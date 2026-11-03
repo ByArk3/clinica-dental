@@ -4,6 +4,7 @@ import * as Pacientes from '../controllers/paciente.controller.js';
 import * as Citas from '../controllers/cita.controller.js';
 import * as Inventario from '../controllers/inventario.controller.js';
 import * as Atencion from '../controllers/atencion.controller.js';
+import * as Caja from '../controllers/caja.controller.js';
 import { requireAuth, requireRol, requireRolConMensaje } from '../middlewares/auth.js';
 import { MENSAJES } from '@clinica/shared';
 
@@ -71,3 +72,14 @@ rutas.patch('/insumos/:id/desactivar', admin, Inventario.desactivarInsumo);
 rutas.patch('/insumos/:id/activar', admin, Inventario.activarInsumo);
 rutas.get('/insumos/:id/kardex', admin, Inventario.kardex);
 rutas.get('/alertas', admin, Inventario.alertas);
+
+// CU-13 Caja — Recepcionista
+const recep = requireRol('recepcionista');
+rutas.get('/caja/pendientes', recep, Caja.pendientes);
+rutas.get('/caja/citas/:id/importe', recep, Caja.importe);
+rutas.post('/caja/citas/:id/comprobante', recep, Caja.emitir);
+rutas.get('/tipos-pago', recep, Caja.tiposPago);
+rutas.get('/descuentos', recep, Caja.descuentos);
+rutas.get('/comprobantes/:id', requireRol('recepcionista', 'administrador'), Caja.ver);
+rutas.get('/comprobantes/:id/pdf', requireRol('recepcionista', 'administrador'), Caja.pdf);
+rutas.post('/comprobantes/:id/enviar', recep, Caja.enviar);

@@ -17,7 +17,7 @@ const MENU: Record<Rol, Item[]> = {
   recepcionista: [
     { texto: 'Nueva cita', ruta: '/citas/nueva' },
     { texto: 'Citas del día', ruta: '/citas/dia' },
-    { texto: 'Caja' },
+    { texto: 'Caja', ruta: '/caja' },
   ],
   odontologo: [
     { texto: 'Mis citas del día', ruta: '/atencion' },

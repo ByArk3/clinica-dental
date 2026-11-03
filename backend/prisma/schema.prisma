@@ -65,32 +65,32 @@ model Usuario {
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
-  paciente            Paciente?
-  odontologo          Odontologo?
-  citasCreadas        Cita[]           @relation("CitaCreadaPor")
-  movimientos         MovimientoKardex[]
-  alertasRevisadas    AlertaStock[]
-  pedidosRegistrados  Pedido[]
+  paciente             Paciente?
+  odontologo           Odontologo?
+  citasCreadas         Cita[]             @relation("CitaCreadaPor")
+  movimientos          MovimientoKardex[]
+  alertasRevisadas     AlertaStock[]
+  pedidosRegistrados   Pedido[]
   comprobantesEmitidos Comprobante[]
 
   @@map("usuarios")
 }
 
 model Paciente {
-  id              Int       @id @default(autoincrement())
-  usuarioId       Int?      @unique @map("usuario_id")
-  dni             String    @unique @db.Char(8)
+  id              Int      @id @default(autoincrement())
+  usuarioId       Int?     @unique @map("usuario_id")
+  dni             String   @unique @db.Char(8)
   nombres         String
   apellidos       String
-  fechaNacimiento DateTime  @map("fecha_nacimiento") @db.Date
+  fechaNacimiento DateTime @map("fecha_nacimiento") @db.Date
   telefono        String
   email           String?
   direccion       String?
   apoderado       String? // P14
-  inasistencias   Int       @default(0)
-  restringido     Boolean   @default(false) // RN-12
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  inasistencias   Int      @default(0)
+  restringido     Boolean  @default(false) // RN-12
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   usuario      Usuario?       @relation(fields: [usuarioId], references: [id])
   ficha        FichaPaciente?
@@ -123,7 +123,7 @@ model Odontologo {
   especialidad String?
   activo       Boolean @default(true)
 
-  usuario    Usuario            @relation(fields: [usuarioId], references: [id])
+  usuario    Usuario           @relation(fields: [usuarioId], references: [id])
   horarios   HorarioAtencion[]
   citas      Cita[]
   atenciones Atencion[]
@@ -146,19 +146,19 @@ model HorarioAtencion {
 }
 
 model Cita {
-  id                   Int        @id @default(autoincrement())
-  pacienteId           Int        @map("paciente_id")
-  odontologoId         Int        @map("odontologo_id")
-  fecha                DateTime   @db.Date
-  hora                 DateTime   @db.Time(0)
-  motivo               String     @db.VarChar(200)
-  canal                CanalCita
-  estado               EstadoCita
-  tokenConfirmacion    String?    @unique @map("token_confirmacion")
-  recordatorioEnviadoEn DateTime? @map("recordatorio_enviado_en")
-  creadoPorId          Int        @map("creado_por")
-  createdAt            DateTime   @default(now()) @map("created_at")
-  updatedAt            DateTime   @updatedAt @map("updated_at")
+  id                    Int        @id @default(autoincrement())
+  pacienteId            Int        @map("paciente_id")
+  odontologoId          Int        @map("odontologo_id")
+  fecha                 DateTime   @db.Date
+  hora                  DateTime   @db.Time(0)
+  motivo                String     @db.VarChar(200)
+  canal                 CanalCita
+  estado                EstadoCita
+  tokenConfirmacion     String?    @unique @map("token_confirmacion")
+  recordatorioEnviadoEn DateTime?  @map("recordatorio_enviado_en")
+  creadoPorId           Int        @map("creado_por")
+  createdAt             DateTime   @default(now()) @map("created_at")
+  updatedAt             DateTime   @updatedAt @map("updated_at")
 
   paciente     Paciente      @relation(fields: [pacienteId], references: [id])
   odontologo   Odontologo    @relation(fields: [odontologoId], references: [id])
@@ -242,9 +242,9 @@ model Insumo {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  tratamientos  TratamientoInsumo[]
-  movimientos   MovimientoKardex[]
-  alertas       AlertaStock[]
+  tratamientos   TratamientoInsumo[]
+  movimientos    MovimientoKardex[]
+  alertas        AlertaStock[]
   detallesPedido DetallePedido[]
 
   @@map("insumos")
@@ -354,28 +354,29 @@ model Descuento {
 }
 
 model Comprobante {
-  id            Int             @id @default(autoincrement())
-  numero        String          @unique // P2: comprobante interno C-000001
-  tipo          TipoComprobante @default(servicio)
-  citaId        Int             @map("cita_id")
-  pacienteId    Int             @map("paciente_id")
-  tipoPagoId    Int             @map("tipo_pago_id")
-  descuentoId   Int?            @map("descuento_id")
-  subtotal      Decimal         @db.Decimal(10, 2)
-  descuento     Decimal         @default(0) @db.Decimal(10, 2)
-  total         Decimal         @db.Decimal(10, 2)
-  montoRecibido Decimal         @map("monto_recibido") @db.Decimal(10, 2)
-  vuelto        Decimal         @default(0) @db.Decimal(10, 2)
-  enviadoEmail  Boolean         @default(false) @map("enviado_email")
-  emitidoPorId  Int             @map("emitido_por")
-  createdAt     DateTime        @default(now()) @map("created_at")
+  id               Int             @id @default(autoincrement())
+  numero           String          @unique // P2: comprobante interno C-000001
+  tipo             TipoComprobante @default(servicio)
+  citaId           Int             @map("cita_id")
+  pacienteId       Int             @map("paciente_id")
+  tipoPagoId       Int             @map("tipo_pago_id")
+  descuentoId      Int?            @map("descuento_id")
+  subtotal         Decimal         @db.Decimal(10, 2)
+  descuento        Decimal         @default(0) @db.Decimal(10, 2)
+  adelantoAplicado Decimal         @default(0) @map("adelanto_aplicado") @db.Decimal(10, 2) // P6: adelanto ya pagado que se descuenta
+  total            Decimal         @db.Decimal(10, 2)
+  montoRecibido    Decimal         @map("monto_recibido") @db.Decimal(10, 2)
+  vuelto           Decimal         @default(0) @db.Decimal(10, 2)
+  enviadoEmail     Boolean         @default(false) @map("enviado_email")
+  emitidoPorId     Int             @map("emitido_por")
+  createdAt        DateTime        @default(now()) @map("created_at")
 
-  cita            Cita                 @relation(fields: [citaId], references: [id])
-  paciente        Paciente             @relation(fields: [pacienteId], references: [id])
-  tipoPago        TipoPago             @relation(fields: [tipoPagoId], references: [id])
-  descuentoAplicado Descuento?         @relation(fields: [descuentoId], references: [id])
-  emitidoPor      Usuario              @relation(fields: [emitidoPorId], references: [id])
-  detalles        DetalleComprobante[]
+  cita              Cita                 @relation(fields: [citaId], references: [id])
+  paciente          Paciente             @relation(fields: [pacienteId], references: [id])
+  tipoPago          TipoPago             @relation(fields: [tipoPagoId], references: [id])
+  descuentoAplicado Descuento?           @relation(fields: [descuentoId], references: [id])
+  emitidoPor        Usuario              @relation(fields: [emitidoPorId], references: [id])
+  detalles          DetalleComprobante[]
 
   @@unique([citaId, tipo]) // un comprobante de servicio (y a lo más uno de adelanto) por cita
   @@map("comprobantes")

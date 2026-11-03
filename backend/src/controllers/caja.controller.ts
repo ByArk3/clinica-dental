@@ -1,0 +1,61 @@
+import type { Request, Response } from 'express';
+import { z } from 'zod';
+import { comprobanteSchema, MENSAJES } from '@clinica/shared';
+import * as CajaService from '../services/caja.service.js';
+import { prisma } from '../lib/prisma.js';
+import { pdfComprobante } from '../lib/pdf.js';
+import { enviarCorreo } from '../lib/correo.js';
+import { ErrorNegocio } from '../lib/errores.js';
+import { usuarioActual } from '../middlewares/auth.js';
+import { idParam } from './comun.js';
+
+export const pendientes = async (_req: Request, res: Response) => res.json(await CajaService.pendientes());
+export const tiposPago = async (_req: Request, res: Response) => res.json(await CajaService.tiposPago());
+export const descuentos = async (_req: Request, res: Response) => res.json(await CajaService.descuentosActivos());
+
+/** GET /caja/citas/:id/importe?descuentoId= (c_calcularImporte) */
+export async function importe(req: Request, res: Response) {
+  const descuentoId = req.query.descuentoId ? z.coerce.number().int().positive().parse(req.query.descuentoId) : undefined;
+  res.json(await CajaService.calcularImporte(prisma, idParam(req), descuentoId));
+}
+
+/** POST /caja/citas/:id/comprobante (c_emitirComprobante) */
+export async function emitir(req: Request, res: Response) {
+  res.status(201).json(await CajaService.emitirComprobante(idParam(req), comprobanteSchema.parse(req.body), usuarioActual(req)));
+}
+
+export const ver = async (req: Request, res: Response) => res.json(await CajaService.obtenerComprobante(idParam(req)));
+
+/** GET /comprobantes/:id/pdf — 10.1: si falla, el comprobante ya está registrado y se puede reintentar */
+export async function pdf(req: Request, res: Response) {
+  const c = await CajaService.buscarComprobante(idParam(req));
+  let archivo: Buffer;
+  try {
+    archivo = await pdfComprobante(c);
+  } catch {
+    throw new ErrorNegocio(500, 'ERROR_PDF', MENSAJES.ERROR_PDF);
+  }
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${c.numero}.pdf"`);
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(archivo);
+}
+
+/** POST /comprobantes/:id/enviar — 9.1: sin correo no se puede enviar */
+export async function enviar(req: Request, res: Response) {
+  const c = await CajaService.buscarComprobante(idParam(req));
+  if (!c.paciente.email) throw new ErrorNegocio(422, 'PACIENTE_SIN_CORREO', MENSAJES.PACIENTE_SIN_CORREO);
+  try {
+    const archivo = await pdfComprobante(c);
+    await enviarCorreo(
+      c.paciente.email,
+      `Comprobante ${c.numero} — Clínica Dental`,
+      `<p>Hola ${c.paciente.nombres}:</p><p>Adjuntamos su comprobante <b>${c.numero}</b> por <b>S/ ${c.total.toFixed(2)}</b>.</p><p>Gracias por su preferencia.</p>`,
+      [{ filename: `${c.numero}.pdf`, content: archivo, contentType: 'application/pdf' }],
+    );
+  } catch {
+    throw new ErrorNegocio(502, 'ERROR_CORREO', MENSAJES.ERROR_CORREO);
+  }
+  await CajaService.marcarEnviado(c.id);
+  res.json({ mensaje: `Comprobante enviado a ${c.paciente.email}` });
+}

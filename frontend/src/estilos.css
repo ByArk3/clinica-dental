@@ -61,3 +61,5 @@ body { background: var(--fondo); }
   .odontograma > .cuadrante:nth-child(-n + 2) { border-bottom: 0; padding-bottom: 0; }
   .odontograma > .cuadrante:nth-child(2) { border-bottom: 2px solid #ced4da; padding-bottom: 0.35rem; }
 }
+
+.list-group-item.active { background: var(--acento); border-color: var(--acento); }

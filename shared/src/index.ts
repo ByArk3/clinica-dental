@@ -73,6 +73,16 @@ export const MENSAJES = {
   // CU-11
   CITA_NO_ATENCION: 'La cita no está disponible para atención',
   TRATAMIENTO_NO_TARIFARIO: 'El tratamiento no está en el tarifario vigente',
+  // CU-13 Caja
+  CITA_SIN_COBRO: 'La cita no tiene cobros pendientes',
+  TRATAMIENTO_SIN_PRECIO: 'Hay un tratamiento sin precio; no se puede cobrar',
+  MONTO_INSUFICIENTE: 'El monto recibido es menor que el total',
+  DESCUENTO_NO_VALIDO: 'El descuento no está disponible',
+  TIPO_PAGO_NO_VALIDO: 'Elija un tipo de pago válido',
+  COMPROBANTE_NO_ENCONTRADO: 'Comprobante no encontrado',
+  PACIENTE_SIN_CORREO: 'El paciente no tiene correo registrado',
+  ERROR_PDF: 'No se pudo generar el PDF; reintente. El comprobante ya quedó registrado',
+  ERROR_CORREO: 'No se pudo enviar el correo; reintente. El comprobante ya quedó registrado',
 } as const;
 
 /** Estados en los que la cita todavía puede reprogramarse o cancelarse (CU-07). */
@@ -217,6 +227,37 @@ export const atencionSchema = z.object({
     .min(1, 'Agregue al menos un tratamiento'),
 });
 export type AtencionDTO = z.infer<typeof atencionSchema>;
+
+// ---------- Caja (CU-13) ----------
+export type TipoCobro = 'servicio' | 'adelanto';
+export const comprobanteSchema = z.object({
+  tipoPagoId: z.coerce.number({ invalid_type_error: 'Elija un tipo de pago' }).int().positive('Elija un tipo de pago'),
+  // Solo se usa en efectivo; con tarjeta o Yape/Plin se cobra el total exacto
+  montoRecibido: z.coerce
+    .number({ invalid_type_error: 'Ingrese el monto recibido' })
+    .min(0, 'No puede ser negativo')
+    .refine((n) => Math.abs(n * 100 - Math.round(n * 100)) < 1e-6, 'Máximo 2 decimales')
+    .optional(),
+  descuentoId: z.coerce.number().int().positive().optional().nullable(),
+});
+export type ComprobanteDTO = z.infer<typeof comprobanteSchema>;
+
+export interface LineaImporte {
+  tratamientoId: number | null;
+  descripcion: string;
+  precio: string;
+}
+export interface Importe {
+  citaId: number;
+  tipo: TipoCobro;
+  paciente: { id: number; dni: string; nombres: string; apellidos: string; email: string | null };
+  lineas: LineaImporte[];
+  subtotal: string;
+  descuento: string;
+  descuentoAplicado: { id: number; nombre: string; porcentaje: string } | null;
+  adelantoAplicado: string;
+  total: string;
+}
 
 export interface ErrorApi {
   codigo: string;

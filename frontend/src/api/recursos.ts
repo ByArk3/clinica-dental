@@ -1,4 +1,4 @@
-import type { AtencionDTO, InsumoDTO, InsumoNuevoDTO, TratamientoDTO, CitaConfirmacion, CitaDTO, ContactoDTO, Disponibilidad, PacienteDTO, RegistroPacienteDTO, ReprogramarDTO, UsuarioSesion, EstadoCita, Canal } from '@clinica/shared';
+import type { ComprobanteDTO, Importe, TipoCobro, AtencionDTO, InsumoDTO, InsumoNuevoDTO, TratamientoDTO, CitaConfirmacion, CitaDTO, ContactoDTO, Disponibilidad, PacienteDTO, RegistroPacienteDTO, ReprogramarDTO, UsuarioSesion, EstadoCita, Canal } from '@clinica/shared';
 import { api } from './cliente';
 
 export interface Paciente {
@@ -186,4 +186,50 @@ export const historialApi = {
 export const atencionApi = {
   misCitas: (fecha: string) => api<CitaOdontologo[]>(`/odontologos/me/citas${qs({ fecha })}`),
   registrar: (citaId: number, d: AtencionDTO) => api<ResultadoAtencion>(`/citas/${citaId}/atencion`, { method: 'POST', body: d }),
+};
+
+// ---------- Iteración 3: caja ----------
+export interface PendienteCaja {
+  citaId: number;
+  tipo: TipoCobro;
+  fecha: string;
+  hora: string;
+  odontologo: string;
+  paciente: { id: number; dni: string; nombres: string; apellidos: string };
+  importe: string;
+}
+export interface Comprobante {
+  id: number;
+  numero: string;
+  tipo: TipoCobro;
+  citaId: number;
+  estadoCita: EstadoCita;
+  fecha: string;
+  paciente: { dni: string; nombres: string; apellidos: string; tieneCorreo: boolean };
+  tipoPago: string;
+  descuento: { nombre: string; monto: string } | null;
+  lineas: { descripcion: string; precio: string }[];
+  subtotal: string;
+  adelantoAplicado: string;
+  total: string;
+  montoRecibido: string;
+  vuelto: string;
+  enviadoEmail: boolean;
+  emitidoPor: string;
+}
+
+export const cajaApi = {
+  pendientes: () => api<PendienteCaja[]>('/caja/pendientes'),
+  importe: (citaId: number, descuentoId?: number) =>
+    api<Importe>(`/caja/citas/${citaId}/importe${qs({ descuentoId: descuentoId ? String(descuentoId) : undefined })}`),
+  emitir: (citaId: number, d: ComprobanteDTO) => api<Comprobante>(`/caja/citas/${citaId}/comprobante`, { method: 'POST', body: d }),
+  tiposPago: () => api<{ id: number; nombre: string }[]>('/tipos-pago'),
+  descuentos: () => api<{ id: number; nombre: string; porcentaje: string }[]>('/descuentos'),
+  enviar: (id: number) => api<{ mensaje: string }>(`/comprobantes/${id}/enviar`, { method: 'POST' }),
+  /** Descarga el PDF; si falla, lanza error (10.1: el comprobante ya está registrado y se puede reintentar). */
+  pdf: async (id: number) => {
+    const r = await fetch(`/api/comprobantes/${id}/pdf`, { credentials: 'include' });
+    if (!r.ok) throw new Error('pdf');
+    return r.blob();
+  },
 };

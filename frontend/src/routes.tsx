@@ -16,6 +16,7 @@ import MisCitasOdontologo from './pages/MisCitasOdontologo';
 import RegistrarAtencion from './pages/RegistrarAtencion';
 import Tarifario from './pages/Tarifario';
 import Insumos from './pages/Insumos';
+import Caja from './pages/Caja';
 
 export const rutaInicio = (rol: Rol) =>
   ({ paciente: '/reservar', recepcionista: '/citas/dia', odontologo: '/atencion', administrador: '/insumos' })[rol];
@@ -53,6 +54,7 @@ export function Rutas() {
       <Route element={<Protegida roles={['recepcionista']} />}>
         <Route path="/citas/nueva" element={<NuevaCita />} />
         <Route path="/citas/dia" element={<CitasDelDia />} />
+        <Route path="/caja" element={<Caja />} />
       </Route>
       <Route element={<Protegida roles={['odontologo']} />}>
         <Route path="/atencion" element={<MisCitasOdontologo />} />

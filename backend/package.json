@@ -14,7 +14,9 @@
     "db:reset": "prisma migrate reset --force",
     "test": "dotenv -e .env.test -- prisma migrate deploy && dotenv -e .env.test -- vitest run"
   },
-  "prisma": { "seed": "tsx prisma/seed.ts" },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "dependencies": {
     "@clinica/shared": "*",
     "@prisma/client": "6.19.3",
@@ -40,6 +42,7 @@
     "@types/node": "^22.9.0",
     "@types/node-cron": "^3.0.11",
     "@types/nodemailer": "^6.4.16",
+    "@types/pdfkit": "^0.13.9",
     "@types/supertest": "^6.0.2",
     "dotenv-cli": "^7.4.2",
     "prisma": "6.19.3",

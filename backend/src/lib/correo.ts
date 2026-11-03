@@ -9,8 +9,14 @@ const transporte = process.env.SMTP_HOST
     })
   : nodemailer.createTransport({ jsonTransport: true });
 
-export async function enviarCorreo(para: string, asunto: string, html: string) {
-  const info = await transporte.sendMail({ from: process.env.MAIL_FROM, to: para, subject: asunto, html });
+export interface Adjunto {
+  filename: string;
+  content: Buffer;
+  contentType: string;
+}
+
+export async function enviarCorreo(para: string, asunto: string, html: string, adjuntos: Adjunto[] = []) {
+  const info = await transporte.sendMail({ from: process.env.MAIL_FROM, to: para, subject: asunto, html, attachments: adjuntos });
   if (!process.env.SMTP_HOST && process.env.NODE_ENV !== 'test') {
     console.info(`[correo] para=${para} asunto="${asunto}"`);
   }

@@ -69,9 +69,18 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | CU-10 Consultar historial clínico: búsqueda por DNI o nombre, ficha + atenciones (más reciente primero), 2.1, 4.1 (RN-07), 5.1 | `atencion.test.ts`, `Iteracion2.test.tsx` |
 | CU-11 Registrar tratamiento: mis citas del día, diagnóstico, pieza FDI 11–48, uno o más tratamientos activos (RN-08), tabla de insumos a descontar; en una transacción: atención + precio congelado + cita «Atendida» + salidas de stock (RN-09) | `atencion.test.ts`, `Iteracion2.test.tsx` |
 
-Total acumulado: 113 pruebas de API + 29 de interfaz.
+## Avance — Iteración 3 ✅ completa
 
-**Siguiente: Iteración 3** — tipos de pago, CU-13 emitir comprobante (descuentos, vuelto, PDF y correo) y cobro del adelanto RN-12.
+| Caso de uso | Pruebas |
+|---|---|
+| CU-13 Emitir comprobante: pendientes de caja, importe (RN-10, precios congelados de la atención), descuento (P3), efectivo con vuelto / tarjeta / Yape-Plin, comprobante interno correlativo `C-000001` (P2) y cita «Pagada» en una transacción | `caja.test.ts`, `Caja.test.tsx` |
+| Flujos alternos 3.1 (adelanto RN-12 → la cita vuelve a «Pendiente de confirmación»), 4.1 (sin precio), 6.1 (monto insuficiente), 9.1 (sin correo), 10.1 (error al imprimir: reintentar) | `caja.test.ts`, `Caja.test.tsx` |
+| Adelanto (P6): S/ 30 configurable, se descuenta del cobro final | `caja.test.ts` |
+| PDF del comprobante (pdfkit) y envío por correo con el PDF adjunto | `caja.test.ts` |
+
+Total acumulado: 135 pruebas de API + 39 de interfaz.
+
+**Siguiente: Iteración 4** — proveedores (CRUD), CU-30 registrar pedido, CU-31/32 listar y anular, CU-33 recepción, CU-23/24/25 kárdex, alertas y ajustes, usuarios (CRUD), panel y reportes (CU-38..40).
 
 **Tareas programadas** (`backend/src/jobs`, node-cron, cada 15 min, hora de Lima; se activan con `JOBS_ENABLED=true`):
 primero libera las citas sin confirmar a menos de 24 h y luego envía el recordatorio por correo a las que empiezan dentro de 48 h.
@@ -100,4 +109,12 @@ Se aplican los supuestos de la sección 14 del brief (P2–P17). Además:
   Si se elige dos veces el mismo tratamiento (p. ej. dos piezas), se cobra y se descuenta dos veces.
 - **Alertas de stock (RN-14):** se genera una cuando el saldo queda ≤ mínimo, y no se repite mientras haya una sin revisar.
 - **Insumo desactivado:** un tratamiento no puede reactivarse mientras alguno de sus insumos esté desactivado.
+- **Caja:** con tarjeta o Yape/Plin se cobra el total exacto (sin vuelto). El correlativo se asigna con un bloqueo
+  (`pg_advisory_xact_lock`), así no quedan números repetidos ni huecos. Una restricción `CHECK` en la base garantiza
+  `total = subtotal − descuento − adelanto` y `vuelto = recibido − total`.
+- **Adelanto (RN-12 / P6):** no admite descuentos y solo se cobra si la cita aún no pasó. Si el adelanto supera el cobro
+  final, el total queda en S/ 0.00. `TODO(decisión P6)`: ¿qué pasa con el saldo sobrante, o con el adelanto de una cita
+  cancelada? Hoy no se devuelve ni se acumula.
+- Los descuentos (P3) se cargan en la semilla («Paciente frecuente», 10 %). La pantalla para que el Administrador los
+  gestione queda pendiente (`TODO(decisión P3)`).
 - Los precios de Extracción, Blanqueamiento y Consulta en la semilla son de ejemplo: `TODO(decisión)`.

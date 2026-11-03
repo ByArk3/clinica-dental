@@ -55,7 +55,7 @@ async function validarHorario(tx: Tx, odontologoId: number, fecha: string, hora:
  * para confirmar: se registra directamente como confirmada (la tarea programada la liberaría de inmediato).
  * TODO(decisión): validar con la clínica el tratamiento de las reservas de último momento.
  */
-function estadoInicial(restringido: boolean, fecha: string, hora: string): EstadoCita {
+export function estadoInicial(restringido: boolean, fecha: string, hora: string): EstadoCita {
   if (restringido) return 'pendiente_adelanto';
   const horas = (instanteCita(fecha, hora).getTime() - Date.now()) / HORA_MS;
   return horas < 24 ? 'confirmada' : 'pendiente_confirmacion';
