@@ -8,9 +8,12 @@ import RegistroPaciente from './pages/RegistroPaciente';
 import { MisCitas, ReservaWeb } from './pages/ReservaWeb';
 import NuevaCita from './pages/NuevaCita';
 import Inicio from './pages/Inicio';
+import CitasDelDia from './pages/CitasDelDia';
+import ConfirmarCita from './pages/ConfirmarCita';
+import MiPerfil from './pages/MiPerfil';
 
 export const rutaInicio = (rol: Rol) =>
-  ({ paciente: '/reservar', recepcionista: '/citas/nueva', odontologo: '/inicio', administrador: '/inicio' })[rol];
+  ({ paciente: '/reservar', recepcionista: '/citas/dia', odontologo: '/inicio', administrador: '/inicio' })[rol];
 
 /** Rutas protegidas por rol (RNF07). La API vuelve a validar el rol: esto es solo navegación. */
 function Protegida({ roles }: { roles?: Rol[] }) {
@@ -36,12 +39,15 @@ export function Rutas() {
       <Route path="/recuperar" element={<Recuperar />} />
       <Route path="/restablecer" element={<Restablecer />} />
       <Route path="/registro" element={<RegistroPaciente />} />
+      <Route path="/citas/confirmar/:token" element={<ConfirmarCita />} />
       <Route element={<Protegida roles={['paciente']} />}>
         <Route path="/reservar" element={<ReservaWeb />} />
         <Route path="/mis-citas" element={<MisCitas />} />
+        <Route path="/mis-datos" element={<MiPerfil />} />
       </Route>
       <Route element={<Protegida roles={['recepcionista']} />}>
         <Route path="/citas/nueva" element={<NuevaCita />} />
+        <Route path="/citas/dia" element={<CitasDelDia />} />
       </Route>
       <Route element={<Protegida />}>
         <Route path="/inicio" element={<Inicio />} />

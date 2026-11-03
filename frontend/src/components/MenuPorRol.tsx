@@ -9,10 +9,14 @@ interface Item {
 }
 
 const MENU: Record<Rol, Item[]> = {
-  paciente: [{ texto: 'Reservar cita', ruta: '/reservar' }, { texto: 'Mis citas', ruta: '/mis-citas' }],
+  paciente: [
+    { texto: 'Reservar cita', ruta: '/reservar' },
+    { texto: 'Mis citas', ruta: '/mis-citas' },
+    { texto: 'Mis datos', ruta: '/mis-datos' },
+  ],
   recepcionista: [
     { texto: 'Nueva cita', ruta: '/citas/nueva' },
-    { texto: 'Citas del día' },
+    { texto: 'Citas del día', ruta: '/citas/dia' },
     { texto: 'Caja' },
   ],
   odontologo: [{ texto: 'Mis citas del día' }, { texto: 'Historial clínico' }],

@@ -47,7 +47,25 @@ export const MENSAJES = {
     'El paciente tiene 3 o más inasistencias: la cita queda pendiente de adelanto hasta que se pague en caja',
   ENLACE_INVALIDO: 'El enlace de recuperación no es válido o ya venció',
   ODONTOLOGO_NO_DISPONIBLE: 'El odontólogo no está disponible',
+  // CU-07
+  CITA_NO_ENCONTRADA: 'Cita no encontrada',
+  CITA_NO_MODIFICABLE: 'La cita ya no se puede reprogramar ni cancelar',
+  LIMITE_24H: 'Solo puede reprogramar o cancelar hasta 24 horas antes; comuníquese con la clínica',
+  // CU-08
+  ENLACE_CITA_INVALIDO: 'El enlace no es válido',
+  PLAZO_VENCIDO: 'El plazo de confirmación venció; comuníquese con la clínica',
+  CITA_YA_CANCELADA: 'La cita ya fue cancelada',
+  // CU-09
+  INASISTENCIA_SOLO_CONFIRMADA: 'Solo se puede registrar inasistencia en una cita confirmada',
+  HORA_NO_PASADA: 'La hora de la cita aún no pasó',
+  PACIENTE_RESTRINGIDO:
+    'El paciente llegó a 3 inasistencias: desde ahora debe pagar un adelanto para reservar (RN-12)',
 } as const;
+
+/** Estados en los que la cita todavía puede reprogramarse o cancelarse (CU-07). */
+export const ESTADOS_MODIFICABLES: EstadoCita[] = ['pendiente_confirmacion', 'pendiente_adelanto', 'confirmada'];
+/** P8: el paciente puede reprogramar o cancelar por la web hasta 24 h antes. */
+export const HORAS_LIMITE_PACIENTE = 24;
 
 // ---------- Validaciones reutilizables ----------
 export const dniSchema = z.string().regex(/^\d{8}$/, 'El DNI debe tener 8 dígitos');
@@ -106,6 +124,36 @@ export const citaSchema = z.object({
   motivo: z.string().trim().min(3, 'Indique el motivo de la cita').max(200),
 });
 export type CitaDTO = z.infer<typeof citaSchema>;
+
+// ---------- CU-04 Actualizar datos de contacto ----------
+export const contactoSchema = z.object({
+  telefono: telefonoSchema,
+  email: z.string().email('Correo inválido').optional().or(z.literal('').transform(() => undefined)),
+  direccion: z.string().trim().optional(),
+  apoderado: z.string().trim().optional(),
+});
+export type ContactoDTO = z.infer<typeof contactoSchema>;
+
+// ---------- CU-07 Reprogramar / cancelar ----------
+export const reprogramarSchema = z.object({
+  odontologoId: z.number().int().positive('Seleccione un odontólogo'),
+  fecha: fechaSchema,
+  hora: horaSchema,
+});
+export type ReprogramarDTO = z.infer<typeof reprogramarSchema>;
+
+// ---------- CU-08 Confirmar cita ----------
+export const confirmacionSchema = z.object({ accion: z.enum(['confirmar', 'cancelar']) });
+
+export interface CitaConfirmacion {
+  paciente: string;
+  odontologo: string;
+  fecha: string;
+  hora: string;
+  estado: EstadoCita;
+  puedeResponder: boolean;
+  mensaje?: string;
+}
 
 export interface ErrorApi {
   codigo: string;

@@ -1,4 +1,4 @@
-import type { CitaDTO, Disponibilidad, PacienteDTO, RegistroPacienteDTO, UsuarioSesion, EstadoCita, Canal } from '@clinica/shared';
+import type { CitaConfirmacion, CitaDTO, ContactoDTO, Disponibilidad, PacienteDTO, RegistroPacienteDTO, ReprogramarDTO, UsuarioSesion, EstadoCita, Canal } from '@clinica/shared';
 import { api } from './cliente';
 
 export interface Paciente {
@@ -9,6 +9,8 @@ export interface Paciente {
   fechaNacimiento: string;
   telefono: string;
   email: string | null;
+  direccion?: string | null;
+  apoderado?: string | null;
   inasistencias: number;
   restringido: boolean;
 }
@@ -29,6 +31,12 @@ export interface Cita {
   estado: EstadoCita;
 }
 
+export interface CitaDelDia extends Cita {
+  paciente: Pick<Paciente, 'id' | 'dni' | 'nombres' | 'apellidos' | 'telefono' | 'inasistencias' | 'restringido'>;
+  puedeRegistrarInasistencia: boolean;
+  whatsapp?: string;
+}
+
 export const authApi = {
   yo: () => api<UsuarioSesion>('/auth/yo'),
   login: (email: string, password: string) => api<UsuarioSesion>('/auth/login', { method: 'POST', body: { email, password } }),
@@ -43,6 +51,10 @@ export const authApi = {
 export const pacientesApi = {
   porDni: (dni: string) => api<Paciente>(`/pacientes?dni=${encodeURIComponent(dni)}`),
   registrar: (datos: PacienteDTO) => api<Paciente>('/pacientes', { method: 'POST', body: datos }),
+  miPerfil: () => api<Paciente>('/pacientes/me'),
+  actualizarMiContacto: (datos: ContactoDTO) => api<Paciente>('/pacientes/me', { method: 'PATCH', body: datos }),
+  actualizarContacto: (id: number, datos: ContactoDTO) =>
+    api<Paciente>(`/pacientes/${id}/contacto`, { method: 'PATCH', body: datos }),
 };
 
 export const citasApi = {
@@ -51,4 +63,12 @@ export const citasApi = {
     api<Disponibilidad>(`/disponibilidad?odontologoId=${odontologoId}&fecha=${fecha}`),
   registrar: (datos: CitaDTO) => api<{ cita: Cita; aviso?: string }>('/citas', { method: 'POST', body: datos }),
   mias: () => api<Cita[]>('/citas/mias'),
+  reprogramar: (id: number, datos: ReprogramarDTO) => api<Cita>(`/citas/${id}/reprogramar`, { method: 'PATCH', body: datos }),
+  cancelar: (id: number) => api<Cita>(`/citas/${id}/cancelar`, { method: 'PATCH' }),
+  delDia: (fecha: string) => api<CitaDelDia[]>(`/citas?fecha=${fecha}`),
+  inasistencia: (id: number) =>
+    api<{ inasistencias: number; restringido: boolean; aviso?: string }>(`/citas/${id}/inasistencia`, { method: 'POST' }),
+  verConfirmacion: (token: string) => api<CitaConfirmacion>(`/citas/confirmar/${encodeURIComponent(token)}`),
+  responderConfirmacion: (token: string, accion: 'confirmar' | 'cancelar') =>
+    api<CitaConfirmacion>(`/citas/confirmar/${encodeURIComponent(token)}`, { method: 'POST', body: { accion } }),
 };

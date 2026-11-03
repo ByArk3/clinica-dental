@@ -44,3 +44,4 @@ body { background: var(--fondo); }
 .chip-pagada { background: #d4edda; color: #1e5f2c; }
 .chip-cancelada, .chip-liberada { background: #e9ecef; color: #495057; }
 .chip-inasistencia { background: #f8d7da; color: #842029; }
+.text-capitalize-first::first-letter { text-transform: uppercase; }

@@ -88,3 +88,21 @@ export async function obtenerContacto(id: number) {
   if (!p) throw new ErrorNegocio(404, 'PACIENTE_NO_ENCONTRADO', MENSAJES.PACIENTE_NO_ENCONTRADO);
   return formatear(p);
 }
+
+/** CU-04 Actualizar datos de contacto (paciente: los suyos; recepcionista: de cualquier paciente). */
+export async function actualizarContacto(id: number, dto: import('@clinica/shared').ContactoDTO) {
+  if (!(await prisma.paciente.findUnique({ where: { id } }))) {
+    throw new ErrorNegocio(404, 'PACIENTE_NO_ENCONTRADO', MENSAJES.PACIENTE_NO_ENCONTRADO);
+  }
+  const p = await prisma.paciente.update({
+    where: { id },
+    data: {
+      telefono: dto.telefono,
+      email: dto.email?.toLowerCase() ?? null,
+      direccion: dto.direccion || null,
+      apoderado: dto.apoderado || null,
+    },
+    select: CONTACTO,
+  });
+  return formatear(p);
+}

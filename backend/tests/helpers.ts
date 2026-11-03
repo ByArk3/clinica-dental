@@ -47,3 +47,34 @@ export async function idOdontologo(email: string = USUARIOS.odontologo) {
 export async function idPaciente(dni: string) {
   return (await prisma.paciente.findUniqueOrThrow({ where: { dni } })).id;
 }
+
+/**
+ * Crea una cita directamente en la BD a `horas` de ahora (redondeada a la media hora, hora de Lima).
+ * Útil para probar plazos (24 h / 48 h) e inasistencias sin depender del horario de atención.
+ */
+export async function crearCita(opciones: {
+  horas: number;
+  estado?: 'pendiente_confirmacion' | 'pendiente_adelanto' | 'confirmada' | 'atendida' | 'cancelada' | 'liberada';
+  dni?: string;
+  odontologoEmail?: string;
+  token?: string;
+}) {
+  const instante = new Date(Date.now() + opciones.horas * 3_600_000);
+  const { fecha, hora } = ahoraLima(instante);
+  const [h, m] = hora.split(':').map(Number);
+  const horaRedondeada = `${String(h).padStart(2, '0')}:${m < 30 ? '00' : '30'}`;
+  const creador = await prisma.usuario.findFirstOrThrow({ where: { rol: 'recepcionista' } });
+  return prisma.cita.create({
+    data: {
+      pacienteId: await idPaciente(opciones.dni ?? '72458190'),
+      odontologoId: await idOdontologo(opciones.odontologoEmail),
+      fecha: new Date(`${fecha}T00:00:00Z`),
+      hora: new Date(`1970-01-01T${horaRedondeada}:00Z`),
+      motivo: 'Prueba',
+      canal: 'presencial',
+      estado: opciones.estado ?? 'pendiente_confirmacion',
+      tokenConfirmacion: opciones.token ?? `tok${Math.random().toString(16).slice(2)}${Date.now()}`,
+      creadoPorId: creador.id,
+    },
+  });
+}

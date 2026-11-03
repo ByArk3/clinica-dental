@@ -15,3 +15,10 @@ export const hoyLima = () => new Intl.DateTimeFormat('en-CA', { timeZone: ZONA }
 
 export const diaSemanaPE = (iso: string) =>
   new Intl.DateTimeFormat('es-PE', { weekday: 'long', timeZone: 'UTC' }).format(new Date(`${iso}T00:00:00Z`));
+
+/** Horas que faltan para una cita (Lima es UTC-5 todo el año). */
+export const horasPara = (fecha: string, hora: string) =>
+  (new Date(`${fecha}T${hora}:00-05:00`).getTime() - Date.now()) / 3_600_000;
+
+export const mensajeError = (e: unknown) =>
+  e && typeof e === 'object' && 'datos' in e ? (e as { datos: { mensaje: string } }).datos.mensaje : 'No se pudo conectar con el servidor';

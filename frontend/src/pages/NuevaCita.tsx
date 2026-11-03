@@ -4,6 +4,7 @@ import { pacientesApi, type Paciente } from '../api/recursos';
 import { ApiError } from '../api/cliente';
 import { FormReserva } from '../components/FormReserva';
 import { FormPaciente } from '../components/FormPaciente';
+import { FormContacto } from '../components/FormContacto';
 
 /** CU-06 canal presencial (i_cita): la recepcionista busca por DNI y registra la cita. */
 export default function NuevaCita() {
@@ -11,12 +12,14 @@ export default function NuevaCita() {
   const [paciente, setPaciente] = useState<Paciente | null>(null);
   const [noEncontrado, setNoEncontrado] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editando, setEditando] = useState(false);
 
   async function buscar(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setPaciente(null);
     setNoEncontrado(false);
+    setEditando(false);
     const v = dniSchema.safeParse(dni);
     if (!v.success) return setError(v.error.issues[0].message);
     try {
@@ -64,6 +67,18 @@ export default function NuevaCita() {
                 {paciente.inasistencias} inasistencia{paciente.inasistencias > 1 ? 's' : ''}
                 {paciente.restringido && ' — requiere adelanto'}
               </span>
+            )}
+            {!editando && (
+              <button className="btn btn-sm btn-link" onClick={() => setEditando(true)}>Editar contacto</button>
+            )}
+            {editando && (
+              <div className="mt-3">
+                <FormContacto
+                  paciente={paciente}
+                  onCancelar={() => setEditando(false)}
+                  onGuardar={async (d) => setPaciente(await pacientesApi.actualizarContacto(paciente.id, d))}
+                />
+              </div>
             )}
           </div>
           <FormReserva key={paciente.id} pacienteId={paciente.id} />

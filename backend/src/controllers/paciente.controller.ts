@@ -1,5 +1,7 @@
 import type { Request, Response } from 'express';
-import { dniSchema, pacienteSchema } from '@clinica/shared';
+import { z } from 'zod';
+import { contactoSchema, dniSchema, pacienteSchema } from '@clinica/shared';
+import { usuarioActual } from '../middlewares/auth.js';
 import * as PacienteService from '../services/paciente.service.js';
 
 /** CU-03 Registrar paciente (recepcionista) — flujo alterno 4.1 de CU-06 */
@@ -12,4 +14,19 @@ export async function registrar(req: Request, res: Response) {
 export async function buscarPorDni(req: Request, res: Response) {
   const dni = dniSchema.parse(req.query.dni);
   res.json(await PacienteService.buscarPorDni(dni));
+}
+
+const idParam = (req: Request) => z.coerce.number().int().positive().parse(req.params.id);
+
+/** CU-04 (recepcionista): PATCH /pacientes/:id/contacto */
+export async function actualizarContacto(req: Request, res: Response) {
+  res.json(await PacienteService.actualizarContacto(idParam(req), contactoSchema.parse(req.body)));
+}
+
+/** CU-04 (paciente): GET/PATCH /pacientes/me */
+export async function miPerfil(req: Request, res: Response) {
+  res.json(await PacienteService.obtenerContacto(usuarioActual(req).pacienteId!));
+}
+export async function actualizarMiContacto(req: Request, res: Response) {
+  res.json(await PacienteService.actualizarContacto(usuarioActual(req).pacienteId!, contactoSchema.parse(req.body)));
 }

@@ -46,3 +46,6 @@ export const minutos = (hora: string) => {
 };
 export const aHora = (min: number) =>
   `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+
+/** 'aaaa-mm-dd' → 'dd/mm/aaaa' */
+export const fechaPE = (fecha: string) => fecha.split('-').reverse().join('/');

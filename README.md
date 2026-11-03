@@ -43,17 +43,28 @@ npm test          # backend (Vitest + Supertest contra PostgreSQL) y frontend (R
 
 Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo se registran en consola.
 
-## Avance — Iteración 1 (parcial)
+## Avance — Iteración 1 ✅ completa
 
-| Caso de uso | Estado | Pruebas |
-|---|---|---|
-| CU-01 Iniciar / cerrar sesión (cookie httpOnly, 15 min deslizantes) | ✅ | `backend/tests/auth.test.ts` |
-| CU-02 Recuperar contraseña (enlace de 30 min, un solo uso) | ✅ | `auth.test.ts` |
-| CU-03 Registrar paciente (recepcionista) y crear cuenta (web) + ficha (RN-05) | ✅ | `paciente.test.ts` |
-| CU-05 Consultar disponibilidad (horario − citas activas − horas pasadas; sugiere fecha) | ✅ | `cita.test.ts` |
-| CU-06 Registrar cita web y presencial: 4.1, 8.1, 8.2, RN-01/02/03/12 | ✅ | `cita.test.ts`, `frontend/src/test/*` |
-| Menú y rutas por rol (RNF07), vista móvil 360 px (RNF02) | ✅ | |
-| CU-04, CU-07 Reprogramar/cancelar, CU-08 Confirmar + tareas programadas, CU-09 Inasistencia | ⏳ siguiente | |
+| Caso de uso | Pruebas |
+|---|---|
+| CU-01 Iniciar / cerrar sesión (cookie httpOnly, 15 min deslizantes) | `backend/tests/auth.test.ts` |
+| CU-02 Recuperar contraseña (enlace de 30 min, un solo uso) | `auth.test.ts` |
+| CU-03 Registrar paciente (recepcionista) y crear cuenta (web) + ficha (RN-05) | `paciente.test.ts` |
+| CU-04 Actualizar datos de contacto (paciente: «Mis datos»; recepcionista: desde «Nueva cita») | `inasistencia.test.ts` |
+| CU-05 Consultar disponibilidad (horario − citas activas − horas pasadas; sugiere fecha) | `cita.test.ts` |
+| CU-06 Registrar cita web y presencial: 4.1, 8.1, 8.2, RN-01/02/03/12 | `cita.test.ts`, `frontend/src/test/FormReserva*`, `NuevaCita*` |
+| CU-07 Reprogramar / cancelar (paciente hasta 24 h antes, P8; recepcionista hasta la hora de la cita) | `reprogramar.test.ts`, `Iteracion1.test.tsx` |
+| CU-08 Confirmar cita por enlace (2.1, 2.2, 4.1) + tareas programadas: recordatorio 48 h y liberación 24 h (RN-04) | `confirmacion.test.ts`, `Iteracion1.test.tsx` |
+| CU-09 Citas del día e inasistencias (3.1, 6.1 → paciente restringido, RN-12) | `inasistencia.test.ts`, `Iteracion1.test.tsx` |
+| Menú y rutas por rol (RNF07), vistas móviles 360 px (RNF02) | |
+
+Total: 76 pruebas de API + 18 de interfaz.
+
+**Siguiente: Iteración 2** — tarifario e insumos (CRUD), `StockService` + kárdex + alertas, CU-10 historial clínico, CU-11 registrar atención.
+
+**Tareas programadas** (`backend/src/jobs`, node-cron, cada 15 min, hora de Lima; se activan con `JOBS_ENABLED=true`):
+primero libera las citas sin confirmar a menos de 24 h y luego envía el recordatorio por correo a las que empiezan dentro de 48 h.
+Si el paciente no tiene correo, «Citas del día» muestra el botón **Recordar por WhatsApp** (enlace `wa.me`, P7).
 
 **RN-02 (sin cruces de citas)** se protege en dos niveles: bloqueo `SELECT … FOR UPDATE` de la fila del odontólogo
 dentro de la transacción, y el índice único parcial `cita_horario_activo` (migración inicial). Si una reserva web y una
@@ -69,4 +80,9 @@ Se aplican los supuestos de la sección 14 del brief (P2–P17). Además:
   el comprobante final de la misma cita. Por eso `detalle_comprobante.tratamiento_id` admite NULL.
 - Tablas extra: `descuentos` (P3), `configuracion` (duración del bloque P5, monto del adelanto P6), `session` (sesiones).
 - `citas.recordatorio_enviado_en` para no repetir el recordatorio de 48 h; `fichas_paciente.notas` para anotar inasistencias.
+- **Reservas de último momento:** una cita registrada (o reprogramada) con menos de 24 h de anticipación ya no tiene plazo
+  para confirmarse, así que queda directamente «Confirmada»; si no, la liberación automática la anularía al instante.
+  `TODO(decisión)`: validarlo con la clínica.
+- El enlace de confirmación (CU-08) no pide sesión y solo muestra el nombre de pila, el odontólogo, la fecha y la hora.
+  Al reprogramar se genera un enlace nuevo y el anterior deja de servir.
 - Los precios de Extracción, Blanqueamiento y Consulta en la semilla son de ejemplo: `TODO(decisión)`.

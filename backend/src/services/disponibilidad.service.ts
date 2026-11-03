@@ -31,9 +31,14 @@ export async function bloquesDelHorario(db: Tx | typeof prisma, odontologoId: nu
   return [...new Set(bloques)].sort();
 }
 
-export async function horasOcupadas(db: Tx | typeof prisma, odontologoId: number, fecha: string) {
+export async function horasOcupadas(db: Tx | typeof prisma, odontologoId: number, fecha: string, excluirCitaId?: number) {
   const citas = await db.cita.findMany({
-    where: { odontologoId, fecha: fechaADate(fecha), estado: { notIn: [...ESTADOS_QUE_LIBERAN] } },
+    where: {
+      odontologoId,
+      fecha: fechaADate(fecha),
+      estado: { notIn: [...ESTADOS_QUE_LIBERAN] },
+      ...(excluirCitaId ? { id: { not: excluirCitaId } } : {}),
+    },
     select: { hora: true },
   });
   return new Set(citas.map((c) => dateAHora(c.hora)));
