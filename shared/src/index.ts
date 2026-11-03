@@ -60,6 +60,19 @@ export const MENSAJES = {
   HORA_NO_PASADA: 'La hora de la cita aún no pasó',
   PACIENTE_RESTRINGIDO:
     'El paciente llegó a 3 inasistencias: desde ahora debe pagar un adelanto para reservar (RN-12)',
+  // Iteración 2: tarifario e insumos
+  TRATAMIENTO_NO_ENCONTRADO: 'Tratamiento no encontrado',
+  TRATAMIENTO_DUPLICADO: 'Ya existe un tratamiento con ese nombre',
+  INSUMO_NO_ENCONTRADO: 'Insumo no encontrado',
+  INSUMO_DUPLICADO: 'Ya existe un insumo con ese nombre',
+  INSUMO_INACTIVO: 'Uno de los insumos está desactivado',
+  INSUMO_EN_USO: 'No se puede desactivar: lo usa un tratamiento activo',
+  // CU-10
+  SIN_PERMISO_HISTORIAL: 'No tiene permiso para ver el historial clínico',
+  SIN_ATENCIONES: 'El paciente no tiene atenciones registradas',
+  // CU-11
+  CITA_NO_ATENCION: 'La cita no está disponible para atención',
+  TRATAMIENTO_NO_TARIFARIO: 'El tratamiento no está en el tarifario vigente',
 } as const;
 
 /** Estados en los que la cita todavía puede reprogramarse o cancelarse (CU-07). */
@@ -154,6 +167,56 @@ export interface CitaConfirmacion {
   puedeResponder: boolean;
   mensaje?: string;
 }
+
+// ---------- Tarifario (CU-14..17) ----------
+const dinero = z.coerce
+  .number({ invalid_type_error: 'Ingrese un monto' })
+  .positive('El precio debe ser mayor que 0')
+  .max(99_999_999, 'Monto demasiado alto')
+  .refine((n) => Math.abs(n * 100 - Math.round(n * 100)) < 1e-6, 'Máximo 2 decimales');
+const cantidad = z.coerce.number({ invalid_type_error: 'Ingrese una cantidad' }).positive('La cantidad debe ser mayor que 0');
+const noNegativo = z.coerce.number({ invalid_type_error: 'Ingrese un número' }).min(0, 'No puede ser negativo');
+
+export const tratamientoSchema = z.object({
+  nombre: z.string().trim().min(2, 'Ingrese el nombre').max(120),
+  precio: dinero,
+  insumos: z
+    .array(z.object({ insumoId: z.coerce.number().int().positive('Elija un insumo'), cantidad }))
+    .refine((l) => new Set(l.map((i) => i.insumoId)).size === l.length, 'Un insumo aparece dos veces'),
+});
+export type TratamientoDTO = z.infer<typeof tratamientoSchema>;
+
+// ---------- Insumos (CU-18..21) ----------
+export const insumoSchema = z.object({
+  nombre: z.string().trim().min(2, 'Ingrese el nombre').max(120),
+  unidad: z.string().trim().min(1, 'Ingrese la unidad (p. ej. unidad, caja, jeringa)').max(30),
+  stockMinimo: noNegativo,
+});
+/** Al registrar se indica el stock inicial; después solo cambia por recepción o ajuste. */
+export const insumoNuevoSchema = insumoSchema.extend({ stockInicial: noNegativo });
+export type InsumoDTO = z.infer<typeof insumoSchema>;
+export type InsumoNuevoDTO = z.infer<typeof insumoNuevoSchema>;
+
+// ---------- Atención (CU-11) ----------
+/** Piezas permanentes en notación FDI: cuadrantes 1–4, piezas 1–8 (11–18, 21–28, 31–38, 41–48). */
+export const PIEZAS_FDI = [1, 2, 3, 4].flatMap((c) => [1, 2, 3, 4, 5, 6, 7, 8].map((p) => `${c}${p}`));
+export const atencionSchema = z.object({
+  diagnostico: z.string().trim().min(3, 'Ingrese el diagnóstico').max(2000),
+  observaciones: z.string().trim().max(2000).optional(),
+  tratamientos: z
+    .array(
+      z.object({
+        tratamientoId: z.coerce.number().int().positive('Elija un tratamiento'),
+        piezaDental: z
+          .string()
+          .refine((p) => PIEZAS_FDI.includes(p), 'Pieza dental inválida (FDI 11–48)')
+          .optional()
+          .or(z.literal('').transform(() => undefined)),
+      }),
+    )
+    .min(1, 'Agregue al menos un tratamiento'),
+});
+export type AtencionDTO = z.infer<typeof atencionSchema>;
 
 export interface ErrorApi {
   codigo: string;

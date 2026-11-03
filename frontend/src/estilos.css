@@ -45,3 +45,19 @@ body { background: var(--fondo); }
 .chip-cancelada, .chip-liberada { background: #e9ecef; color: #495057; }
 .chip-inasistencia { background: #f8d7da; color: #842029; }
 .text-capitalize-first::first-letter { text-transform: uppercase; }
+
+/* Selector de pieza dental FDI: 2 × 2 cuadrantes de 8 piezas; en celular se apilan */
+.odontograma { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.35rem 0.75rem; }
+.cuadrante { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 2px; }
+.cuadrante:nth-child(odd) { border-right: 2px solid #ced4da; padding-right: 0.5rem; }
+.odontograma > .cuadrante:nth-child(-n + 2) { border-bottom: 2px solid #ced4da; padding-bottom: 0.35rem; }
+.odontograma > .small { grid-column: 1 / -1; }
+.pieza { border: 1px solid #ced4da; background: #fff; border-radius: 4px; font-size: 0.75rem; padding: 0.3rem 0; min-height: 32px; }
+.pieza:hover { border-color: var(--acento); }
+.pieza.activa { background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 600; }
+@media (max-width: 575.98px) {
+  .odontograma { grid-template-columns: 1fr; }
+  .cuadrante:nth-child(odd) { border-right: 0; padding-right: 0; }
+  .odontograma > .cuadrante:nth-child(-n + 2) { border-bottom: 0; padding-bottom: 0; }
+  .odontograma > .cuadrante:nth-child(2) { border-bottom: 2px solid #ced4da; padding-bottom: 0.35rem; }
+}

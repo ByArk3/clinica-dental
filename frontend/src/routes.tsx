@@ -11,9 +11,14 @@ import Inicio from './pages/Inicio';
 import CitasDelDia from './pages/CitasDelDia';
 import ConfirmarCita from './pages/ConfirmarCita';
 import MiPerfil from './pages/MiPerfil';
+import Historial from './pages/Historial';
+import MisCitasOdontologo from './pages/MisCitasOdontologo';
+import RegistrarAtencion from './pages/RegistrarAtencion';
+import Tarifario from './pages/Tarifario';
+import Insumos from './pages/Insumos';
 
 export const rutaInicio = (rol: Rol) =>
-  ({ paciente: '/reservar', recepcionista: '/citas/dia', odontologo: '/inicio', administrador: '/inicio' })[rol];
+  ({ paciente: '/reservar', recepcionista: '/citas/dia', odontologo: '/atencion', administrador: '/insumos' })[rol];
 
 /** Rutas protegidas por rol (RNF07). La API vuelve a validar el rol: esto es solo navegación. */
 function Protegida({ roles }: { roles?: Rol[] }) {
@@ -48,6 +53,17 @@ export function Rutas() {
       <Route element={<Protegida roles={['recepcionista']} />}>
         <Route path="/citas/nueva" element={<NuevaCita />} />
         <Route path="/citas/dia" element={<CitasDelDia />} />
+      </Route>
+      <Route element={<Protegida roles={['odontologo']} />}>
+        <Route path="/atencion" element={<MisCitasOdontologo />} />
+        <Route path="/atencion/:citaId" element={<RegistrarAtencion />} />
+      </Route>
+      <Route element={<Protegida roles={['odontologo', 'administrador']} />}>
+        <Route path="/historial" element={<Historial />} />
+      </Route>
+      <Route element={<Protegida roles={['administrador']} />}>
+        <Route path="/tarifario" element={<Tarifario />} />
+        <Route path="/insumos" element={<Insumos />} />
       </Route>
       <Route element={<Protegida />}>
         <Route path="/inicio" element={<Inicio />} />

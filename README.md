@@ -58,9 +58,20 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | CU-09 Citas del día e inasistencias (3.1, 6.1 → paciente restringido, RN-12) | `inasistencia.test.ts`, `Iteracion1.test.tsx` |
 | Menú y rutas por rol (RNF07), vistas móviles 360 px (RNF02) | |
 
-Total: 76 pruebas de API + 18 de interfaz.
+## Avance — Iteración 2 ✅ completa
 
-**Siguiente: Iteración 2** — tarifario e insumos (CRUD), `StockService` + kárdex + alertas, CU-10 historial clínico, CU-11 registrar atención.
+| Caso de uso | Pruebas |
+|---|---|
+| CU-12 Actualizar stock: `StockService.registrarMovimiento(tx, …)` (bloqueo de fila, kárdex con saldo, alerta RN-14 sin duplicar, salida que no alcanza → 0 + observación) | `stock.test.ts` |
+| CU-14..17 Tarifario: agregar con insumos que consume, listar/buscar/filtrar, modificar (precio solo a futuro), desactivar/activar | `inventario.test.ts`, `Iteracion2.test.tsx` |
+| CU-18..22 Insumos: registrar con stock inicial (kárdex), listar (filtro «en stock mínimo»), modificar sin tocar el stock, desactivar (no si lo usa un tratamiento activo), buscar | `inventario.test.ts` |
+| Kárdex por insumo y alertas pendientes (lectura; CU-23/24 completos en la iteración 4) | `inventario.test.ts` |
+| CU-10 Consultar historial clínico: búsqueda por DNI o nombre, ficha + atenciones (más reciente primero), 2.1, 4.1 (RN-07), 5.1 | `atencion.test.ts`, `Iteracion2.test.tsx` |
+| CU-11 Registrar tratamiento: mis citas del día, diagnóstico, pieza FDI 11–48, uno o más tratamientos activos (RN-08), tabla de insumos a descontar; en una transacción: atención + precio congelado + cita «Atendida» + salidas de stock (RN-09) | `atencion.test.ts`, `Iteracion2.test.tsx` |
+
+Total acumulado: 113 pruebas de API + 29 de interfaz.
+
+**Siguiente: Iteración 3** — tipos de pago, CU-13 emitir comprobante (descuentos, vuelto, PDF y correo) y cobro del adelanto RN-12.
 
 **Tareas programadas** (`backend/src/jobs`, node-cron, cada 15 min, hora de Lima; se activan con `JOBS_ENABLED=true`):
 primero libera las citas sin confirmar a menos de 24 h y luego envía el recordatorio por correo a las que empiezan dentro de 48 h.
@@ -85,4 +96,8 @@ Se aplican los supuestos de la sección 14 del brief (P2–P17). Además:
   `TODO(decisión)`: validarlo con la clínica.
 - El enlace de confirmación (CU-08) no pide sesión y solo muestra el nombre de pila, el odontólogo, la fecha y la hora.
   Al reprogramar se genera un enlace nuevo y el anterior deja de servir.
+- **Atención:** solo el odontólogo de la cita, con la cita «Confirmada» y de hoy o de un día anterior (no futura).
+  Si se elige dos veces el mismo tratamiento (p. ej. dos piezas), se cobra y se descuenta dos veces.
+- **Alertas de stock (RN-14):** se genera una cuando el saldo queda ≤ mínimo, y no se repite mientras haya una sin revisar.
+- **Insumo desactivado:** un tratamiento no puede reactivarse mientras alguno de sus insumos esté desactivado.
 - Los precios de Extracción, Blanqueamiento y Consulta en la semilla son de ejemplo: `TODO(decisión)`.
