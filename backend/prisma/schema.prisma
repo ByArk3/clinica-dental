@@ -1,0 +1,413 @@
+// Modelo de datos (entidades e_). Propuesta del brief, sección 6.
+// Los CHECK y el índice único parcial de RN-02 están en la migración SQL inicial.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Rol {
+  paciente
+  recepcionista
+  odontologo
+  administrador
+}
+
+enum CanalCita {
+  web
+  presencial
+}
+
+enum EstadoCita {
+  pendiente_confirmacion
+  pendiente_adelanto
+  confirmada
+  atendida
+  pagada
+  cancelada
+  liberada
+  inasistencia
+}
+
+enum TipoMovimiento {
+  entrada_recepcion
+  salida_tratamiento
+  ajuste
+  merma
+  inicial
+}
+
+enum EstadoPedido {
+  pendiente
+  recibido
+  recibido_con_diferencias
+  anulado
+}
+
+enum TipoComprobante {
+  servicio
+  adelanto // RN-12 / P6
+}
+
+model Usuario {
+  id               Int       @id @default(autoincrement())
+  nombres          String
+  email            String    @unique
+  password         String // hash bcrypt (RNF05)
+  rol              Rol
+  activo           Boolean   @default(true)
+  resetTokenHash   String?   @unique @map("reset_token_hash") // CU-02, guardado como hash SHA-256
+  resetTokenExpira DateTime? @map("reset_token_expira") // P16: 30 min
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  paciente            Paciente?
+  odontologo          Odontologo?
+  citasCreadas        Cita[]           @relation("CitaCreadaPor")
+  movimientos         MovimientoKardex[]
+  alertasRevisadas    AlertaStock[]
+  pedidosRegistrados  Pedido[]
+  comprobantesEmitidos Comprobante[]
+
+  @@map("usuarios")
+}
+
+model Paciente {
+  id              Int       @id @default(autoincrement())
+  usuarioId       Int?      @unique @map("usuario_id")
+  dni             String    @unique @db.Char(8)
+  nombres         String
+  apellidos       String
+  fechaNacimiento DateTime  @map("fecha_nacimiento") @db.Date
+  telefono        String
+  email           String?
+  direccion       String?
+  apoderado       String? // P14
+  inasistencias   Int       @default(0)
+  restringido     Boolean   @default(false) // RN-12
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  usuario      Usuario?       @relation(fields: [usuarioId], references: [id])
+  ficha        FichaPaciente?
+  citas        Cita[]
+  comprobantes Comprobante[]
+
+  @@index([apellidos, nombres])
+  @@map("pacientes")
+}
+
+model FichaPaciente {
+  id           Int      @id @default(autoincrement())
+  pacienteId   Int      @unique @map("paciente_id")
+  alergias     String?
+  antecedentes String?
+  notas        String? // anotaciones administrativas (p. ej. inasistencias, CU-09)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  paciente   Paciente   @relation(fields: [pacienteId], references: [id])
+  atenciones Atencion[]
+
+  @@map("fichas_paciente")
+}
+
+model Odontologo {
+  id           Int     @id @default(autoincrement())
+  usuarioId    Int     @unique @map("usuario_id")
+  cmp          String?
+  especialidad String?
+  activo       Boolean @default(true)
+
+  usuario    Usuario            @relation(fields: [usuarioId], references: [id])
+  horarios   HorarioAtencion[]
+  citas      Cita[]
+  atenciones Atencion[]
+
+  @@map("odontologos")
+}
+
+/// odontologoId NULL = horario general de la clínica (P4/P5)
+model HorarioAtencion {
+  id           Int      @id @default(autoincrement())
+  odontologoId Int?     @map("odontologo_id")
+  diaSemana    Int      @map("dia_semana") @db.SmallInt // 1 = lunes … 7 = domingo
+  horaInicio   DateTime @map("hora_inicio") @db.Time(0)
+  horaFin      DateTime @map("hora_fin") @db.Time(0)
+
+  odontologo Odontologo? @relation(fields: [odontologoId], references: [id])
+
+  @@index([odontologoId, diaSemana])
+  @@map("horarios_atencion")
+}
+
+model Cita {
+  id                   Int        @id @default(autoincrement())
+  pacienteId           Int        @map("paciente_id")
+  odontologoId         Int        @map("odontologo_id")
+  fecha                DateTime   @db.Date
+  hora                 DateTime   @db.Time(0)
+  motivo               String     @db.VarChar(200)
+  canal                CanalCita
+  estado               EstadoCita
+  tokenConfirmacion    String?    @unique @map("token_confirmacion")
+  recordatorioEnviadoEn DateTime? @map("recordatorio_enviado_en")
+  creadoPorId          Int        @map("creado_por")
+  createdAt            DateTime   @default(now()) @map("created_at")
+  updatedAt            DateTime   @updatedAt @map("updated_at")
+
+  paciente     Paciente      @relation(fields: [pacienteId], references: [id])
+  odontologo   Odontologo    @relation(fields: [odontologoId], references: [id])
+  creadoPor    Usuario       @relation("CitaCreadaPor", fields: [creadoPorId], references: [id])
+  atencion     Atencion?
+  comprobantes Comprobante[]
+
+  @@index([fecha, estado])
+  @@index([pacienteId])
+  @@index([odontologoId, fecha])
+  @@map("citas")
+}
+
+model Atencion {
+  id            Int      @id @default(autoincrement())
+  citaId        Int      @unique @map("cita_id")
+  fichaId       Int      @map("ficha_id")
+  odontologoId  Int      @map("odontologo_id")
+  diagnostico   String
+  observaciones String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  cita         Cita                  @relation(fields: [citaId], references: [id])
+  ficha        FichaPaciente         @relation(fields: [fichaId], references: [id])
+  odontologo   Odontologo            @relation(fields: [odontologoId], references: [id])
+  tratamientos AtencionTratamiento[]
+
+  @@index([fichaId])
+  @@map("atenciones")
+}
+
+model AtencionTratamiento {
+  id             Int     @id @default(autoincrement())
+  atencionId     Int     @map("atencion_id")
+  tratamientoId  Int     @map("tratamiento_id")
+  piezaDental    String? @map("pieza_dental") @db.VarChar(2)
+  precioAplicado Decimal @map("precio_aplicado") @db.Decimal(10, 2) // precio congelado del tarifario
+
+  atencion    Atencion    @relation(fields: [atencionId], references: [id])
+  tratamiento Tratamiento @relation(fields: [tratamientoId], references: [id])
+
+  @@map("atencion_tratamiento")
+}
+
+/// El tarifario (RN-08)
+model Tratamiento {
+  id        Int      @id @default(autoincrement())
+  nombre    String   @unique
+  precio    Decimal  @db.Decimal(10, 2)
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  insumos             TratamientoInsumo[]
+  atenciones          AtencionTratamiento[]
+  detallesComprobante DetalleComprobante[]
+
+  @@map("tratamientos")
+}
+
+model TratamientoInsumo {
+  tratamientoId Int     @map("tratamiento_id")
+  insumoId      Int     @map("insumo_id")
+  cantidad      Decimal @db.Decimal(10, 2)
+
+  tratamiento Tratamiento @relation(fields: [tratamientoId], references: [id])
+  insumo      Insumo      @relation(fields: [insumoId], references: [id])
+
+  @@id([tratamientoId, insumoId])
+  @@map("tratamiento_insumo")
+}
+
+model Insumo {
+  id          Int      @id @default(autoincrement())
+  nombre      String   @unique
+  unidad      String
+  stockActual Decimal  @default(0) @map("stock_actual") @db.Decimal(10, 2)
+  stockMinimo Decimal  @default(0) @map("stock_minimo") @db.Decimal(10, 2)
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tratamientos  TratamientoInsumo[]
+  movimientos   MovimientoKardex[]
+  alertas       AlertaStock[]
+  detallesPedido DetallePedido[]
+
+  @@map("insumos")
+}
+
+model MovimientoKardex {
+  id             Int            @id @default(autoincrement())
+  insumoId       Int            @map("insumo_id")
+  tipo           TipoMovimiento
+  cantidad       Decimal        @db.Decimal(10, 2)
+  saldo          Decimal        @db.Decimal(10, 2)
+  motivo         String?
+  referenciaTipo String?        @map("referencia_tipo")
+  referenciaId   Int?           @map("referencia_id")
+  usuarioId      Int            @map("usuario_id")
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  insumo  Insumo  @relation(fields: [insumoId], references: [id])
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@index([insumoId, createdAt])
+  @@map("movimientos_kardex")
+}
+
+model AlertaStock {
+  id             Int       @id @default(autoincrement())
+  insumoId       Int       @map("insumo_id")
+  stockAlGenerar Decimal   @map("stock_al_generar") @db.Decimal(10, 2)
+  revisada       Boolean   @default(false)
+  revisadaPorId  Int?      @map("revisada_por")
+  revisadaEn     DateTime? @map("revisada_en")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  insumo      Insumo   @relation(fields: [insumoId], references: [id])
+  revisadaPor Usuario? @relation(fields: [revisadaPorId], references: [id])
+
+  @@index([revisada])
+  @@map("alertas_stock")
+}
+
+model Proveedor {
+  id          Int      @id @default(autoincrement())
+  ruc         String   @unique @db.Char(11)
+  razonSocial String   @map("razon_social")
+  contacto    String?
+  telefono    String?
+  email       String?
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  pedidos Pedido[]
+
+  @@map("proveedores")
+}
+
+model Pedido {
+  id                   Int          @id @default(autoincrement())
+  codigo               String       @unique // PED-0001
+  proveedorId          Int          @map("proveedor_id")
+  estado               EstadoPedido @default(pendiente)
+  motivoAnulacion      String?      @map("motivo_anulacion")
+  observacionRecepcion String?      @map("observacion_recepcion")
+  registradoPorId      Int          @map("registrado_por")
+  recibidoEn           DateTime?    @map("recibido_en")
+  createdAt            DateTime     @default(now()) @map("created_at")
+  updatedAt            DateTime     @updatedAt @map("updated_at")
+
+  proveedor     Proveedor       @relation(fields: [proveedorId], references: [id])
+  registradoPor Usuario         @relation(fields: [registradoPorId], references: [id])
+  detalles      DetallePedido[]
+
+  @@index([estado])
+  @@map("pedidos")
+}
+
+model DetallePedido {
+  id               Int      @id @default(autoincrement())
+  pedidoId         Int      @map("pedido_id")
+  insumoId         Int      @map("insumo_id")
+  cantidadPedida   Decimal  @map("cantidad_pedida") @db.Decimal(10, 2)
+  cantidadRecibida Decimal? @map("cantidad_recibida") @db.Decimal(10, 2)
+
+  pedido Pedido @relation(fields: [pedidoId], references: [id])
+  insumo Insumo @relation(fields: [insumoId], references: [id])
+
+  @@map("detalle_pedido")
+}
+
+model TipoPago {
+  id           Int           @id @default(autoincrement())
+  nombre       String        @unique
+  comprobantes Comprobante[]
+
+  @@map("tipos_pago")
+}
+
+/// P3: descuentos gestionados por el Administrador; uno por cobro
+model Descuento {
+  id           Int           @id @default(autoincrement())
+  nombre       String        @unique
+  porcentaje   Decimal       @db.Decimal(5, 2)
+  activo       Boolean       @default(true)
+  comprobantes Comprobante[]
+
+  @@map("descuentos")
+}
+
+model Comprobante {
+  id            Int             @id @default(autoincrement())
+  numero        String          @unique // P2: comprobante interno C-000001
+  tipo          TipoComprobante @default(servicio)
+  citaId        Int             @map("cita_id")
+  pacienteId    Int             @map("paciente_id")
+  tipoPagoId    Int             @map("tipo_pago_id")
+  descuentoId   Int?            @map("descuento_id")
+  subtotal      Decimal         @db.Decimal(10, 2)
+  descuento     Decimal         @default(0) @db.Decimal(10, 2)
+  total         Decimal         @db.Decimal(10, 2)
+  montoRecibido Decimal         @map("monto_recibido") @db.Decimal(10, 2)
+  vuelto        Decimal         @default(0) @db.Decimal(10, 2)
+  enviadoEmail  Boolean         @default(false) @map("enviado_email")
+  emitidoPorId  Int             @map("emitido_por")
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  cita            Cita                 @relation(fields: [citaId], references: [id])
+  paciente        Paciente             @relation(fields: [pacienteId], references: [id])
+  tipoPago        TipoPago             @relation(fields: [tipoPagoId], references: [id])
+  descuentoAplicado Descuento?         @relation(fields: [descuentoId], references: [id])
+  emitidoPor      Usuario              @relation(fields: [emitidoPorId], references: [id])
+  detalles        DetalleComprobante[]
+
+  @@unique([citaId, tipo]) // un comprobante de servicio (y a lo más uno de adelanto) por cita
+  @@map("comprobantes")
+}
+
+model DetalleComprobante {
+  id            Int     @id @default(autoincrement())
+  comprobanteId Int     @map("comprobante_id")
+  tratamientoId Int?    @map("tratamiento_id") // NULL en el comprobante de adelanto
+  descripcion   String
+  precio        Decimal @db.Decimal(10, 2)
+
+  comprobante Comprobante  @relation(fields: [comprobanteId], references: [id])
+  tratamiento Tratamiento? @relation(fields: [tratamientoId], references: [id])
+
+  @@map("detalle_comprobante")
+}
+
+/// Parámetros configurables (p. ej. monto del adelanto P6, duración del bloque P5)
+model Configuracion {
+  clave String @id
+  valor String
+
+  @@map("configuracion")
+}
+
+/// Tabla de sesiones de express-session (connect-pg-simple)
+model Sesion {
+  sid    String   @id @db.VarChar
+  sess   Json     @db.Json
+  expire DateTime @db.Timestamp(6)
+
+  @@index([expire], map: "IDX_session_expire")
+  @@map("session")
+}

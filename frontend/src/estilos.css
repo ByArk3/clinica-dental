@@ -1,0 +1,46 @@
+/* Estilo de los prototipos: barra lateral oscura, acento verde azulado, tarjetas blancas. */
+:root {
+  --oscuro: #0b3c49;
+  --acento: #0e7c86;
+  --acento-hover: #0b666e;
+  --fondo: #f3f6f7;
+}
+body { background: var(--fondo); }
+
+.layout { display: flex; min-height: 100vh; }
+.barra-lateral { background: var(--oscuro); width: 240px; flex-shrink: 0; }
+.barra-lateral .nav-link { color: rgba(255, 255, 255, 0.8); border-radius: 6px; padding: 0.5rem 0.75rem; }
+.barra-lateral .nav-link.active { background: var(--acento); color: #fff; }
+.barra-lateral .nav-link.disabled { color: rgba(255, 255, 255, 0.35); }
+.contenido { flex: 1; padding: 1.5rem; max-width: 960px; min-width: 0; }
+
+/* RNF02: desde 360 px la barra lateral pasa a ser una barra superior */
+@media (max-width: 767.98px) {
+  .layout { flex-direction: column; }
+  .barra-lateral { width: 100%; }
+  .contenido { padding: 1rem; }
+}
+
+.tarjeta { background: #fff; border-radius: 10px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(11, 60, 73, 0.1); }
+
+.btn-acento {
+  --bs-btn-color: #fff; --bs-btn-bg: var(--acento); --bs-btn-border-color: var(--acento);
+  --bs-btn-hover-color: #fff; --bs-btn-hover-bg: var(--acento-hover); --bs-btn-hover-border-color: var(--acento-hover);
+  --bs-btn-active-color: #fff; --bs-btn-active-bg: var(--acento-hover); --bs-btn-active-border-color: var(--acento-hover);
+  --bs-btn-disabled-color: #fff; --bs-btn-disabled-bg: var(--acento); --bs-btn-disabled-border-color: var(--acento);
+  --bs-btn-focus-shadow-rgb: 14, 124, 134;
+}
+
+.grilla-horarios { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 0.4rem; }
+
+.pantalla-acceso { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1rem; background: var(--oscuro); }
+.acceso { width: 100%; max-width: 400px; }
+
+.chip { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
+.chip-pendiente_confirmacion { background: #fff3cd; color: #7a5b00; }
+.chip-pendiente_adelanto { background: #ffe0cc; color: #8a3b00; }
+.chip-confirmada { background: #d1f0f2; color: #0b5a61; }
+.chip-atendida { background: #dbe7ff; color: #1d3f8f; }
+.chip-pagada { background: #d4edda; color: #1e5f2c; }
+.chip-cancelada, .chip-liberada { background: #e9ecef; color: #495057; }
+.chip-inasistencia { background: #f8d7da; color: #842029; }
