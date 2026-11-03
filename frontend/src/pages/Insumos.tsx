@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { insumoNuevoSchema, insumoSchema, type InsumoDTO, type InsumoNuevoDTO } from '@clinica/shared';
+import { ajusteSchema, insumoNuevoSchema, insumoSchema, type InsumoDTO, type InsumoNuevoDTO } from '@clinica/shared';
+import { Link } from 'react-router-dom';
 import { insumosApi, type Insumo, type MovimientoKardex } from '../api/recursos';
 import { FiltroLista } from '../components/FiltroLista';
 import { ModalConfirmar } from '../components/ModalConfirmar';
-import { mensajeError } from '../formato';
+import { camposApi, erroresZod, fechaHoraPE, mensajeError } from '../formato';
 
 const num = (s: string) => Number(s).toLocaleString('es-PE', { maximumFractionDigits: 2 });
 const TIPO: Record<MovimientoKardex['tipo'], string> = {
@@ -24,10 +25,11 @@ export default function Insumos() {
   const [soloBajos, setSoloBajos] = useState(false);
   const [editando, setEditando] = useState<Insumo | 'nuevo' | null>(null);
   const [kardexDe, setKardexDe] = useState<Insumo | null>(null);
+  const [ajusteDe, setAjusteDe] = useState<Insumo | null>(null);
   const [cambiarEstado, setCambiarEstado] = useState<Insumo | null>(null);
 
   const lista = useQuery({ queryKey: ['insumos', q, estado, soloBajos], queryFn: () => insumosApi.listar({ q, activo: estado, bajoMinimo: soloBajos ? '1' : undefined }) });
-  const alertas = useQuery({ queryKey: ['alertas'], queryFn: insumosApi.alertas });
+  const alertas = useQuery({ queryKey: ['alertas'], queryFn: () => insumosApi.alertas() });
   const estadoMut = useMutation({
     mutationFn: (i: Insumo) => insumosApi.cambiarEstado(i.id, !i.activo),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['insumos'] }); setCambiarEstado(null); },
@@ -41,7 +43,8 @@ export default function Insumos() {
       </div>
       {!!alertas.data?.length && (
         <div className="alert alert-warning">
-          <strong>{alertas.data.length} insumo(s) en stock mínimo:</strong> {alertas.data.map((a) => a.insumo.nombre).join(', ')}. Deben pedirse (RN-14).
+          <strong>{alertas.data.length} insumo(s) en stock mínimo:</strong> {alertas.data.map((a) => a.insumo.nombre).join(', ')}. Deben pedirse (RN-14).{' '}
+          <Link to="/alertas">Revisar alertas</Link>
         </div>
       )}
       <FiltroLista
@@ -71,6 +74,7 @@ export default function Insumos() {
                   <td className="text-end">{num(i.stockMinimo)}</td>
                   <td className="text-end text-nowrap">
                     <button className="btn btn-sm btn-outline-secondary me-1" onClick={() => setKardexDe(i)}>Kárdex</button>
+                    {i.activo && <button className="btn btn-sm btn-outline-secondary me-1" onClick={() => setAjusteDe(i)}>Ajuste</button>}
                     <button className="btn btn-sm btn-outline-secondary me-1" onClick={() => setEditando(i)}>Modificar</button>
                     <button className={`btn btn-sm ${i.activo ? 'btn-outline-danger' : 'btn-outline-success'}`} onClick={() => setCambiarEstado(i)}>
                       {i.activo ? 'Desactivar' : 'Activar'}
@@ -85,6 +89,7 @@ export default function Insumos() {
       </div>
       {editando && <FormInsumo insumo={editando === 'nuevo' ? null : editando} onCerrar={() => setEditando(null)} />}
       {kardexDe && <ModalKardex insumo={kardexDe} onCerrar={() => setKardexDe(null)} />}
+      {ajusteDe && <ModalAjuste insumo={ajusteDe} onCerrar={() => setAjusteDe(null)} />}
       <ModalConfirmar
         abierto={!!cambiarEstado}
         titulo={cambiarEstado?.activo ? 'Desactivar insumo' : 'Activar insumo'}
@@ -166,20 +171,39 @@ function FormInsumo({ insumo, onCerrar }: { insumo: Insumo | null; onCerrar: () 
   );
 }
 
+/** CU-23 Consultar kárdex (filtros por fecha y tipo de movimiento). */
 function ModalKardex({ insumo, onCerrar }: { insumo: Insumo; onCerrar: () => void }) {
-  const k = useQuery({ queryKey: ['kardex', insumo.id], queryFn: () => insumosApi.kardex(insumo.id) });
-  const fmt = new Intl.DateTimeFormat('es-PE', { timeZone: 'America/Lima', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const [f, setF] = useState({ desde: '', hasta: '', tipo: '' });
+  const k = useQuery({ queryKey: ['kardex', insumo.id, f], queryFn: () => insumosApi.kardex(insumo.id, f) });
   return (
     <Modal show onHide={onCerrar} centered size="lg">
       <Modal.Header closeButton><Modal.Title className="h5">Kárdex — {insumo.nombre}</Modal.Title></Modal.Header>
       <Modal.Body>
+        <div className="row g-2 mb-3">
+          <div className="col-sm-4">
+            <label htmlFor="k-desde" className="form-label small mb-1">Desde</label>
+            <input id="k-desde" type="date" className="form-control form-control-sm" value={f.desde} onChange={(e) => setF({ ...f, desde: e.target.value })} />
+          </div>
+          <div className="col-sm-4">
+            <label htmlFor="k-hasta" className="form-label small mb-1">Hasta</label>
+            <input id="k-hasta" type="date" className="form-control form-control-sm" value={f.hasta} onChange={(e) => setF({ ...f, hasta: e.target.value })} />
+          </div>
+          <div className="col-sm-4">
+            <label htmlFor="k-tipo" className="form-label small mb-1">Movimiento</label>
+            <select id="k-tipo" className="form-select form-select-sm" value={f.tipo} onChange={(e) => setF({ ...f, tipo: e.target.value })}>
+              <option value="">Todos</option>
+              {Object.entries(TIPO).map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+        {k.data?.movimientos.length === 0 && <p className="text-muted small">Sin movimientos para el filtro elegido.</p>}
         <div className="table-responsive">
           <table className="table table-sm mb-0">
             <thead><tr><th>Fecha</th><th>Movimiento</th><th className="text-end">Cantidad</th><th className="text-end">Saldo</th><th>Detalle</th></tr></thead>
             <tbody>
               {k.data?.movimientos.map((m) => (
                 <tr key={m.id}>
-                  <td className="text-nowrap">{fmt.format(new Date(m.fecha))}</td>
+                  <td className="text-nowrap">{fechaHoraPE(m.fecha)}</td>
                   <td>{TIPO[m.tipo]}</td>
                   <td className={`text-end ${Number(m.cantidad) < 0 ? 'text-danger' : 'text-success'}`}>{Number(m.cantidad) > 0 ? '+' : ''}{num(m.cantidad)}</td>
                   <td className="text-end fw-semibold">{num(m.saldo)}</td>
@@ -190,6 +214,79 @@ function ModalKardex({ insumo, onCerrar }: { insumo: Insumo; onCerrar: () => voi
           </table>
         </div>
       </Modal.Body>
+    </Modal>
+  );
+}
+
+/** CU-25 Registrar ajuste de stock o merma (RN-13: solo el Administrador). */
+function ModalAjuste({ insumo, onCerrar }: { insumo: Insumo; onCerrar: () => void }) {
+  const qc = useQueryClient();
+  const [tipo, setTipo] = useState<'ajuste' | 'merma'>('ajuste');
+  const [sentido, setSentido] = useState<1 | -1>(1);
+  const [cantidad, setCantidad] = useState('');
+  const [motivo, setMotivo] = useState('');
+  const [errores, setErrores] = useState<Record<string, string>>({});
+  const guardar = useMutation({
+    mutationFn: (d: Parameters<typeof insumosApi.ajuste>[1]) => insumosApi.ajuste(insumo.id, d),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['insumos'] });
+      qc.invalidateQueries({ queryKey: ['alertas'] });
+      qc.invalidateQueries({ queryKey: ['kardex', insumo.id] });
+      onCerrar();
+    },
+    onError: (e) => setErrores(camposApi(e)),
+  });
+  const n = Number(cantidad.replace(',', '.'));
+  const resultado = Number(insumo.stockActual) + (tipo === 'merma' ? -n : sentido * n);
+
+  function enviar(e: FormEvent) {
+    e.preventDefault();
+    const r = ajusteSchema.safeParse({ tipo, cantidad: tipo === 'merma' ? n : sentido * n, motivo });
+    if (!r.success) return setErrores(erroresZod(r.error.issues));
+    setErrores({});
+    guardar.mutate(r.data);
+  }
+
+  return (
+    <Modal show onHide={onCerrar} centered>
+      <form onSubmit={enviar} noValidate>
+        <Modal.Header closeButton><Modal.Title className="h5">Ajuste de stock — {insumo.nombre}</Modal.Title></Modal.Header>
+        <Modal.Body>
+          <div className="btn-group w-100 mb-3" role="group" aria-label="Tipo de movimiento">
+            <button type="button" className={`btn ${tipo === 'ajuste' ? 'btn-acento' : 'btn-outline-secondary'}`} onClick={() => setTipo('ajuste')}>Ajuste (conteo físico)</button>
+            <button type="button" className={`btn ${tipo === 'merma' ? 'btn-acento' : 'btn-outline-secondary'}`} onClick={() => setTipo('merma')}>Merma (vencido, dañado)</button>
+          </div>
+          {tipo === 'ajuste' && (
+            <div className="btn-group mb-3" role="group" aria-label="Sentido">
+              <button type="button" className={`btn btn-sm ${sentido === 1 ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setSentido(1)}>Sumar</button>
+              <button type="button" className={`btn btn-sm ${sentido === -1 ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setSentido(-1)}>Restar</button>
+            </div>
+          )}
+          <div className="row g-3">
+            <div className="col-sm-5">
+              <label htmlFor="a-cantidad" className="form-label">Cantidad ({insumo.unidad})</label>
+              <input id="a-cantidad" inputMode="decimal" className={`form-control ${errores.cantidad ? 'is-invalid' : ''}`} value={cantidad} onChange={(e) => setCantidad(e.target.value)} />
+              <div className="invalid-feedback">{errores.cantidad}</div>
+            </div>
+            <div className="col-sm-7">
+              <span className="form-label d-block">Stock</span>
+              <div className="form-control-plaintext">
+                {num(insumo.stockActual)} → <strong className={resultado < 0 ? 'text-danger' : ''}>{cantidad ? num(String(resultado)) : '—'}</strong>
+              </div>
+            </div>
+            <div className="col-12">
+              <label htmlFor="a-motivo" className="form-label">Motivo</label>
+              <input id="a-motivo" className={`form-control ${errores.motivo ? 'is-invalid' : ''}`} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej.: conteo físico mensual, jeringas vencidas" />
+              <div className="invalid-feedback">{errores.motivo}</div>
+            </div>
+          </div>
+          {guardar.isError && <div className="alert alert-danger mt-3 mb-0" role="alert">{mensajeError(guardar.error)}</div>}
+        </Modal.Body>
+        <Modal.Footer>
+          <button type="button" className="btn btn-outline-secondary" onClick={onCerrar}>Cancelar</button>
+          <button className="btn btn-acento" disabled={guardar.isPending}>Registrar</button>
+        </Modal.Footer>
+      </form>
     </Modal>
   );
 }

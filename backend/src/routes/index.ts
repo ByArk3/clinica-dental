@@ -5,6 +5,7 @@ import * as Citas from '../controllers/cita.controller.js';
 import * as Inventario from '../controllers/inventario.controller.js';
 import * as Atencion from '../controllers/atencion.controller.js';
 import * as Caja from '../controllers/caja.controller.js';
+import * as Admin from '../controllers/admin.controller.js';
 import { requireAuth, requireRol, requireRolConMensaje } from '../middlewares/auth.js';
 import { MENSAJES } from '@clinica/shared';
 
@@ -70,8 +71,10 @@ rutas.post('/insumos', admin, Inventario.crearInsumo);
 rutas.patch('/insumos/:id', admin, Inventario.modificarInsumo);
 rutas.patch('/insumos/:id/desactivar', admin, Inventario.desactivarInsumo);
 rutas.patch('/insumos/:id/activar', admin, Inventario.activarInsumo);
-rutas.get('/insumos/:id/kardex', admin, Inventario.kardex);
-rutas.get('/alertas', admin, Inventario.alertas);
+rutas.get('/insumos/:id/kardex', admin, Admin.kardex); // CU-23
+rutas.post('/insumos/:id/ajuste', admin, Admin.ajuste); // CU-25 (RN-13)
+rutas.get('/alertas', admin, Admin.alertas); // CU-24
+rutas.patch('/alertas/:id/revisar', admin, Admin.revisarAlerta);
 
 // CU-13 Caja — Recepcionista
 const recep = requireRol('recepcionista');
@@ -83,3 +86,41 @@ rutas.get('/descuentos', recep, Caja.descuentos);
 rutas.get('/comprobantes/:id', requireRol('recepcionista', 'administrador'), Caja.ver);
 rutas.get('/comprobantes/:id/pdf', requireRol('recepcionista', 'administrador'), Caja.pdf);
 rutas.post('/comprobantes/:id/enviar', recep, Caja.enviar);
+
+// ===== Iteración 4 (Administrador) =====
+// Proveedores CU-26..29
+rutas.get('/proveedores', admin, Admin.listarProveedores);
+rutas.post('/proveedores', admin, Admin.crearProveedor);
+rutas.patch('/proveedores/:id', admin, Admin.modificarProveedor);
+rutas.patch('/proveedores/:id/desactivar', admin, Admin.desactivarProveedor);
+rutas.patch('/proveedores/:id/activar', admin, Admin.activarProveedor);
+
+// Pedidos CU-30..33 (RN-13: solo el Administrador)
+rutas.get('/pedidos', admin, Admin.listarPedidos);
+rutas.post('/pedidos', admin, Admin.registrarPedido);
+rutas.get('/pedidos/:id', admin, Admin.verPedido);
+rutas.get('/pedidos/:id/pdf', admin, Admin.pdfDePedido);
+rutas.post('/pedidos/:id/enviar', admin, Admin.enviarPedido);
+rutas.patch('/pedidos/:id/anular', admin, Admin.anularPedido);
+rutas.post('/pedidos/:id/recepcion', admin, Admin.recepcion);
+
+// Usuarios CU-34..37
+rutas.get('/usuarios', admin, Admin.listarUsuarios);
+rutas.post('/usuarios', admin, Admin.crearUsuario);
+rutas.patch('/usuarios/:id', admin, Admin.modificarUsuario);
+rutas.patch('/usuarios/:id/desactivar', admin, Admin.desactivarUsuario);
+rutas.patch('/usuarios/:id/activar', admin, Admin.activarUsuario);
+
+// Descuentos (P3) y monto del adelanto (P6)
+rutas.get('/admin/descuentos', admin, Admin.listarDescuentos);
+rutas.post('/admin/descuentos', admin, Admin.crearDescuento);
+rutas.patch('/admin/descuentos/:id', admin, Admin.modificarDescuento);
+rutas.patch('/admin/descuentos/:id/desactivar', admin, Admin.desactivarDescuento);
+rutas.patch('/admin/descuentos/:id/activar', admin, Admin.activarDescuento);
+rutas.get('/admin/adelanto', admin, Admin.verAdelanto);
+rutas.put('/admin/adelanto', admin, Admin.cambiarAdelanto);
+
+// CU-38..40 Panel y reportes
+rutas.get('/panel', admin, Admin.panel);
+rutas.get('/reportes/ingresos', admin, Admin.reporteIngresos);
+rutas.get('/reportes/inventario', admin, Admin.reporteInventario);

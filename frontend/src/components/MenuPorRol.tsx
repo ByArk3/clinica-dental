@@ -24,13 +24,16 @@ const MENU: Record<Rol, Item[]> = {
     { texto: 'Historial clínico', ruta: '/historial' },
   ],
   administrador: [
-    { texto: 'Panel' },
+    { texto: 'Panel', ruta: '/panel' },
     { texto: 'Historial clínico', ruta: '/historial' },
     { texto: 'Tarifario', ruta: '/tarifario' },
     { texto: 'Insumos', ruta: '/insumos' },
-    { texto: 'Pedidos' },
-    { texto: 'Proveedores' },
-    { texto: 'Usuarios' },
+    { texto: 'Alertas de stock', ruta: '/alertas' },
+    { texto: 'Pedidos', ruta: '/pedidos' },
+    { texto: 'Proveedores', ruta: '/proveedores' },
+    { texto: 'Usuarios', ruta: '/usuarios' },
+    { texto: 'Reportes', ruta: '/reportes' },
+    { texto: 'Configuración', ruta: '/configuracion' },
   ],
 };
 

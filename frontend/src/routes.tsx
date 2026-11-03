@@ -17,9 +17,18 @@ import RegistrarAtencion from './pages/RegistrarAtencion';
 import Tarifario from './pages/Tarifario';
 import Insumos from './pages/Insumos';
 import Caja from './pages/Caja';
+import Panel from './pages/Panel';
+import Proveedores from './pages/Proveedores';
+import Pedidos from './pages/Pedidos';
+import NuevoPedido from './pages/NuevoPedido';
+import RecepcionPedido from './pages/RecepcionPedido';
+import Alertas from './pages/Alertas';
+import Usuarios from './pages/Usuarios';
+import Configuracion from './pages/Configuracion';
+import Reportes from './pages/Reportes';
 
 export const rutaInicio = (rol: Rol) =>
-  ({ paciente: '/reservar', recepcionista: '/citas/dia', odontologo: '/atencion', administrador: '/insumos' })[rol];
+  ({ paciente: '/reservar', recepcionista: '/citas/dia', odontologo: '/atencion', administrador: '/panel' })[rol];
 
 /** Rutas protegidas por rol (RNF07). La API vuelve a validar el rol: esto es solo navegación. */
 function Protegida({ roles }: { roles?: Rol[] }) {
@@ -66,6 +75,15 @@ export function Rutas() {
       <Route element={<Protegida roles={['administrador']} />}>
         <Route path="/tarifario" element={<Tarifario />} />
         <Route path="/insumos" element={<Insumos />} />
+        <Route path="/panel" element={<Panel />} />
+        <Route path="/alertas" element={<Alertas />} />
+        <Route path="/proveedores" element={<Proveedores />} />
+        <Route path="/pedidos" element={<Pedidos />} />
+        <Route path="/pedidos/nuevo" element={<NuevoPedido />} />
+        <Route path="/pedidos/:id/recepcion" element={<RecepcionPedido />} />
+        <Route path="/usuarios" element={<Usuarios />} />
+        <Route path="/configuracion" element={<Configuracion />} />
+        <Route path="/reportes" element={<Reportes />} />
       </Route>
       <Route element={<Protegida />}>
         <Route path="/inicio" element={<Inicio />} />

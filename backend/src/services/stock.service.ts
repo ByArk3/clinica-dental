@@ -75,6 +75,12 @@ export async function registrarMovimiento(tx: Tx, m: Movimiento): Promise<Result
       await tx.alertaStock.create({ data: { insumoId: insumo.id, stockAlGenerar: saldo } });
       alertaGenerada = true;
     }
+  } else if (delta.isPositive()) {
+    // Repuesto sobre el mínimo (recepción o ajuste): la alerta abierta queda resuelta por quien repuso
+    await tx.alertaStock.updateMany({
+      where: { insumoId: insumo.id, revisada: false },
+      data: { revisada: true, revisadaPorId: m.usuarioId, revisadaEn: new Date() },
+    });
   }
 
   return {

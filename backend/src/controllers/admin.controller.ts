@@ -1,0 +1,157 @@
+// Iteración 4: proveedores, pedidos, ajustes/alertas, usuarios, descuentos, panel y reportes (Administrador).
+import type { Request, Response } from 'express';
+import { z } from 'zod';
+import {
+  ajusteSchema,
+  anularPedidoSchema,
+  descuentoSchema,
+  ESTADOS_PEDIDO,
+  fechaSchema,
+  MENSAJES,
+  pedidoSchema,
+  proveedorSchema,
+  rangoFechasSchema,
+  recepcionSchema,
+  ROLES,
+  usuarioModificarSchema,
+  usuarioNuevoSchema,
+} from '@clinica/shared';
+import * as ProveedorService from '../services/proveedor.service.js';
+import * as PedidoService from '../services/pedido.service.js';
+import * as InsumoService from '../services/insumo.service.js';
+import * as UsuarioService from '../services/usuario.service.js';
+import * as DescuentoService from '../services/descuento.service.js';
+import * as ReporteService from '../services/reporte.service.js';
+import { pdfPedido } from '../lib/pdf-pedido.js';
+import { enviarCorreo } from '../lib/correo.js';
+import { ErrorNegocio } from '../lib/errores.js';
+import { usuarioActual } from '../middlewares/auth.js';
+import { boolQuery, idParam, textoQuery } from './comun.js';
+import { ahoraLima } from '../lib/fechas.js';
+
+// ---------- Proveedores CU-26..29 ----------
+export const listarProveedores = async (req: Request, res: Response) =>
+  res.json(await ProveedorService.listar({ q: textoQuery(req.query.q), activo: boolQuery(req.query.activo) }));
+export const crearProveedor = async (req: Request, res: Response) => res.status(201).json(await ProveedorService.crear(proveedorSchema.parse(req.body)));
+export const modificarProveedor = async (req: Request, res: Response) => res.json(await ProveedorService.modificar(idParam(req), proveedorSchema.parse(req.body)));
+export const desactivarProveedor = async (req: Request, res: Response) => res.json(await ProveedorService.cambiarEstado(idParam(req), false));
+export const activarProveedor = async (req: Request, res: Response) => res.json(await ProveedorService.cambiarEstado(idParam(req), true));
+
+// ---------- Pedidos CU-30..33 ----------
+export async function listarPedidos(req: Request, res: Response) {
+  const estado = req.query.estado ? z.enum(ESTADOS_PEDIDO).parse(req.query.estado) : undefined;
+  const lista = await PedidoService.listar({ estado, q: textoQuery(req.query.q) });
+  // CU-33 2.1: sin pedidos pendientes → mensaje
+  res.json(estado === 'pendiente' && lista.length === 0 ? { pedidos: [], mensaje: MENSAJES.SIN_PEDIDOS_PENDIENTES } : { pedidos: lista });
+}
+export const verPedido = async (req: Request, res: Response) => res.json(await PedidoService.ver(idParam(req)));
+export const registrarPedido = async (req: Request, res: Response) =>
+  res.status(201).json(await PedidoService.registrar(pedidoSchema.parse(req.body), usuarioActual(req)));
+export const anularPedido = async (req: Request, res: Response) => res.json(await PedidoService.anular(idParam(req), anularPedidoSchema.parse(req.body).motivo));
+export const recepcion = async (req: Request, res: Response) =>
+  res.json(await PedidoService.registrarRecepcion(idParam(req), recepcionSchema.parse(req.body), usuarioActual(req)));
+
+export async function pdfDePedido(req: Request, res: Response) {
+  const p = await PedidoService.obtener(idParam(req));
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${p.codigo}.pdf"`);
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(await pdfPedido(p));
+}
+/** CU-30 paso 4: enviar el pedido al proveedor por correo */
+export async function enviarPedido(req: Request, res: Response) {
+  const p = await PedidoService.obtener(idParam(req));
+  if (!p.proveedor.email) throw new ErrorNegocio(422, 'PROVEEDOR_SIN_CORREO', MENSAJES.PROVEEDOR_SIN_CORREO);
+  try {
+    await enviarCorreo(
+      p.proveedor.email,
+      `Pedido ${p.codigo} — Clínica Dental`,
+      `<p>Estimados ${p.proveedor.razonSocial}:</p><p>Adjuntamos nuestro pedido <b>${p.codigo}</b>. Por favor, confirmen disponibilidad y fecha de entrega.</p>`,
+      [{ filename: `${p.codigo}.pdf`, content: await pdfPedido(p), contentType: 'application/pdf' }],
+    );
+  } catch {
+    throw new ErrorNegocio(502, 'ERROR_CORREO', 'No se pudo enviar el correo; reintente');
+  }
+  res.json({ mensaje: `Pedido enviado a ${p.proveedor.email}` });
+}
+
+// ---------- CU-23 kárdex · CU-24 alertas · CU-25 ajuste ----------
+const TIPOS_MOV = ['entrada_recepcion', 'salida_tratamiento', 'ajuste', 'merma', 'inicial'] as const;
+export async function kardex(req: Request, res: Response) {
+  const f = z
+    .object({ desde: fechaSchema.optional(), hasta: fechaSchema.optional(), tipo: z.enum(TIPOS_MOV).optional() })
+    .parse({ desde: req.query.desde || undefined, hasta: req.query.hasta || undefined, tipo: req.query.tipo || undefined });
+  res.json(await InsumoService.kardex(idParam(req), f));
+}
+export const alertas = async (req: Request, res: Response) => {
+  const revisada = req.query.todas ? undefined : (boolQuery(req.query.revisada) ?? false);
+  res.json(await InsumoService.alertas({ revisada }));
+};
+export const revisarAlerta = async (req: Request, res: Response) => res.json(await InsumoService.revisarAlerta(idParam(req), usuarioActual(req).id));
+export const ajuste = async (req: Request, res: Response) =>
+  res.status(201).json(await InsumoService.registrarAjuste(idParam(req), ajusteSchema.parse(req.body), usuarioActual(req).id));
+
+// ---------- Usuarios CU-34..37 ----------
+export async function listarUsuarios(req: Request, res: Response) {
+  const rol = req.query.rol ? z.enum(ROLES).parse(req.query.rol) : undefined;
+  res.json(await UsuarioService.listar({ q: textoQuery(req.query.q), rol, activo: boolQuery(req.query.activo) }));
+}
+export const crearUsuario = async (req: Request, res: Response) => res.status(201).json(await UsuarioService.crear(usuarioNuevoSchema.parse(req.body)));
+export const modificarUsuario = async (req: Request, res: Response) =>
+  res.json(await UsuarioService.modificar(idParam(req), usuarioModificarSchema.parse(req.body), usuarioActual(req)));
+export const desactivarUsuario = async (req: Request, res: Response) => res.json(await UsuarioService.cambiarEstado(idParam(req), false, usuarioActual(req)));
+export const activarUsuario = async (req: Request, res: Response) => res.json(await UsuarioService.cambiarEstado(idParam(req), true, usuarioActual(req)));
+
+// ---------- Descuentos (P3) y adelanto (P6) ----------
+export const listarDescuentos = async (_req: Request, res: Response) => res.json(await DescuentoService.listar());
+export const crearDescuento = async (req: Request, res: Response) => res.status(201).json(await DescuentoService.crear(descuentoSchema.parse(req.body)));
+export const modificarDescuento = async (req: Request, res: Response) => res.json(await DescuentoService.modificar(idParam(req), descuentoSchema.parse(req.body)));
+export const desactivarDescuento = async (req: Request, res: Response) => res.json(await DescuentoService.cambiarEstado(idParam(req), false));
+export const activarDescuento = async (req: Request, res: Response) => res.json(await DescuentoService.cambiarEstado(idParam(req), true));
+export const verAdelanto = async (_req: Request, res: Response) => res.json({ monto: await DescuentoService.montoAdelanto() });
+export async function cambiarAdelanto(req: Request, res: Response) {
+  const { monto } = z.object({ monto: z.coerce.number({ invalid_type_error: 'Ingrese un monto' }).positive('Debe ser mayor que 0').max(10_000) }).parse(req.body);
+  res.json({ monto: await DescuentoService.cambiarMontoAdelanto(monto) });
+}
+
+// ---------- CU-38..40 Panel y reportes ----------
+export const panel = async (_req: Request, res: Response) => res.json(await ReporteService.panel());
+
+function rangoDe(req: Request) {
+  const hoy = ahoraLima().fecha;
+  return rangoFechasSchema.parse({ desde: req.query.desde || `${hoy.slice(0, 8)}01`, hasta: req.query.hasta || hoy });
+}
+function enviarCsv(res: Response, nombre: string, csv: string) {
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${nombre}.csv"`);
+  res.send(csv);
+}
+
+export async function reporteIngresos(req: Request, res: Response) {
+  const { desde, hasta } = rangoDe(req);
+  const r = await ReporteService.ingresos(desde, hasta);
+  if (req.query.formato !== 'csv') return res.json(r);
+  const fmt = new Intl.DateTimeFormat('es-PE', { timeZone: 'America/Lima', dateStyle: 'short', timeStyle: 'short' });
+  enviarCsv(
+    res,
+    `ingresos_${desde}_${hasta}`,
+    ReporteService.aCsv(
+      ['Número', 'Fecha', 'Tipo', 'Paciente', 'DNI', 'Tipo de pago', 'Subtotal', 'Descuento', 'Adelanto aplicado', 'Total'],
+      r.detalle.map((d) => [d.numero, fmt.format(new Date(d.fecha)), d.tipo, d.paciente, d.dni, d.tipoPago, d.subtotal, d.descuento, d.adelantoAplicado, d.total]),
+    ),
+  );
+}
+
+export async function reporteInventario(req: Request, res: Response) {
+  const { desde, hasta } = rangoDe(req);
+  const r = await ReporteService.inventario(desde, hasta);
+  if (req.query.formato !== 'csv') return res.json(r);
+  enviarCsv(
+    res,
+    `inventario_${desde}_${hasta}`,
+    ReporteService.aCsv(
+      ['Insumo', 'Unidad', 'Activo', 'Stock actual', 'Stock mínimo', 'Bajo mínimo', 'Entradas', 'Consumo', 'Ajustes', 'Mermas'],
+      r.insumos.map((i) => [i.nombre, i.unidad, i.activo ? 'Sí' : 'No', i.stockActual, i.stockMinimo, i.bajoMinimo ? 'Sí' : 'No', i.entradas, i.consumo, i.ajustes, i.mermas]),
+    ),
+  );
+}

@@ -41,5 +41,3 @@ export async function modificarInsumo(req: Request, res: Response) {
 }
 export const desactivarInsumo = async (req: Request, res: Response) => res.json(await InsumoService.cambiarEstado(idParam(req), false));
 export const activarInsumo = async (req: Request, res: Response) => res.json(await InsumoService.cambiarEstado(idParam(req), true));
-export const kardex = async (req: Request, res: Response) => res.json(await InsumoService.kardex(idParam(req)));
-export const alertas = async (_req: Request, res: Response) => res.json(await InsumoService.alertasPendientes());

@@ -22,3 +22,19 @@ export const horasPara = (fecha: string, hora: string) =>
 
 export const mensajeError = (e: unknown) =>
   e && typeof e === 'object' && 'datos' in e ? (e as { datos: { mensaje: string } }).datos.mensaje : 'No se pudo conectar con el servidor';
+
+/** Errores de un safeParse de Zod → { campo: mensaje } (el primero por campo). */
+export function erroresZod(issues: { path: (string | number)[]; message: string }[]) {
+  const c: Record<string, string> = {};
+  for (const i of issues) c[i.path.join('.')] ??= i.message;
+  return c;
+}
+
+/** Campos con error devueltos por la API (422/409), si los hay. */
+export const camposApi = (e: unknown): Record<string, string> =>
+  (e as { datos?: { campos?: Record<string, string> } })?.datos?.campos ?? {};
+
+export const fechaHoraPE = (iso: string) =>
+  new Intl.DateTimeFormat('es-PE', { timeZone: ZONA, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso));
+
+export const numPE = (n: string | number) => Number(n).toLocaleString('es-PE', { maximumFractionDigits: 2 });

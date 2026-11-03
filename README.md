@@ -78,9 +78,20 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | Adelanto (P6): S/ 30 configurable, se descuenta del cobro final | `caja.test.ts` |
 | PDF del comprobante (pdfkit) y envío por correo con el PDF adjunto | `caja.test.ts` |
 
-Total acumulado: 135 pruebas de API + 39 de interfaz.
+## Avance — Iteración 4 ✅ completa
 
-**Siguiente: Iteración 4** — proveedores (CRUD), CU-30 registrar pedido, CU-31/32 listar y anular, CU-33 recepción, CU-23/24/25 kárdex, alertas y ajustes, usuarios (CRUD), panel y reportes (CU-38..40).
+| Caso de uso | Pruebas |
+|---|---|
+| CU-26..29 Proveedores: registrar (RUC de 11 dígitos, único), listar/buscar, modificar, desactivar (no con pedidos pendientes) | `pedido.test.ts` |
+| CU-30 Registrar pedido: proveedor activo (3.1), ≥ 1 insumo (8.1), precarga desde alertas (1.1), código `PED-0001`, stock sin cambios; PDF y envío al proveedor | `pedido.test.ts`, `Iteracion4.test.tsx` |
+| CU-31 Listar pedidos · CU-32 Anular (solo pendientes, con motivo; RN-13) | `pedido.test.ts`, `Iteracion4.test.tsx` |
+| CU-33 Registrar recepción: «verifiqué» obligatorio (RN-15), 2.1, 6.1 (diferencias → observación y «Recibido con diferencias», suma solo lo recibido), en una transacción | `pedido.test.ts`, `Iteracion4.test.tsx` |
+| CU-23 Kárdex con filtros (fechas, tipo) · CU-24 Revisar alertas (quién y cuándo; se cierran solas al reponer sobre el mínimo) · CU-25 Ajuste / merma (con motivo, sin stock negativo) | `admin.test.ts` |
+| CU-34..37 Usuarios: registrar personal (odontólogo con CMP), listar, modificar (cierra sesiones al cambiar clave, correo o rol), desactivar (cierra sesiones); el Administrador no se desactiva ni se quita el rol | `admin.test.ts` |
+| Descuentos (P3) y monto del adelanto (P6) gestionados por el Administrador | `admin.test.ts` |
+| CU-38 Panel de control · CU-39 Reporte de ingresos · CU-40 Reporte de inventario (rango de fechas, exportación CSV para Excel) | `reporte.test.ts`, `Iteracion4.test.tsx` |
+
+Total: **171 pruebas de API + 50 de interfaz**. Los 40 casos de uso del brief están implementados.
 
 **Tareas programadas** (`backend/src/jobs`, node-cron, cada 15 min, hora de Lima; se activan con `JOBS_ENABLED=true`):
 primero libera las citas sin confirmar a menos de 24 h y luego envía el recordatorio por correo a las que empiezan dentro de 48 h.
@@ -115,6 +126,12 @@ Se aplican los supuestos de la sección 14 del brief (P2–P17). Además:
 - **Adelanto (RN-12 / P6):** no admite descuentos y solo se cobra si la cita aún no pasó. Si el adelanto supera el cobro
   final, el total queda en S/ 0.00. `TODO(decisión P6)`: ¿qué pasa con el saldo sobrante, o con el adelanto de una cita
   cancelada? Hoy no se devuelve ni se acumula.
-- Los descuentos (P3) se cargan en la semilla («Paciente frecuente», 10 %). La pantalla para que el Administrador los
-  gestione queda pendiente (`TODO(decisión P3)`).
+- Los descuentos (P3) y el monto del adelanto (P6) se gestionan en **Configuración** (Administrador). La semilla carga
+  «Paciente frecuente», 10 %. `TODO(decisión P3)`: confirmar con la clínica qué descuentos existen.
+- **Alertas (CU-24):** además de marcarse como revisadas a mano, se cierran solas cuando una recepción o un ajuste
+  deja el stock sobre el mínimo; queda registrado quién hizo la reposición.
+- **Pedidos:** sin precios (P13). El código `PED-0001` es correlativo sin huecos. Si un insumo no llegó, se registra 0
+  y no genera movimiento.
+- **Usuarios:** los pacientes crean su cuenta en la web; el Administrador gestiona al personal. El rol de odontólogo no
+  se asigna ni se quita a una cuenta existente, porque tiene citas y atenciones vinculadas: se registra un usuario nuevo.
 - Los precios de Extracción, Blanqueamiento y Consulta en la semilla son de ejemplo: `TODO(decisión)`.

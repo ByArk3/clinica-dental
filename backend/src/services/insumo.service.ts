@@ -1,6 +1,7 @@
 // Insumos (CU-18 a CU-21) y CU-22 Buscar insumo. El stock solo cambia vía StockService.
 import { Prisma } from '@prisma/client';
-import { MENSAJES, type InsumoDTO, type InsumoNuevoDTO } from '@clinica/shared';
+import { MENSAJES, type AjusteDTO, type InsumoDTO, type InsumoNuevoDTO } from '@clinica/shared';
+import type { TipoMovimiento } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { ErrorNegocio } from '../lib/errores.js';
 import { registrarMovimiento } from './stock.service.js';
@@ -79,14 +80,28 @@ export async function cambiarEstado(id: number, activo: boolean) {
   return formatear(await prisma.insumo.update({ where: { id }, data: { activo } }));
 }
 
-/** Kárdex del insumo (lectura; la consulta completa con filtros es CU-23, iteración 4). */
-export async function kardex(id: number) {
+/**
+ * CU-23 Consultar kárdex: movimientos del insumo, filtrables por rango de fechas (hora de Lima) y tipo.
+ * Fechas inclusive: desde 00:00 hasta 23:59 del día `hasta`.
+ */
+export async function kardex(id: number, f: { desde?: string; hasta?: string; tipo?: TipoMovimiento } = {}) {
   const insumo = await prisma.insumo.findUnique({ where: { id } });
   if (!insumo) throw noEncontrado();
   const movimientos = await prisma.movimientoKardex.findMany({
-    where: { insumoId: id },
+    where: {
+      insumoId: id,
+      ...(f.tipo ? { tipo: f.tipo } : {}),
+      ...(f.desde || f.hasta
+        ? {
+            createdAt: {
+              ...(f.desde ? { gte: new Date(`${f.desde}T00:00:00-05:00`) } : {}),
+              ...(f.hasta ? { lt: new Date(new Date(`${f.hasta}T00:00:00-05:00`).getTime() + 86_400_000) } : {}),
+            },
+          }
+        : {}),
+    },
     orderBy: { id: 'desc' },
-    take: 200,
+    take: 500,
     include: { usuario: { select: { nombres: true } } },
   });
   return {
@@ -104,17 +119,50 @@ export async function kardex(id: number) {
   };
 }
 
-/** Alertas de stock mínimo sin revisar (RN-14). La revisión es CU-24 (iteración 4). */
-export async function alertasPendientes() {
-  const alertas = await prisma.alertaStock.findMany({
-    where: { revisada: false },
+/** CU-24 Revisar alertas de stock mínimo (RN-14): pendientes por defecto, o todas. */
+export async function alertas(f: { revisada?: boolean } = { revisada: false }) {
+  const lista = await prisma.alertaStock.findMany({
+    where: f.revisada !== undefined ? { revisada: f.revisada } : {},
     orderBy: { createdAt: 'desc' },
-    include: { insumo: true },
+    take: 200,
+    include: { insumo: true, revisadaPor: { select: { nombres: true } } },
   });
-  return alertas.map((a) => ({
+  return lista.map((a) => ({
     id: a.id,
     fecha: a.createdAt.toISOString(),
     stockAlGenerar: a.stockAlGenerar.toFixed(2),
+    revisada: a.revisada,
+    revisadaPor: a.revisadaPor?.nombres ?? null,
+    revisadaEn: a.revisadaEn?.toISOString() ?? null,
     insumo: formatear(a.insumo),
   }));
+}
+export const alertasPendientes = () => alertas({ revisada: false });
+
+/** CU-24: marcar una alerta como revisada (queda constancia de quién y cuándo). */
+export async function revisarAlerta(id: number, usuarioId: number) {
+  const a = await prisma.alertaStock.findUnique({ where: { id } });
+  if (!a) throw new ErrorNegocio(404, 'ALERTA_NO_ENCONTRADA', MENSAJES.ALERTA_NO_ENCONTRADA);
+  if (!a.revisada) {
+    await prisma.alertaStock.update({ where: { id }, data: { revisada: true, revisadaPorId: usuarioId, revisadaEn: new Date() } });
+  }
+  return (await alertas({})).find((x) => x.id === id)!;
+}
+
+/**
+ * CU-25 Registrar ajuste de stock (RN-13: solo el Administrador). Pasa por StockService (CU-12).
+ * ajuste: cantidad con signo (conteo físico); merma: resta (vencimiento P11, rotura, pérdida).
+ * A diferencia de la salida por tratamiento, un ajuste que deja stock negativo se rechaza.
+ */
+export async function registrarAjuste(id: number, d: AjusteDTO, usuarioId: number) {
+  return prisma.$transaction(async (tx) => {
+    const [fila] = await tx.$queryRaw<{ stock_actual: Prisma.Decimal }[]>`SELECT stock_actual FROM insumos WHERE id = ${id} FOR UPDATE`;
+    if (!fila) throw noEncontrado();
+    const delta = d.tipo === 'merma' ? -d.cantidad : d.cantidad;
+    if (new Prisma.Decimal(fila.stock_actual).plus(delta).isNegative()) {
+      throw new ErrorNegocio(422, 'AJUSTE_NEGATIVO', MENSAJES.AJUSTE_NEGATIVO, { cantidad: MENSAJES.AJUSTE_NEGATIVO });
+    }
+    const r = await registrarMovimiento(tx, { insumoId: id, tipo: d.tipo, cantidad: d.cantidad, motivo: d.motivo, usuarioId, referencia: { tipo: 'ajuste', id } });
+    return { ...r, insumo: formatear(await tx.insumo.findUniqueOrThrow({ where: { id } })) };
+  });
 }

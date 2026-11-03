@@ -83,6 +83,27 @@ export const MENSAJES = {
   PACIENTE_SIN_CORREO: 'El paciente no tiene correo registrado',
   ERROR_PDF: 'No se pudo generar el PDF; reintente. El comprobante ya quedó registrado',
   ERROR_CORREO: 'No se pudo enviar el correo; reintente. El comprobante ya quedó registrado',
+  // Iteración 4: proveedores y pedidos
+  PROVEEDOR_NO_ENCONTRADO: 'Proveedor no encontrado',
+  RUC_DUPLICADO: 'Ya existe un proveedor con ese RUC',
+  PROVEEDOR_INACTIVO: 'El proveedor no está activo; regístrelo o actívelo antes de hacer el pedido',
+  PROVEEDOR_CON_PEDIDOS: 'No se puede desactivar: el proveedor tiene pedidos pendientes',
+  SIN_INSUMOS_PEDIDO: 'Agregue al menos un insumo',
+  PEDIDO_NO_ENCONTRADO: 'Pedido no encontrado',
+  PEDIDO_NO_PENDIENTE: 'El pedido ya no está pendiente',
+  SIN_PEDIDOS_PENDIENTES: 'No hay pedidos pendientes de recepción',
+  VERIFICACION_REQUERIDA: 'Confirme que verificó lo recibido contra el pedido',
+  OBSERVACION_REQUERIDA: 'Hay diferencias con lo pedido: ingrese una observación',
+  RECEPCION_INCOMPLETA: 'Ingrese la cantidad recibida de cada insumo del pedido',
+  PROVEEDOR_SIN_CORREO: 'El proveedor no tiene correo registrado',
+  // CU-24 / CU-25
+  ALERTA_NO_ENCONTRADA: 'Alerta no encontrada',
+  AJUSTE_NEGATIVO: 'El ajuste dejaría el stock en negativo',
+  // Usuarios
+  USUARIO_NO_ENCONTRADO: 'Usuario no encontrado',
+  NO_DESACTIVARSE: 'No puede desactivar su propia cuenta',
+  NO_QUITARSE_ADMIN: 'No puede quitarse el rol de Administrador',
+  CAMBIO_ROL_ODONTOLOGO: 'El rol de odontólogo no se puede asignar ni quitar a una cuenta existente; registre un usuario nuevo',
 } as const;
 
 /** Estados en los que la cita todavía puede reprogramarse o cancelarse (CU-07). */
@@ -258,6 +279,78 @@ export interface Importe {
   adelantoAplicado: string;
   total: string;
 }
+
+// ---------- Proveedores (CU-26..29) ----------
+const vacioAUndef = z.literal('').transform(() => undefined);
+export const proveedorSchema = z.object({
+  ruc: z.string().regex(/^\d{11}$/, 'El RUC debe tener 11 dígitos'),
+  razonSocial: z.string().trim().min(3, 'Ingrese la razón social').max(150),
+  contacto: z.string().trim().max(100).optional().or(vacioAUndef),
+  telefono: z.string().regex(/^\d{6,9}$/, 'Teléfono inválido (6 a 9 dígitos)').optional().or(vacioAUndef),
+  email: z.string().email('Correo inválido').optional().or(vacioAUndef),
+});
+export type ProveedorDTO = z.infer<typeof proveedorSchema>;
+
+// ---------- Pedidos (CU-30..33) ----------
+export const ESTADOS_PEDIDO = ['pendiente', 'recibido', 'recibido_con_diferencias', 'anulado'] as const;
+export type EstadoPedido = (typeof ESTADOS_PEDIDO)[number];
+export const ETIQUETA_ESTADO_PEDIDO: Record<EstadoPedido, string> = {
+  pendiente: 'Pendiente',
+  recibido: 'Recibido',
+  recibido_con_diferencias: 'Recibido con diferencias',
+  anulado: 'Anulado',
+};
+export const pedidoSchema = z.object({
+  proveedorId: z.coerce.number({ invalid_type_error: 'Elija un proveedor' }).int().positive('Elija un proveedor'),
+  insumos: z
+    .array(z.object({ insumoId: z.coerce.number().int().positive('Elija un insumo'), cantidad }))
+    .min(1, 'Agregue al menos un insumo')
+    .refine((l) => new Set(l.map((i) => i.insumoId)).size === l.length, 'Un insumo aparece dos veces'),
+});
+export type PedidoDTO = z.infer<typeof pedidoSchema>;
+export const anularPedidoSchema = z.object({ motivo: z.string().trim().min(5, 'Indique el motivo de la anulación').max(300) });
+export const recepcionSchema = z.object({
+  verificado: z.literal(true, { errorMap: () => ({ message: 'Confirme que verificó lo recibido contra el pedido' }) }),
+  items: z.array(z.object({ detalleId: z.coerce.number().int().positive(), cantidadRecibida: noNegativo })).min(1),
+  observacion: z.string().trim().max(500).optional().or(vacioAUndef),
+});
+export type RecepcionDTO = z.infer<typeof recepcionSchema>;
+
+// ---------- CU-25 Ajuste de stock ----------
+export const ajusteSchema = z.object({
+  tipo: z.enum(['ajuste', 'merma'], { errorMap: () => ({ message: 'Elija el tipo de movimiento' }) }),
+  /** ajuste: con signo (+ suma, − resta). merma: positiva (siempre resta). */
+  cantidad: z.coerce.number({ invalid_type_error: 'Ingrese una cantidad' }).refine((n) => n !== 0, 'La cantidad no puede ser 0'),
+  motivo: z.string().trim().min(5, 'Indique el motivo').max(300),
+}).refine((a) => a.tipo !== 'merma' || a.cantidad > 0, { message: 'La merma debe ser una cantidad positiva', path: ['cantidad'] });
+export type AjusteDTO = z.infer<typeof ajusteSchema>;
+
+// ---------- Usuarios (CU-34..37) ----------
+export const ROLES_PERSONAL = ['recepcionista', 'odontologo', 'administrador'] as const;
+export const usuarioSchema = z.object({
+  nombres: z.string().trim().min(3, 'Ingrese los nombres').max(120),
+  email: z.string().email('Correo inválido'),
+  rol: z.enum(ROLES_PERSONAL, { errorMap: () => ({ message: 'Elija un rol' }) }),
+  cmp: z.string().trim().max(20).optional().or(vacioAUndef),
+  especialidad: z.string().trim().max(80).optional().or(vacioAUndef),
+});
+export const usuarioNuevoSchema = usuarioSchema.extend({ password: passwordSchema });
+/** Modificar: la contraseña es opcional (vacía = no cambia). */
+export const usuarioModificarSchema = usuarioSchema.extend({ password: passwordSchema.optional().or(vacioAUndef) });
+export type UsuarioNuevoDTO = z.infer<typeof usuarioNuevoSchema>;
+export type UsuarioModificarDTO = z.infer<typeof usuarioModificarSchema>;
+
+// ---------- Descuentos (P3) ----------
+export const descuentoSchema = z.object({
+  nombre: z.string().trim().min(3, 'Ingrese el nombre').max(80),
+  porcentaje: z.coerce.number({ invalid_type_error: 'Ingrese un porcentaje' }).gt(0, 'Debe ser mayor que 0').max(100, 'Máximo 100 %'),
+});
+export type DescuentoDTO = z.infer<typeof descuentoSchema>;
+
+// ---------- Reportes ----------
+export const rangoFechasSchema = z
+  .object({ desde: fechaSchema, hasta: fechaSchema })
+  .refine((r) => r.desde <= r.hasta, { message: 'La fecha inicial debe ser anterior a la final', path: ['hasta'] });
 
 export interface ErrorApi {
   codigo: string;

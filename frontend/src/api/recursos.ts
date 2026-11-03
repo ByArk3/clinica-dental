@@ -1,4 +1,4 @@
-import type { ComprobanteDTO, Importe, TipoCobro, AtencionDTO, InsumoDTO, InsumoNuevoDTO, TratamientoDTO, CitaConfirmacion, CitaDTO, ContactoDTO, Disponibilidad, PacienteDTO, RegistroPacienteDTO, ReprogramarDTO, UsuarioSesion, EstadoCita, Canal } from '@clinica/shared';
+import type { AjusteDTO, DescuentoDTO, EstadoPedido, PedidoDTO, ProveedorDTO, RecepcionDTO, Rol, UsuarioModificarDTO, UsuarioNuevoDTO, ComprobanteDTO, Importe, TipoCobro, AtencionDTO, InsumoDTO, InsumoNuevoDTO, TratamientoDTO, CitaConfirmacion, CitaDTO, ContactoDTO, Disponibilidad, PacienteDTO, RegistroPacienteDTO, ReprogramarDTO, UsuarioSesion, EstadoCita, Canal } from '@clinica/shared';
 import { api } from './cliente';
 
 export interface Paciente {
@@ -113,6 +113,9 @@ export interface Alerta {
   id: number;
   fecha: string;
   stockAlGenerar: string;
+  revisada: boolean;
+  revisadaPor: string | null;
+  revisadaEn: string | null;
   insumo: Insumo;
 }
 export interface PacienteEncontrado {
@@ -174,8 +177,12 @@ export const insumosApi = {
   crear: (d: InsumoNuevoDTO) => api<Insumo>('/insumos', { method: 'POST', body: d }),
   modificar: (id: number, d: InsumoDTO) => api<Insumo>(`/insumos/${id}`, { method: 'PATCH', body: d }),
   cambiarEstado: (id: number, activo: boolean) => api<Insumo>(`/insumos/${id}/${activo ? 'activar' : 'desactivar'}`, { method: 'PATCH' }),
-  kardex: (id: number) => api<{ insumo: Insumo; movimientos: MovimientoKardex[] }>(`/insumos/${id}/kardex`),
-  alertas: () => api<Alerta[]>('/alertas'),
+  kardex: (id: number, f: { desde?: string; hasta?: string; tipo?: string } = {}) =>
+    api<{ insumo: Insumo; movimientos: MovimientoKardex[] }>(`/insumos/${id}/kardex${qs(f)}`),
+  alertas: (f: { todas?: string } = {}) => api<Alerta[]>(`/alertas${qs(f)}`),
+  revisarAlerta: (id: number) => api<Alerta>(`/alertas/${id}/revisar`, { method: 'PATCH' }),
+  ajuste: (id: number, d: AjusteDTO) =>
+    api<{ saldo: string; alertaGenerada: boolean; insumo: Insumo }>(`/insumos/${id}/ajuste`, { method: 'POST', body: d }),
 };
 
 export const historialApi = {
@@ -232,4 +239,100 @@ export const cajaApi = {
     if (!r.ok) throw new Error('pdf');
     return r.blob();
   },
+};
+
+// ---------- Iteración 4: proveedores, pedidos, usuarios, configuración, panel y reportes ----------
+export interface Proveedor {
+  id: number;
+  ruc: string;
+  razonSocial: string;
+  contacto: string | null;
+  telefono: string | null;
+  email: string | null;
+  activo: boolean;
+}
+export interface Pedido {
+  id: number;
+  codigo: string;
+  estado: EstadoPedido;
+  fecha: string;
+  recibidoEn: string | null;
+  motivoAnulacion: string | null;
+  observacionRecepcion: string | null;
+  registradoPor: string;
+  proveedor: { id: number; ruc: string; razonSocial: string; email: string | null };
+  detalles: { id: number; insumoId: number; insumo: string; unidad: string; stockActual: string; cantidadPedida: string; cantidadRecibida: string | null }[];
+}
+export interface Usuario {
+  id: number;
+  nombres: string;
+  email: string;
+  rol: Rol;
+  activo: boolean;
+  cmp: string | null;
+  especialidad: string | null;
+  dni: string | null;
+}
+export interface Descuento { id: number; nombre: string; porcentaje: string; activo: boolean }
+export interface Panel {
+  fecha: string;
+  citasHoy: { total: number; porEstado: Partial<Record<EstadoCita, number>> };
+  ingresos: { hoy: string; comprobantesHoy: number; mes: string; comprobantesMes: number; ultimos7Dias: { fecha: string; total: string }[] };
+  inventario: { alertasPendientes: number; alertas: { id: number; insumo: string; unidad: string; stockActual: string; stockMinimo: string }[]; pedidosPendientes: number };
+  agenda: { porConfirmar48h: number; inasistenciasMes: number; pacientesRestringidos: number };
+}
+export interface ReporteIngresos {
+  desde: string;
+  hasta: string;
+  resumen: { total: string; comprobantes: number; ticketPromedio: string; descuentos: string; adelantos: string };
+  porTipoPago: { tipo: string; total: string; cantidad: number }[];
+  porDia: { fecha: string; total: string }[];
+  porTratamiento: { tratamiento: string; cantidad: number; importe: string }[];
+  detalle: { numero: string; fecha: string; tipo: TipoCobro; paciente: string; dni: string; tipoPago: string; subtotal: string; descuento: string; adelantoAplicado: string; total: string }[];
+}
+export interface ReporteInventario {
+  desde: string;
+  hasta: string;
+  resumen: { insumosActivos: number; bajoMinimo: number; pedidos: Partial<Record<EstadoPedido, number>> };
+  insumos: { id: number; nombre: string; unidad: string; activo: boolean; stockActual: string; stockMinimo: string; bajoMinimo: boolean; entradas: string; consumo: string; ajustes: string; mermas: string }[];
+}
+
+export const proveedoresApi = {
+  listar: (f: { q?: string; activo?: string } = {}) => api<Proveedor[]>(`/proveedores${qs(f)}`),
+  crear: (d: ProveedorDTO) => api<Proveedor>('/proveedores', { method: 'POST', body: d }),
+  modificar: (id: number, d: ProveedorDTO) => api<Proveedor>(`/proveedores/${id}`, { method: 'PATCH', body: d }),
+  cambiarEstado: (id: number, activo: boolean) => api<Proveedor>(`/proveedores/${id}/${activo ? 'activar' : 'desactivar'}`, { method: 'PATCH' }),
+};
+
+export const pedidosApi = {
+  listar: (f: { estado?: string; q?: string } = {}) => api<{ pedidos: Pedido[]; mensaje?: string }>(`/pedidos${qs(f)}`),
+  ver: (id: number) => api<Pedido>(`/pedidos/${id}`),
+  registrar: (d: PedidoDTO) => api<Pedido>('/pedidos', { method: 'POST', body: d }),
+  anular: (id: number, motivo: string) => api<Pedido>(`/pedidos/${id}/anular`, { method: 'PATCH', body: { motivo } }),
+  recepcion: (id: number, d: RecepcionDTO) => api<Pedido>(`/pedidos/${id}/recepcion`, { method: 'POST', body: d }),
+  enviar: (id: number) => api<{ mensaje: string }>(`/pedidos/${id}/enviar`, { method: 'POST' }),
+  pdfUrl: (id: number) => `/api/pedidos/${id}/pdf`,
+};
+
+export const usuariosApi = {
+  listar: (f: { q?: string; rol?: string; activo?: string } = {}) => api<Usuario[]>(`/usuarios${qs(f)}`),
+  crear: (d: UsuarioNuevoDTO) => api<Usuario>('/usuarios', { method: 'POST', body: d }),
+  modificar: (id: number, d: UsuarioModificarDTO) => api<Usuario>(`/usuarios/${id}`, { method: 'PATCH', body: d }),
+  cambiarEstado: (id: number, activo: boolean) => api<Usuario>(`/usuarios/${id}/${activo ? 'activar' : 'desactivar'}`, { method: 'PATCH' }),
+};
+
+export const configApi = {
+  descuentos: () => api<Descuento[]>('/admin/descuentos'),
+  crearDescuento: (d: DescuentoDTO) => api<Descuento>('/admin/descuentos', { method: 'POST', body: d }),
+  modificarDescuento: (id: number, d: DescuentoDTO) => api<Descuento>(`/admin/descuentos/${id}`, { method: 'PATCH', body: d }),
+  estadoDescuento: (id: number, activo: boolean) => api<Descuento>(`/admin/descuentos/${id}/${activo ? 'activar' : 'desactivar'}`, { method: 'PATCH' }),
+  adelanto: () => api<{ monto: string }>('/admin/adelanto'),
+  cambiarAdelanto: (monto: number) => api<{ monto: string }>('/admin/adelanto', { method: 'PUT', body: { monto } }),
+};
+
+export const reportesApi = {
+  panel: () => api<Panel>('/panel'),
+  ingresos: (desde: string, hasta: string) => api<ReporteIngresos>(`/reportes/ingresos${qs({ desde, hasta })}`),
+  inventario: (desde: string, hasta: string) => api<ReporteInventario>(`/reportes/inventario${qs({ desde, hasta })}`),
+  csvUrl: (tipo: 'ingresos' | 'inventario', desde: string, hasta: string) => `/api/reportes/${tipo}${qs({ desde, hasta, formato: 'csv' })}`,
 };
