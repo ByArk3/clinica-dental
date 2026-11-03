@@ -1,0 +1,61 @@
+# Clínica Dental — base de datos, API y web en contenedores.
+#   docker compose up --build        → http://localhost:8080
+# Variables opcionales en un archivo .env junto a este (ver .env.docker.example).
+name: clinica-dental
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: clinica_dental
+      POSTGRES_USER: clinica
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-clinica}
+      TZ: America/Lima
+    volumes:
+      - datos-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clinica -d clinica_dental"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # Descomentar para conectarse con psql/DBeaver desde la máquina (puerto 5433)
+    # ports:
+    #   - "5433:5432"
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://clinica:${DB_PASSWORD:-clinica}@db:5432/clinica_dental?schema=public
+      SESSION_SECRET: ${SESSION_SECRET:-cambie-este-secreto-en-produccion}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      # En local se accede por HTTP. Con HTTPS (producción) poner COOKIE_SECURE=true (RNF06).
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      TRUST_PROXY: "true"
+      JOBS_ENABLED: "true"
+      SEED: ${SEED:-true}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-Clínica Dental <no-responder@clinica.local>}
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8080}:80"
+
+volumes:
+  datos-db:

@@ -11,7 +11,10 @@ const QUINCE_MINUTOS = 15 * 60 * 1000; // RNF05
 export function crearApp() {
   const app = express();
   const produccion = process.env.NODE_ENV === 'production';
-  if (produccion) app.set('trust proxy', 1);
+  // Detrás de nginx (Docker) o de un balanceador: confiar en X-Forwarded-*
+  if (produccion || process.env.TRUST_PROXY === 'true') app.set('trust proxy', 1);
+  // RNF06: cookie `secure` (solo HTTPS) en producción. COOKIE_SECURE=false permite probar por HTTP en local.
+  const cookieSegura = process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === 'true' : produccion;
 
   app.use(helmet()); // RNF06
   app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true })); // CORS solo al frontend
@@ -26,7 +29,7 @@ export function crearApp() {
       resave: false,
       saveUninitialized: false,
       rolling: true, // expiración deslizante: 15 min desde la última petición
-      cookie: { httpOnly: true, sameSite: 'lax', secure: produccion, maxAge: QUINCE_MINUTOS },
+      cookie: { httpOnly: true, sameSite: 'lax', secure: cookieSegura, maxAge: QUINCE_MINUTOS },
     }),
   );
 

@@ -12,7 +12,35 @@ frontend/  src/pages (i_) · components · api (cliente HTTP) · routes.tsx (rut
 shared/    tipos (Rol, EstadoCita), mensajes exactos y esquemas Zod
 ```
 
-## Instalación
+## Opción rápida: Docker (recomendado para el equipo)
+
+Requisito: [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows, macOS o Linux).
+
+```bash
+docker compose up --build
+```
+
+Abrir **http://localhost:8080** y entrar con los usuarios de prueba de abajo. La primera vez tarda unos minutos.
+
+| Contenedor | Qué es |
+|---|---|
+| `db` | PostgreSQL 16; los datos se guardan en el volumen `datos-db` |
+| `api` | Backend (Express + Prisma). Al arrancar aplica las migraciones y carga la semilla (`SEED=true`). Corre las tareas programadas |
+| `web` | Frontend compilado en nginx, que redirige `/api` al contenedor `api` (mismo origen: la cookie de sesión funciona sin CORS) |
+
+Comandos útiles:
+
+```bash
+docker compose logs -f api          # ver la API (y los correos simulados si no hay SMTP)
+docker compose down                 # detener (los datos se conservan)
+docker compose down -v              # detener y BORRAR la base de datos
+docker compose exec db psql -U clinica clinica_dental   # consola SQL
+```
+
+Para cambiar el puerto, la clave de la base, el SMTP, etc., copiar `.env.docker.example` a `.env` en la raíz.
+**En producción (con HTTPS):** `COOKIE_SECURE=true`, `SEED=false` y un `SESSION_SECRET` largo y aleatorio.
+
+## Instalación sin Docker (desarrollo)
 
 Requisitos: Node 20+ y PostgreSQL 14+.
 
