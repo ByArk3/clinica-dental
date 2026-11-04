@@ -163,6 +163,17 @@ Dr. Paredes L–V 08:00–14:00 y Dra. Díaz L–S 14:00–20:00. Sin horario pr
 > Si ya tenías la base de datos de antes (Docker), para tener el tarifario y las campañas nuevas empieza de cero:
 > `docker compose down -v` y luego `docker compose up --build` (borra los datos de prueba anteriores).
 
+## Seguridad, auditoría y correcciones (nov. 2026)
+
+| Función | Cómo funciona |
+|---|---|
+| **Límite de intentos** | Al 3.er intento fallido seguido, la cuenta se bloquea **15 minutos** (también para correos que no existen, para no revelar cuáles están registrados). El mensaje indica cuántos intentos quedan. Un ingreso correcto reinicia el contador. El Administrador puede desbloquear desde **Usuarios**; restablecer la contraseña también lo quita |
+| **Auditoría** | Cada vez que se abre la ficha (historial clínico) de un paciente queda **quién, con qué rol, de qué paciente y cuándo**. También se registran correcciones de atenciones, anulaciones y bloqueos. El Administrador lo consulta en **Auditoría** (filtros por fechas, DNI, usuario y acción) |
+| **Editar una atención** | Solo el odontólogo que la registró, con **motivo** obligatorio. Se guarda la versión anterior: el historial muestra «Editado el … por … – motivo: …» y lo que decía antes. Si cambian los tratamientos, el stock se corrige con la diferencia y los que se mantienen conservan su precio congelado. Si ya se cobró, solo se corrigen diagnóstico y observaciones |
+| **Anular un comprobante** | No se borra: conserva su número (sin huecos), queda «Anulado», no cuenta en ingresos y su PDF muestra el sello. Recepcionista: solo los del día; Administrador: cualquiera; siempre con motivo. **Servicio**: la cita vuelve a «Atendida», el saldo a favor usado vuelve al paciente y el generado se retira (si ya se usó en otro cobro, primero se anula ese). **Adelanto**: si la cita aún no ocurre, vuelve a «Pendiente de adelanto» con 1 hora nueva |
+
+> Supuesto para el informe: los comprobantes son **internos** (P2). En una boleta electrónica real de SUNAT, la anulación se hace con una **nota de crédito**.
+
 ## Decisiones y supuestos
 
 Se aplican los supuestos de la sección 14 del brief (P2–P17). Además:

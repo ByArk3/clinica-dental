@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
-import { comprobanteSchema, MENSAJES, rechazarPagoSchema } from '@clinica/shared';
+import { comprobanteSchema, fechaSchema, MENSAJES, motivoSchema, rechazarPagoSchema } from '@clinica/shared';
+import { ahoraLima } from '../lib/fechas.js';
 import * as CajaService from '../services/caja.service.js';
 import { prisma } from '../lib/prisma.js';
 import { pdfComprobante } from '../lib/pdf.js';
@@ -54,6 +55,7 @@ export async function pdf(req: Request, res: Response) {
 /** POST /comprobantes/:id/enviar — 9.1: sin correo no se puede enviar */
 export async function enviar(req: Request, res: Response) {
   const c = await CajaService.buscarComprobante(idParam(req));
+  if (c.anuladoEn) throw new ErrorNegocio(409, 'COMPROBANTE_YA_ANULADO', MENSAJES.COMPROBANTE_YA_ANULADO);
   if (!c.paciente.email) throw new ErrorNegocio(422, 'PACIENTE_SIN_CORREO', MENSAJES.PACIENTE_SIN_CORREO);
   try {
     const archivo = await pdfComprobante(c);
@@ -68,4 +70,16 @@ export async function enviar(req: Request, res: Response) {
   }
   await CajaService.marcarEnviado(c.id);
   res.json({ mensaje: `Comprobante enviado a ${c.paciente.email}` });
+}
+
+/** GET /caja/comprobantes?fecha= (por defecto hoy) */
+export async function delDia(req: Request, res: Response) {
+  const fecha = req.query.fecha ? fechaSchema.parse(req.query.fecha) : ahoraLima().fecha;
+  res.json(await CajaService.comprobantesDelDia(fecha, usuarioActual(req)));
+}
+
+/** PATCH /comprobantes/:id/anular — recepcionista (solo los de hoy) o administrador, con motivo */
+export async function anular(req: Request, res: Response) {
+  const { motivo } = motivoSchema.parse(req.body);
+  res.json(await CajaService.anularComprobante(idParam(req), motivo, usuarioActual(req), req.ip));
 }

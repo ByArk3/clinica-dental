@@ -33,6 +33,7 @@ const MENU: Record<Rol, Item[]> = {
     { texto: 'Proveedores', ruta: '/proveedores' },
     { texto: 'Usuarios', ruta: '/usuarios' },
     { texto: 'Reportes', ruta: '/reportes' },
+    { texto: 'Auditoría', ruta: '/auditoria' },
     { texto: 'Configuración', ruta: '/configuracion' },
   ],
 };

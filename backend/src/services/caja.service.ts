@@ -11,6 +11,8 @@ import { horasParaCita } from './cita.service.js';
 import { aplicarCampanas, campanasVigentes, edadEn } from './precio.service.js';
 import { moverSaldo } from './saldo.service.js';
 import { ahoraLima } from '../lib/fechas.js';
+import { registrar as registrarAuditoria } from './auditoria.service.js';
+import { MINUTOS_PAGO_ADELANTO } from '@clinica/shared';
 
 const D = (n: Prisma.Decimal.Value) => new Prisma.Decimal(n);
 const CERO = D(0);
@@ -65,7 +67,7 @@ export async function calcularImporte(db: Tx | typeof prisma, citaId: number): P
       paciente: { select: { id: true, dni: true, nombres: true, apellidos: true, email: true, fechaNacimiento: true, saldoFavor: true } },
       atencion: { include: { tratamientos: { include: { tratamiento: { select: { nombre: true } } }, orderBy: { id: 'asc' } } } },
       tratamientoPrevisto: { select: { nombre: true } },
-      comprobantes: true,
+      comprobantes: { where: { anuladoEn: null } }, // los anulados no cuentan
     },
   });
   if (!cita) throw new ErrorNegocio(404, 'CITA_NO_ENCONTRADA', MENSAJES.CITA_NO_ENCONTRADA);
@@ -255,6 +257,7 @@ const INCLUIR = {
   emitidoPor: { select: { nombres: true } },
   detalles: { orderBy: { id: 'asc' as const }, include: { campana: { select: { nombre: true } } } },
   cita: { select: { estado: true } },
+  anuladoPor: { select: { nombres: true } },
 } as const;
 export type ComprobanteCompleto = Prisma.ComprobanteGetPayload<{ include: typeof INCLUIR }>;
 
@@ -288,6 +291,7 @@ export async function obtenerComprobante(id: number) {
     vuelto: c.vuelto.toFixed(2),
     enviadoEmail: c.enviadoEmail,
     emitidoPor: c.emitidoPor.nombres,
+    anulado: c.anuladoEn ? { fecha: c.anuladoEn.toISOString(), por: c.anuladoPor?.nombres ?? '', motivo: c.motivoAnulacion ?? '' } : null,
   };
 }
 
@@ -313,4 +317,94 @@ export async function campanasDeHoy() {
     edadMaxima: d.edadMaxima,
     tratamientos: d.tratamientos.map((t) => t.tratamiento.nombre),
   }));
+}
+
+const fechaLimaDe = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(d);
+
+/** Comprobantes emitidos en un día (hora de Lima), con los anulados marcados. */
+export async function comprobantesDelDia(fecha: string, usuario: UsuarioSesion) {
+  const lista = await prisma.comprobante.findMany({
+    where: { createdAt: { gte: new Date(`${fecha}T00:00:00-05:00`), lt: new Date(new Date(`${fecha}T00:00:00-05:00`).getTime() + 86_400_000) } },
+    orderBy: { id: 'desc' },
+    include: { paciente: { select: { dni: true, nombres: true, apellidos: true } }, tipoPago: true, anuladoPor: { select: { nombres: true } } },
+  });
+  const hoy = ahoraLima().fecha;
+  return lista.map((c) => ({
+    id: c.id,
+    numero: c.numero,
+    tipo: c.tipo,
+    citaId: c.citaId,
+    fecha: c.createdAt.toISOString(),
+    paciente: `${c.paciente.apellidos}, ${c.paciente.nombres}`,
+    dni: c.paciente.dni,
+    tipoPago: c.tipoPago.nombre,
+    total: c.total.toFixed(2),
+    anulado: c.anuladoEn ? { fecha: c.anuladoEn.toISOString(), por: c.anuladoPor?.nombres ?? '', motivo: c.motivoAnulacion ?? '' } : null,
+    puedeAnular: !c.anuladoEn && (usuario.rol === 'administrador' || fechaLimaDe(c.createdAt) === hoy),
+  }));
+}
+
+/**
+ * Anular un comprobante emitido por error. No se borra: conserva su número (la numeración no tiene huecos),
+ * deja de contar en los ingresos y su PDF muestra «ANULADO». En UNA transacción:
+ * - Servicio: el saldo a favor usado vuelve al paciente, el saldo generado (sobrante del adelanto) se retira
+ *   y la cita vuelve a «Atendida» (pendiente de cobro), para emitir el comprobante correcto.
+ * - Adelanto: si la cita aún no ocurre, vuelve a «Pendiente de adelanto» con un nuevo plazo de 1 hora;
+ *   si ya fue atendida y no se cobró, sigue «Atendida» y el cobro final ya no descuenta ese adelanto.
+ * Recepcionista: solo comprobantes de hoy. Administrador: cualquiera. Siempre con motivo (queda en la auditoría).
+ */
+export async function anularComprobante(id: number, motivo: string, usuario: UsuarioSesion, ip?: string) {
+  await prisma.$transaction(async (tx) => {
+    const [fila] = await tx.$queryRaw<{ cita_id: number }[]>`SELECT cita_id FROM comprobantes WHERE id = ${id} FOR UPDATE`;
+    if (!fila) throw new ErrorNegocio(404, 'COMPROBANTE_NO_ENCONTRADO', MENSAJES.COMPROBANTE_NO_ENCONTRADO);
+    await tx.$queryRaw`SELECT id FROM citas WHERE id = ${fila.cita_id} FOR UPDATE`;
+    const c = await tx.comprobante.findUniqueOrThrow({
+      where: { id },
+      include: { movimientosSaldo: true, cita: { include: { comprobantes: { where: { anuladoEn: null } } } } },
+    });
+    if (c.anuladoEn) throw new ErrorNegocio(409, 'COMPROBANTE_YA_ANULADO', MENSAJES.COMPROBANTE_YA_ANULADO);
+    if (usuario.rol !== 'administrador' && fechaLimaDe(c.createdAt) !== ahoraLima().fecha) {
+      throw new ErrorNegocio(403, 'ANULACION_SOLO_HOY', MENSAJES.ANULACION_SOLO_HOY);
+    }
+
+    if (c.tipo === 'servicio') {
+      // Lo que este cobro movió en el saldo a favor (uso −, sobrante +) se revierte
+      const neto = c.movimientosSaldo.reduce((s, m) => s.plus(m.monto), CERO);
+      if (!neto.isZero()) {
+        const [p] = await tx.$queryRaw<{ saldo_favor: Prisma.Decimal }[]>`SELECT saldo_favor FROM pacientes WHERE id = ${c.pacienteId} FOR UPDATE`;
+        if (D(p.saldo_favor).minus(neto).isNegative()) throw new ErrorNegocio(409, 'SALDO_YA_USADO', MENSAJES.SALDO_YA_USADO);
+        await moverSaldo(tx, { pacienteId: c.pacienteId, tipo: 'reversion_anulacion', monto: neto.neg(), usuarioId: usuario.id, citaId: c.citaId, comprobanteId: c.id, motivo: `Anulación de ${c.numero}` });
+      }
+      await tx.cita.update({ where: { id: c.citaId }, data: { estado: 'atendida' } });
+    } else {
+      const cita = c.cita;
+      if (cita.comprobantes.some((x) => x.tipo === 'servicio')) throw new ErrorNegocio(409, 'ANULAR_SERVICIO_PRIMERO', MENSAJES.ANULAR_SERVICIO_PRIMERO);
+      if (cita.estado === 'confirmada' && horasParaCita(cita.fecha, cita.hora) > 0) {
+        await tx.cita.update({
+          where: { id: cita.id },
+          data: {
+            estado: 'pendiente_adelanto',
+            adelantoVenceEn: new Date(Date.now() + MINUTOS_PAGO_ADELANTO * 60_000),
+            pagoMetodo: null,
+            pagoOperacion: null,
+            pagoCaptura: null,
+            pagoCapturaTipo: null,
+            pagoReportadoEn: null,
+          },
+        });
+      } else if (cita.estado !== 'atendida') {
+        throw new ErrorNegocio(409, 'ANULACION_CITA_PASADA', MENSAJES.ANULACION_CITA_PASADA);
+      }
+    }
+
+    await tx.comprobante.update({ where: { id }, data: { anuladoEn: new Date(), anuladoPorId: usuario.id, motivoAnulacion: motivo } });
+    await registrarAuditoria(tx, {
+      usuarioId: usuario.id,
+      accion: 'anular_comprobante',
+      pacienteId: c.pacienteId,
+      detalle: `${c.numero} (${c.tipo}, S/ ${c.total.toFixed(2)}): ${motivo}`,
+      ip,
+    });
+  });
+  return obtenerComprobante(id);
 }

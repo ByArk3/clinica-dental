@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MENSAJES, rechazarPagoSchema } from '@clinica/shared';
-import { cajaApi, type Comprobante, type PendienteCaja } from '../api/recursos';
+import { cajaApi, type Comprobante, type ComprobanteDelDia, type PendienteCaja } from '../api/recursos';
+import { ModalAnular } from '../components/ModalAnular';
 import { ModalConfirmar } from '../components/ModalConfirmar';
 import { fechaHoraPE, fechaPE, mensajeError, solesPE } from '../formato';
 
@@ -51,6 +52,7 @@ export default function Caja() {
               </button>
             ))}
           </div>
+          <ComprobantesDeHoy />
         </div>
         <div className="col-lg-7">
           {emitido ? (
@@ -84,6 +86,7 @@ function Cobro({ pendiente, onEmitido, onCerrado }: { pendiente: PendienteCaja; 
   const vuelto = efectivo && monto !== '' && recibido >= total ? recibido - total : null;
   const listo = (c: Comprobante) => {
     qc.invalidateQueries({ queryKey: ['caja-pendientes'] });
+    qc.invalidateQueries({ queryKey: ['caja-comprobantes'] });
     onEmitido(c);
   };
 
@@ -254,5 +257,58 @@ function ComprobanteEmitido({ c, onSiguiente }: { c: Comprobante; onSiguiente: (
       {estado.ok && <div className="alert alert-success mt-3 mb-0">{estado.ok}</div>}
       {estado.error && <div className="alert alert-danger mt-3 mb-0" role="alert">{estado.error}</div>}
     </div>
+  );
+}
+
+/** Comprobantes emitidos hoy: ver PDF y anular los emitidos por error. */
+function ComprobantesDeHoy() {
+  const lista = useQuery({ queryKey: ['caja-comprobantes'], queryFn: () => cajaApi.delDia(), refetchInterval: 60_000 });
+  const [anular, setAnular] = useState<ComprobanteDelDia | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+  const abrirPdf = async (id: number) => {
+    try {
+      const url = URL.createObjectURL(await cajaApi.pdf(id));
+      window.open(url, '_blank', 'noopener');
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      setAviso(null);
+      window.alert(MENSAJES.ERROR_PDF);
+    }
+  };
+  return (
+    <section className="mt-4">
+      <h2 className="h6 text-uppercase text-muted">Comprobantes de hoy</h2>
+      {aviso && <div className="alert alert-success py-2 small">{aviso}</div>}
+      {lista.data?.length === 0 && <div className="tarjeta text-muted small">Aún no se emitieron comprobantes hoy.</div>}
+      <div className="list-group">
+        {lista.data?.map((c) => (
+          <div key={c.id} className={`list-group-item ${c.anulado ? 'text-muted' : ''}`}>
+            <div className="d-flex justify-content-between gap-2">
+              <span>
+                <strong className={c.anulado ? 'text-decoration-line-through' : ''}>{c.numero}</strong>
+                {c.tipo === 'adelanto' && <span className="badge text-bg-warning ms-1">Adelanto</span>}
+                {c.anulado && <span className="badge text-bg-danger ms-1">Anulado</span>}
+              </span>
+              <span className={`text-nowrap ${c.anulado ? 'text-decoration-line-through' : ''}`}>{solesPE(c.total)}</span>
+            </div>
+            <div className="small">{c.paciente} · {c.tipoPago}</div>
+            {c.anulado && <div className="small">Anulado por {c.anulado.por}: {c.anulado.motivo}</div>}
+            <div className="mt-1">
+              <button type="button" className="btn btn-link btn-sm p-0 me-3" onClick={() => abrirPdf(c.id)}>Ver PDF</button>
+              {c.puedeAnular && (
+                <button type="button" className="btn btn-link btn-sm p-0 text-danger" onClick={() => { setAviso(null); setAnular(c); }}>
+                  Anular
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      <ModalAnular
+        comprobante={anular}
+        onCerrar={() => setAnular(null)}
+        onAnulado={(c) => setAviso(`${c.numero} anulado. ${c.tipo === 'servicio' ? 'La cita volvió a «Por cobrar».' : c.estadoCita === 'pendiente_adelanto' ? 'La cita volvió a «Pendiente de adelanto».' : ''}`)}
+      />
+    </section>
   );
 }

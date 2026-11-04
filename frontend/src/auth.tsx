@@ -33,3 +33,6 @@ export const useAuth = () => {
   if (!c) throw new Error('useAuth fuera de AuthProvider');
   return c;
 };
+
+/** Usuario en sesión, o null si el componente se usa fuera de AuthProvider (p. ej. en pruebas). */
+export const useUsuarioOpcional = () => useContext(Ctx)?.usuario ?? null;

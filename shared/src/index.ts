@@ -55,6 +55,18 @@ export const MENSAJES = {
   PAGO_NO_VERIFICABLE: 'La cita no tiene un pago reportado para verificar',
   HORARIO_INVALIDO: 'Horario inválido',
   FERIADO_DUPLICADO: 'Ya existe un feriado en esa fecha',
+  // Seguridad y auditoría
+  CUENTA_BLOQUEADA: 'Cuenta bloqueada por 15 minutos por intentos fallidos',
+  // Anular comprobante
+  ANULACION_SOLO_HOY: 'La recepcionista solo puede anular comprobantes emitidos hoy; pida al administrador que lo anule',
+  COMPROBANTE_YA_ANULADO: 'El comprobante ya está anulado',
+  SALDO_YA_USADO: 'El saldo a favor que generó este comprobante ya se usó en otro cobro; anule primero ese comprobante',
+  ANULAR_SERVICIO_PRIMERO: 'La cita ya fue atendida; anule primero el comprobante del servicio',
+  ANULACION_CITA_PASADA: 'La cita ya pasó o cambió de estado; no se puede anular su adelanto',
+  // Editar atención
+  ATENCION_NO_EDITABLE: 'Solo el odontólogo que registró la atención puede editarla',
+  ATENCION_COBRADA: 'La atención ya fue cobrada: solo puede corregir el diagnóstico y las observaciones. Para cambiar tratamientos, la recepcionista debe anular el comprobante',
+  ATENCION_SIN_CAMBIOS: 'No hay cambios para guardar',
   ENLACE_INVALIDO: 'El enlace de recuperación no es válido o ya venció',
   ODONTOLOGO_NO_DISPONIBLE: 'El odontólogo no está disponible',
   // CU-07
@@ -143,6 +155,22 @@ export const loginSchema = z.object({
   email: z.string().email('Correo inválido'),
   password: z.string().min(1, 'Ingrese su contraseña'),
 });
+/** Bloqueo por intentos fallidos al iniciar sesión */
+export const MAX_INTENTOS_LOGIN = 3;
+export const MINUTOS_BLOQUEO_LOGIN = 15;
+
+export const ACCIONES_AUDITORIA = ['ver_historial', 'editar_atencion', 'anular_comprobante', 'bloqueo_login', 'desbloqueo_login'] as const;
+export type AccionAuditoria = (typeof ACCIONES_AUDITORIA)[number];
+export const ETIQUETA_AUDITORIA: Record<AccionAuditoria, string> = {
+  ver_historial: 'Vio el historial clínico',
+  editar_atencion: 'Editó una atención',
+  anular_comprobante: 'Anuló un comprobante',
+  bloqueo_login: 'Cuenta bloqueada por intentos fallidos',
+  desbloqueo_login: 'Desbloqueó una cuenta',
+};
+
+export const motivoSchema = z.object({ motivo: z.string().trim().min(5, 'Indique el motivo (mínimo 5 caracteres)').max(300) });
+
 export const recuperarSchema = z.object({ email: z.string().email('Correo inválido') });
 export const restablecerSchema = z.object({ token: z.string().min(10), password: passwordSchema });
 
@@ -281,6 +309,9 @@ export const atencionSchema = z.object({
     .min(1, 'Agregue al menos un tratamiento'),
 });
 export type AtencionDTO = z.infer<typeof atencionSchema>;
+/** Editar una atención: los mismos datos y el motivo de la corrección (queda en el historial). */
+export const editarAtencionSchema = atencionSchema.merge(motivoSchema);
+export type EditarAtencionDTO = z.infer<typeof editarAtencionSchema>;
 
 // ---------- Caja (CU-13) ----------
 export type TipoCobro = 'servicio' | 'adelanto';

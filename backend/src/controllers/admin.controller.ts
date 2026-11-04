@@ -2,6 +2,7 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import {
+  ACCIONES_AUDITORIA,
   ajusteSchema,
   configPagoSchema,
   feriadoSchema,
@@ -26,6 +27,8 @@ import * as UsuarioService from '../services/usuario.service.js';
 import * as DescuentoService from '../services/descuento.service.js';
 import * as ReporteService from '../services/reporte.service.js';
 import * as AgendaService from '../services/agenda.service.js';
+import * as AuthService from '../services/auth.service.js';
+import * as AuditoriaService from '../services/auditoria.service.js';
 import { pdfPedido } from '../lib/pdf-pedido.js';
 import { enviarCorreo } from '../lib/correo.js';
 import { ErrorNegocio } from '../lib/errores.js';
@@ -105,6 +108,19 @@ export const modificarUsuario = async (req: Request, res: Response) =>
   res.json(await UsuarioService.modificar(idParam(req), usuarioModificarSchema.parse(req.body), usuarioActual(req)));
 export const desactivarUsuario = async (req: Request, res: Response) => res.json(await UsuarioService.cambiarEstado(idParam(req), false, usuarioActual(req)));
 export const activarUsuario = async (req: Request, res: Response) => res.json(await UsuarioService.cambiarEstado(idParam(req), true, usuarioActual(req)));
+/** Desbloquear una cuenta bloqueada por intentos fallidos */
+export const desbloquearUsuario = async (req: Request, res: Response) => res.json(await AuthService.desbloquear(idParam(req), usuarioActual(req), req.ip));
+
+// ---------- Auditoría ----------
+const auditoriaQuery = z.object({
+  dni: z.string().regex(/^\d{8}$/, 'El DNI tiene 8 dígitos').optional().or(z.literal('').transform(() => undefined)),
+  usuarioId: z.coerce.number().int().positive().optional().or(z.literal('').transform(() => undefined)),
+  accion: z.enum(ACCIONES_AUDITORIA).optional().or(z.literal('').transform(() => undefined)),
+});
+export async function auditoria(req: Request, res: Response) {
+  const f = auditoriaQuery.parse(req.query);
+  res.json(await AuditoriaService.listar({ ...f, ...rangoDe(req) }));
+}
 
 // ---------- Campañas de descuento, feriados, horarios y datos de pago ----------
 export const listarDescuentos = async (_req: Request, res: Response) => res.json(await DescuentoService.listar());
@@ -155,8 +171,8 @@ export async function reporteIngresos(req: Request, res: Response) {
     res,
     `ingresos_${desde}_${hasta}`,
     ReporteService.aCsv(
-      ['Número', 'Fecha', 'Tipo', 'Paciente', 'DNI', 'Tipo de pago', 'Subtotal', 'Descuento', 'Adelanto aplicado', 'Total'],
-      r.detalle.map((d) => [d.numero, fmt.format(new Date(d.fecha)), d.tipo, d.paciente, d.dni, d.tipoPago, d.subtotal, d.descuento, d.adelantoAplicado, d.total]),
+      ['Número', 'Fecha', 'Tipo', 'Paciente', 'DNI', 'Tipo de pago', 'Subtotal', 'Descuento', 'Adelanto aplicado', 'Total', 'Estado', 'Motivo de anulación'],
+      r.detalle.map((d) => [d.numero, fmt.format(new Date(d.fecha)), d.tipo, d.paciente, d.dni, d.tipoPago, d.subtotal, d.descuento, d.adelantoAplicado, d.total, d.anulado ? 'Anulado' : 'Vigente', d.anulado?.motivo ?? '']),
     ),
   );
 }

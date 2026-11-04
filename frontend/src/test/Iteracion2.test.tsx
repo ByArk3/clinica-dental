@@ -100,7 +100,7 @@ describe('CU-10 Historial', () => {
     simularApi({
       'GET /pacientes/buscar': { body: [{ id: 1, dni: '72458190', nombres: 'María', apellidos: 'Quispe Rojas', fechaNacimiento: '1990-04-12', atenciones: 1 }] },
       'GET /pacientes/1/historial': {
-        body: { ...historial, mensaje: undefined, atenciones: [{ id: 1, fecha: '2026-10-01', hora: '09:00', motivo: 'Dolor', odontologo: 'Dr. Luis Paredes', diagnostico: 'Caries', observaciones: null, tratamientos: [{ nombre: 'Curación con resina', piezaDental: '16', precio: '120.00' }] }] },
+        body: { ...historial, mensaje: undefined, atenciones: [{ id: 1, fecha: '2026-10-01', hora: '09:00', motivo: 'Dolor', odontologo: 'Dr. Luis Paredes', diagnostico: 'Caries', observaciones: null, tratamientos: [{ nombre: 'Curación con resina', piezaDental: '16', precio: '120.00' }], odontologoId: 1, ediciones: [] }] },
       },
     });
     renderizar(<Historial />);

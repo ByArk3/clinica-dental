@@ -26,6 +26,8 @@ import Alertas from './pages/Alertas';
 import Usuarios from './pages/Usuarios';
 import Configuracion from './pages/Configuracion';
 import Reportes from './pages/Reportes';
+import Auditoria from './pages/Auditoria';
+import EditarAtencion from './pages/EditarAtencion';
 
 export const rutaInicio = (rol: Rol) =>
   ({ paciente: '/reservar', recepcionista: '/citas/dia', odontologo: '/atencion', administrador: '/panel' })[rol];
@@ -68,6 +70,7 @@ export function Rutas() {
       <Route element={<Protegida roles={['odontologo']} />}>
         <Route path="/atencion" element={<MisCitasOdontologo />} />
         <Route path="/atencion/:citaId" element={<RegistrarAtencion />} />
+        <Route path="/atencion/editar/:atencionId" element={<EditarAtencion />} />
       </Route>
       <Route element={<Protegida roles={['odontologo', 'administrador']} />}>
         <Route path="/historial" element={<Historial />} />
@@ -84,6 +87,7 @@ export function Rutas() {
         <Route path="/usuarios" element={<Usuarios />} />
         <Route path="/configuracion" element={<Configuracion />} />
         <Route path="/reportes" element={<Reportes />} />
+        <Route path="/auditoria" element={<Auditoria />} />
       </Route>
       <Route element={<Protegida />}>
         <Route path="/inicio" element={<Inicio />} />

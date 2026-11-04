@@ -84,6 +84,17 @@ export function pdfComprobante(c: ComprobanteCompleto): Promise<Buffer> {
     doc.font('Helvetica').fontSize(8).fillColor('#777');
     doc.text(`Atendido por: ${c.emitidoPor.nombres}`, izq, doc.y, { width: ancho, align: 'center' });
     doc.text('Gracias por su preferencia', izq, doc.y, { width: ancho, align: 'center' });
+    if (c.anuladoEn) {
+      // Sello «ANULADO»: el comprobante conserva su número pero ya no tiene validez
+      doc.moveDown(1);
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#B42318');
+      doc.text(`ANULADO el ${fechaHora(c.anuladoEn)} por ${c.anuladoPor?.nombres ?? ''}. Motivo: ${c.motivoAnulacion ?? ''}`, izq, doc.y, { width: ancho, align: 'center' });
+      doc.save();
+      doc.rotate(-30, { origin: [doc.page.width / 2, doc.page.height / 2] });
+      doc.font('Helvetica-Bold').fontSize(64).fillColor('#B42318').fillOpacity(0.18);
+      doc.text('ANULADO', 0, doc.page.height / 2 - 32, { width: doc.page.width, align: 'center', lineBreak: false });
+      doc.restore();
+    }
     doc.end();
   });
 }

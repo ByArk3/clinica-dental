@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ETIQUETA_ESTADO_PEDIDO, rangoFechasSchema, type EstadoPedido } from '@clinica/shared';
-import { reportesApi } from '../api/recursos';
+import { reportesApi, type ReporteIngresos } from '../api/recursos';
+import { ModalAnular } from '../components/ModalAnular';
 import { fechaHoraPE, fechaPE, hoyLima, mensajeError, numPE, solesPE } from '../formato';
 
 /** CU-39 Reporte de ingresos · CU-40 Reporte de inventario. */
@@ -14,6 +15,7 @@ export default function Reportes() {
   const ingresos = useQuery({ queryKey: ['rep-ingresos', desde, hasta], queryFn: () => reportesApi.ingresos(desde, hasta), enabled: tab === 'ingresos' && valido.success });
   const inventario = useQuery({ queryKey: ['rep-inventario', desde, hasta], queryFn: () => reportesApi.inventario(desde, hasta), enabled: tab === 'inventario' && valido.success });
   const error = ingresos.error ?? inventario.error;
+  const [anular, setAnular] = useState<ReporteIngresos['detalle'][number] | null>(null);
 
   return (
     <>
@@ -53,6 +55,7 @@ export default function Reportes() {
                     {r.porTipoPago.length === 0 && <tr><td className="text-muted">Sin cobros en el periodo.</td></tr>}
                   </tbody></table>
                   {Number(r.resumen.adelantos) > 0 && <p className="small text-muted mt-2 mb-0">Incluye {solesPE(r.resumen.adelantos)} de adelantos.</p>}
+                  {r.resumen.anulados > 0 && <p className="small text-muted mt-1 mb-0">{r.resumen.anulados} comprobante(s) anulado(s), no incluidos en los totales.</p>}
                   {Number(r.resumen.devoluciones) > 0 && <p className="small text-danger mt-1 mb-0">Devoluciones de adelantos: − {solesPE(r.resumen.devoluciones)} (cobrado: {solesPE(r.resumen.cobrado)}).</p>}
                 </div>
               </div>
@@ -68,12 +71,22 @@ export default function Reportes() {
             <div className="tarjeta p-0">
               <div className="table-responsive">
                 <table className="table table-sm align-middle mb-0 small">
-                  <thead><tr><th>N.°</th><th>Fecha</th><th>Paciente</th><th>Pago</th><th className="text-end">Total</th></tr></thead>
+                  <thead><tr><th>N.°</th><th>Fecha</th><th>Paciente</th><th>Pago</th><th className="text-end">Total</th><th></th></tr></thead>
                   <tbody>
                     {r.detalle.map((d) => (
-                      <tr key={d.numero}>
-                        <td className="text-nowrap">{d.numero}{d.tipo === 'adelanto' && <span className="badge text-bg-warning ms-1">Adelanto</span>}</td>
-                        <td className="text-nowrap">{fechaHoraPE(d.fecha)}</td><td>{d.paciente}</td><td>{d.tipoPago}</td><td className="text-end">{solesPE(d.total)}</td>
+                      <tr key={d.numero} className={d.anulado ? 'text-muted' : ''}>
+                        <td className="text-nowrap">
+                          {d.numero}
+                          {d.tipo === 'adelanto' && <span className="badge text-bg-warning ms-1">Adelanto</span>}
+                          {d.anulado && <span className="badge text-bg-danger ms-1" title={`${d.anulado.por}: ${d.anulado.motivo}`}>Anulado</span>}
+                        </td>
+                        <td className="text-nowrap">{fechaHoraPE(d.fecha)}</td>
+                        <td>{d.paciente}{d.anulado && <div className="small">Anulado por {d.anulado.por}: {d.anulado.motivo}</div>}</td>
+                        <td>{d.tipoPago}</td>
+                        <td className={`text-end text-nowrap ${d.anulado ? 'text-decoration-line-through' : ''}`}>{solesPE(d.total)}</td>
+                        <td className="text-end">
+                          {!d.anulado && <button type="button" className="btn btn-link btn-sm p-0 text-danger" onClick={() => setAnular(d)}>Anular</button>}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -83,6 +96,8 @@ export default function Reportes() {
           </>
         );
       })()}
+
+      <ModalAnular comprobante={anular} onCerrar={() => setAnular(null)} />
 
       {tab === 'inventario' && inventario.data && (() => {
         const r = inventario.data;

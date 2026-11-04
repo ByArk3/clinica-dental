@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { historialApi, type PacienteEncontrado } from '../api/recursos';
 import { VistaHistorial } from '../components/VistaHistorial';
@@ -9,7 +10,8 @@ export default function Historial() {
   const [q, setQ] = useState('');
   const [resultados, setResultados] = useState<PacienteEncontrado[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [elegido, setElegido] = useState<number | null>(null);
+  const [params] = useSearchParams();
+  const [elegido, setElegido] = useState<number | null>(Number(params.get('paciente')) || null);
   const historial = useQuery({ queryKey: ['historial', elegido], queryFn: () => historialApi.ver(elegido!), enabled: !!elegido });
 
   async function buscar(e: FormEvent) {

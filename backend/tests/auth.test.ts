@@ -24,7 +24,7 @@ describe('CU-01 Iniciar sesión', () => {
   it('alterno: contraseña incorrecta → 401 con mensaje genérico', async () => {
     const r = await request(app).post('/api/auth/login').send({ email: USUARIOS.recepcionista, password: 'otraCosa1' });
     expect(r.status).toBe(401);
-    expect(r.body).toEqual({ codigo: 'CREDENCIALES_INVALIDAS', mensaje: MENSAJES.CREDENCIALES_INVALIDAS });
+    expect(r.body).toEqual({ codigo: 'CREDENCIALES_INVALIDAS', mensaje: `${MENSAJES.CREDENCIALES_INVALIDAS}. Le quedan 2 intentos` });
   });
 
   it('alterno: usuario desactivado no puede ingresar', async () => {

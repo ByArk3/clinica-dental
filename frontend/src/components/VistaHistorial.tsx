@@ -1,8 +1,13 @@
+import { Link } from 'react-router-dom';
 import type { Historial } from '../api/recursos';
-import { fechaPE, solesPE } from '../formato';
+import { useUsuarioOpcional } from '../auth';
+import { fechaHoraPE, fechaPE, solesPE } from '../formato';
+
+const piezas = (t: { nombre: string; piezaDental: string | null }[]) => t.map((x) => (x.piezaDental ? `${x.nombre} (pieza ${x.piezaDental})` : x.nombre)).join(', ');
 
 /** Ficha y atenciones del paciente (CU-10). Solo se muestra a Odontólogo y Administrador (RN-07). */
 export function VistaHistorial({ h, compacto }: { h: Historial; compacto?: boolean }) {
+  const usuario = useUsuarioOpcional();
   const edad = Math.floor((Date.now() - new Date(`${h.paciente.fechaNacimiento}T00:00:00-05:00`).getTime()) / (365.25 * 86_400_000));
   return (
     <>
@@ -37,7 +42,10 @@ export function VistaHistorial({ h, compacto }: { h: Historial; compacto?: boole
           <div className="tarjeta py-3" key={a.id}>
             <div className="d-flex flex-wrap justify-content-between gap-2">
               <strong>{fechaPE(a.fecha)} · {a.hora}</strong>
-              <span className="small text-muted">{a.odontologo}</span>
+              <span className="small text-muted">
+                {a.odontologo}
+                {a.ediciones.length > 0 && <span className="badge text-bg-light border ms-2">Editado</span>}
+              </span>
             </div>
             <div className="mt-1"><span className="text-muted small">Diagnóstico:</span> {a.diagnostico}</div>
             <ul className="mb-1 small ps-3">
@@ -49,6 +57,25 @@ export function VistaHistorial({ h, compacto }: { h: Historial; compacto?: boole
               ))}
             </ul>
             {a.observaciones && <div className="small text-muted">Obs.: {a.observaciones}</div>}
+            {a.ediciones.length > 0 && (
+              <details className="small mt-2">
+                <summary className="text-muted">
+                  Editado el {fechaHoraPE(a.ediciones[0].fecha)} por {a.ediciones[0].por} – motivo: {a.ediciones[0].motivo}
+                  {a.ediciones.length > 1 && ` (${a.ediciones.length} correcciones)`}
+                </summary>
+                {a.ediciones.map((e, i) => (
+                  <div key={i} className="border-start ps-2 mt-2">
+                    <div className="text-muted">{fechaHoraPE(e.fecha)} · {e.por} · {e.motivo}</div>
+                    <div>Antes decía — diagnóstico: {e.anterior.diagnostico}</div>
+                    <div>Tratamientos: {piezas(e.anterior.tratamientos)}</div>
+                    {e.anterior.observaciones && <div>Obs.: {e.anterior.observaciones}</div>}
+                  </div>
+                ))}
+              </details>
+            )}
+            {!compacto && usuario?.odontologoId === a.odontologoId && (
+              <Link className="btn btn-link btn-sm p-0 mt-1 align-self-start" to={`/atencion/editar/${a.id}`}>Editar atención</Link>
+            )}
           </div>
         ))}
       </div>

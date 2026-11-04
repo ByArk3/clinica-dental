@@ -22,6 +22,7 @@ const base = {
   'GET /caja/citas/7/importe': { body: importe },
   'GET /tipos-pago': { body: tipos },
   'GET /caja/campanas': { body: [] },
+  'GET /caja/comprobantes': { body: [] },
 };
 
 async function abrirCobro() {

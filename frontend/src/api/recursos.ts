@@ -1,4 +1,4 @@
-import type { HorarioDTO, ReportarPagoDTO, AjusteDTO, DescuentoDTO, EstadoPedido, PedidoDTO, ProveedorDTO, RecepcionDTO, Rol, UsuarioModificarDTO, UsuarioNuevoDTO, ComprobanteDTO, Importe, TipoCobro, AtencionDTO, InsumoDTO, InsumoNuevoDTO, TratamientoDTO, CitaConfirmacion, CitaDTO, ContactoDTO, Disponibilidad, PacienteDTO, RegistroPacienteDTO, ReprogramarDTO, UsuarioSesion, EstadoCita, Canal } from '@clinica/shared';
+import type { AccionAuditoria, EditarAtencionDTO, HorarioDTO, ReportarPagoDTO, AjusteDTO, DescuentoDTO, EstadoPedido, PedidoDTO, ProveedorDTO, RecepcionDTO, Rol, UsuarioModificarDTO, UsuarioNuevoDTO, ComprobanteDTO, Importe, TipoCobro, AtencionDTO, InsumoDTO, InsumoNuevoDTO, TratamientoDTO, CitaConfirmacion, CitaDTO, ContactoDTO, Disponibilidad, PacienteDTO, RegistroPacienteDTO, ReprogramarDTO, UsuarioSesion, EstadoCita, Canal } from '@clinica/shared';
 import { api } from './cliente';
 
 export interface Paciente {
@@ -149,9 +149,11 @@ export interface Historial {
     hora: string;
     motivo: string;
     odontologo: string;
+    odontologoId: number;
     diagnostico: string;
     observaciones: string | null;
     tratamientos: { nombre: string; piezaDental: string | null; precio: string }[];
+    ediciones: { fecha: string; por: string; motivo: string; anterior: { diagnostico: string; observaciones: string | null; tratamientos: { nombre: string; piezaDental: string | null }[] } }[];
   }[];
   mensaje?: string;
 }
@@ -162,6 +164,7 @@ export interface CitaOdontologo {
   motivo: string;
   estado: EstadoCita;
   puedeAtender: boolean;
+  atencionId: number | null;
   paciente: { id: number; dni: string; nombres: string; apellidos: string; fechaNacimiento: string; alergias: string | null };
 }
 export interface ResultadoAtencion {
@@ -204,9 +207,31 @@ export const historialApi = {
   ver: (pacienteId: number) => api<Historial>(`/pacientes/${pacienteId}/historial`),
 };
 
+export interface AtencionEditable {
+  id: number;
+  citaId: number;
+  fecha: string;
+  hora: string;
+  motivo: string;
+  paciente: { id: number; dni: string; nombres: string; apellidos: string; alergias: string | null };
+  diagnostico: string;
+  observaciones: string | null;
+  tratamientos: { tratamientoId: number; piezaDental: string | null; nombre: string; precio: string }[];
+  cobrada: boolean;
+}
+export interface ResultadoEdicion {
+  atencionId: number;
+  citaId: number;
+  tratamientosCambiados: boolean;
+  insumos: ResultadoAtencion['insumos'];
+  alertas: string[];
+}
+
 export const atencionApi = {
   misCitas: (fecha: string) => api<CitaOdontologo[]>(`/odontologos/me/citas${qs({ fecha })}`),
   registrar: (citaId: number, d: AtencionDTO) => api<ResultadoAtencion>(`/citas/${citaId}/atencion`, { method: 'POST', body: d }),
+  ver: (atencionId: number) => api<AtencionEditable>(`/atenciones/${atencionId}`),
+  editar: (atencionId: number, d: EditarAtencionDTO) => api<ResultadoEdicion>(`/atenciones/${atencionId}`, { method: 'PATCH', body: d }),
 };
 
 // ---------- Iteración 3: caja ----------
@@ -245,6 +270,21 @@ export interface Comprobante {
   vuelto: string;
   enviadoEmail: boolean;
   emitidoPor: string;
+  anulado: Anulacion | null;
+}
+export interface Anulacion { fecha: string; por: string; motivo: string }
+export interface ComprobanteDelDia {
+  id: number;
+  numero: string;
+  tipo: TipoCobro;
+  citaId: number;
+  fecha: string;
+  paciente: string;
+  dni: string;
+  tipoPago: string;
+  total: string;
+  anulado: Anulacion | null;
+  puedeAnular: boolean;
 }
 
 export const cajaApi = {
@@ -257,6 +297,8 @@ export const cajaApi = {
   emitir: (citaId: number, d: ComprobanteDTO) => api<Comprobante>(`/caja/citas/${citaId}/comprobante`, { method: 'POST', body: d }),
   tiposPago: () => api<{ id: number; nombre: string }[]>('/tipos-pago'),
   enviar: (id: number) => api<{ mensaje: string }>(`/comprobantes/${id}/enviar`, { method: 'POST' }),
+  delDia: (fecha?: string) => api<ComprobanteDelDia[]>(`/caja/comprobantes${qs({ fecha })}`),
+  anular: (id: number, motivo: string) => api<Comprobante>(`/comprobantes/${id}/anular`, { method: 'PATCH', body: { motivo } }),
   /** Descarga el PDF; si falla, lanza error (10.1: el comprobante ya está registrado y se puede reintentar). */
   pdf: async (id: number) => {
     const r = await fetch(`/api/comprobantes/${id}/pdf`, { credentials: 'include' });
@@ -296,6 +338,7 @@ export interface Usuario {
   cmp: string | null;
   especialidad: string | null;
   dni: string | null;
+  bloqueadoHasta: string | null;
 }
 export interface Descuento {
   id: number;
@@ -325,11 +368,11 @@ export interface Panel {
 export interface ReporteIngresos {
   desde: string;
   hasta: string;
-  resumen: { total: string; cobrado: string; devoluciones: string; saldoAplicado: string; comprobantes: number; ticketPromedio: string; descuentos: string; adelantos: string };
+  resumen: { total: string; cobrado: string; devoluciones: string; saldoAplicado: string; comprobantes: number; anulados: number; ticketPromedio: string; descuentos: string; adelantos: string };
   porTipoPago: { tipo: string; total: string; cantidad: number }[];
   porDia: { fecha: string; total: string }[];
   porTratamiento: { tratamiento: string; cantidad: number; importe: string }[];
-  detalle: { numero: string; fecha: string; tipo: TipoCobro; paciente: string; dni: string; tipoPago: string; subtotal: string; descuento: string; adelantoAplicado: string; total: string }[];
+  detalle: { id: number; numero: string; fecha: string; tipo: TipoCobro; paciente: string; dni: string; tipoPago: string; subtotal: string; descuento: string; adelantoAplicado: string; total: string; anulado: Anulacion | null }[];
 }
 export interface ReporteInventario {
   desde: string;
@@ -360,6 +403,21 @@ export const usuariosApi = {
   crear: (d: UsuarioNuevoDTO) => api<Usuario>('/usuarios', { method: 'POST', body: d }),
   modificar: (id: number, d: UsuarioModificarDTO) => api<Usuario>(`/usuarios/${id}`, { method: 'PATCH', body: d }),
   cambiarEstado: (id: number, activo: boolean) => api<Usuario>(`/usuarios/${id}/${activo ? 'activar' : 'desactivar'}`, { method: 'PATCH' }),
+  desbloquear: (id: number) => api<{ bloqueadoHasta: null }>(`/usuarios/${id}/desbloquear`, { method: 'PATCH' }),
+};
+
+export interface EventoAuditoria {
+  id: number;
+  fecha: string;
+  accion: AccionAuditoria;
+  usuario: { id: number; nombres: string; email: string; rol: Rol } | null;
+  paciente: { id: number; dni: string; nombres: string } | null;
+  detalle: string | null;
+  ip: string | null;
+}
+export const auditoriaApi = {
+  listar: (f: { desde: string; hasta: string; dni?: string; usuarioId?: string; accion?: string }) =>
+    api<{ eventos: EventoAuditoria[]; hayMas: boolean }>(`/admin/auditoria${qs(f)}`),
 };
 
 export const configApi = {

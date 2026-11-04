@@ -59,6 +59,8 @@ rutas.post('/citas/:id/inasistencia', requireRol('recepcionista'), Citas.inasist
 // CU-11 Registrar atención — RN-06: solo el odontólogo
 rutas.get('/odontologos/me/citas', requireRol('odontologo'), Atencion.misCitas);
 rutas.post('/citas/:id/atencion', requireRol('odontologo'), Atencion.registrar);
+rutas.get('/atenciones/:id', requireRol('odontologo'), Atencion.verParaEditar);
+rutas.patch('/atenciones/:id', requireRol('odontologo'), Atencion.editar);
 
 // Tarifario CU-14..17 (el odontólogo puede leerlo para la atención)
 const admin = requireRol('administrador');
@@ -93,6 +95,8 @@ rutas.get('/caja/citas/:id/captura', recep, Caja.captura);
 rutas.get('/comprobantes/:id', requireRol('recepcionista', 'administrador'), Caja.ver);
 rutas.get('/comprobantes/:id/pdf', requireRol('recepcionista', 'administrador'), Caja.pdf);
 rutas.post('/comprobantes/:id/enviar', recep, Caja.enviar);
+rutas.get('/caja/comprobantes', recep, Caja.delDia);
+rutas.patch('/comprobantes/:id/anular', requireRol('recepcionista', 'administrador'), Caja.anular);
 
 // ===== Iteración 4 (Administrador) =====
 // Proveedores CU-26..29
@@ -117,6 +121,9 @@ rutas.post('/usuarios', admin, Admin.crearUsuario);
 rutas.patch('/usuarios/:id', admin, Admin.modificarUsuario);
 rutas.patch('/usuarios/:id/desactivar', admin, Admin.desactivarUsuario);
 rutas.patch('/usuarios/:id/activar', admin, Admin.activarUsuario);
+rutas.patch('/usuarios/:id/desbloquear', admin, Admin.desbloquearUsuario);
+// Auditoría (accesos al historial clínico, ediciones, anulaciones y bloqueos)
+rutas.get('/admin/auditoria', admin, Admin.auditoria);
 
 // Descuentos (P3) y monto del adelanto (P6)
 rutas.get('/admin/descuentos', admin, Admin.listarDescuentos);

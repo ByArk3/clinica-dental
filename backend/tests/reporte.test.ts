@@ -66,8 +66,8 @@ describe('CU-39 Reporte de ingresos', () => {
     expect(r.headers['content-type']).toContain('text/csv');
     expect(r.headers['content-disposition']).toMatch(/attachment; filename="ingresos_/);
     const lineas = r.text.replace(/^﻿/, '').split('\r\n');
-    expect(lineas[0]).toBe('Número;Fecha;Tipo;Paciente;DNI;Tipo de pago;Subtotal;Descuento;Adelanto aplicado;Total');
-    expect(lineas[1]).toMatch(/^C-000001;.*;servicio;Quispe Rojas, María;72458190;Tarjeta;40\.00;0\.00;0\.00;40\.00$/);
+    expect(lineas[0]).toBe('Número;Fecha;Tipo;Paciente;DNI;Tipo de pago;Subtotal;Descuento;Adelanto aplicado;Total;Estado;Motivo de anulación');
+    expect(lineas[1]).toMatch(/^C-000001;.*;servicio;Quispe Rojas, María;72458190;Tarjeta;40\.00;0\.00;0\.00;40\.00;Vigente;$/);
   });
 
   it('rango inválido → 422', async () => {

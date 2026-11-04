@@ -25,7 +25,7 @@ const nuevoToken = () => crypto.randomBytes(24).toString('hex');
 const INCLUIR = {
   odontologo: { include: { usuario: { select: { nombres: true } } } },
   tratamientoPrevisto: { select: { id: true, nombre: true } },
-  comprobantes: { select: { tipo: true, total: true } },
+  comprobantes: { where: { anuladoEn: null }, select: { tipo: true, total: true } }, // solo vigentes
 } as const;
 // pagoCaptura se omite de forma global (lib/prisma.ts)
 type CitaCompleta = Omit<Prisma.CitaGetPayload<{ include: typeof INCLUIR }>, 'pagoCaptura'>;
@@ -158,7 +158,7 @@ export async function registrarCita(dto: CitaDTO, usuario: UsuarioSesion) {
  */
 async function citaModificable(tx: Tx, citaId: number, usuario: UsuarioSesion) {
   await tx.$queryRaw`SELECT id FROM citas WHERE id = ${citaId} FOR UPDATE`;
-  const cita = await tx.cita.findUnique({ where: { id: citaId }, include: { paciente: true, comprobantes: true } });
+  const cita = await tx.cita.findUnique({ where: { id: citaId }, include: { paciente: true, comprobantes: { where: { anuladoEn: null } } } });
   // Al paciente no se le revela si existe la cita de otra persona
   if (!cita || (usuario.rol === 'paciente' && cita.pacienteId !== usuario.pacienteId)) throw citaNoEncontrada();
   if (cita.estado === 'pago_en_verificacion') throw new ErrorNegocio(409, 'PAGO_EN_VERIFICACION', MENSAJES.PAGO_EN_VERIFICACION);
@@ -322,7 +322,7 @@ export function enlaceWhatsapp(telefono: string, nombres: string, fecha: string,
 export async function registrarInasistencia(citaId: number) {
   return prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM citas WHERE id = ${citaId} FOR UPDATE`;
-    const cita = await tx.cita.findUnique({ where: { id: citaId }, include: { comprobantes: true } });
+    const cita = await tx.cita.findUnique({ where: { id: citaId }, include: { comprobantes: { where: { anuladoEn: null } } } });
     if (!cita) throw citaNoEncontrada();
     if (cita.estado !== 'confirmada') {
       throw new ErrorNegocio(409, 'INASISTENCIA_SOLO_CONFIRMADA', MENSAJES.INASISTENCIA_SOLO_CONFIRMADA);

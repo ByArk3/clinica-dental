@@ -4,6 +4,8 @@ import { prisma } from '../lib/prisma.js';
 import { ErrorNegocio } from '../lib/errores.js';
 import { dateAFecha, dateAHora } from '../lib/fechas.js';
 
+type VersionAnterior = { diagnostico: string; observaciones: string | null; tratamientos: { nombre: string; piezaDental: string | null }[] };
+
 const noEncontrado = () => new ErrorNegocio(404, 'PACIENTE_NO_ENCONTRADO', MENSAJES.PACIENTE_NO_ENCONTRADO);
 
 /** Buscar por DNI (8 dígitos) o por nombre/apellidos (todas las palabras deben coincidir). */
@@ -49,6 +51,7 @@ export async function historial(pacienteId: number) {
               cita: { select: { fecha: true, hora: true, motivo: true } },
               odontologo: { include: { usuario: { select: { nombres: true } } } },
               tratamientos: { include: { tratamiento: { select: { nombre: true } } }, orderBy: { id: 'asc' } },
+              ediciones: { include: { usuario: { select: { nombres: true } } }, orderBy: { id: 'desc' } },
             },
           },
         },
@@ -65,9 +68,12 @@ export async function historial(pacienteId: number) {
       hora: dateAHora(a.cita.hora),
       motivo: a.cita.motivo,
       odontologo: a.odontologo.usuario.nombres,
+      odontologoId: a.odontologoId,
       diagnostico: a.diagnostico,
       observaciones: a.observaciones,
       tratamientos: a.tratamientos.map((t) => ({ nombre: t.tratamiento.nombre, piezaDental: t.piezaDental, precio: t.precioAplicado.toFixed(2) })),
+      // Correcciones: la más reciente primero, con lo que decía antes
+      ediciones: a.ediciones.map((e) => ({ fecha: e.createdAt.toISOString(), por: e.usuario.nombres, motivo: e.motivo, anterior: e.anterior as VersionAnterior })),
     }))
     .sort((x, y) => `${y.fecha}${y.hora}`.localeCompare(`${x.fecha}${x.hora}`) || y.id - x.id);
 

@@ -3,11 +3,11 @@ import { Prisma, type Rol } from '@prisma/client';
 import { MENSAJES, type UsuarioModificarDTO, type UsuarioNuevoDTO, type UsuarioSesion } from '@clinica/shared';
 import { prisma } from '../lib/prisma.js';
 import { ErrorNegocio } from '../lib/errores.js';
-import { hashPassword } from './auth.service.js';
+import { bloqueosVigentes, hashPassword } from './auth.service.js';
 
 const INCLUIR = { odontologo: true, paciente: { select: { id: true, dni: true } } } as const;
 type UsuarioCompleto = Prisma.UsuarioGetPayload<{ include: typeof INCLUIR }>;
-const formatear = (u: UsuarioCompleto) => ({
+const formatear = (u: UsuarioCompleto, bloqueadoHasta: Date | null = null) => ({
   id: u.id,
   nombres: u.nombres,
   email: u.email,
@@ -17,6 +17,7 @@ const formatear = (u: UsuarioCompleto) => ({
   especialidad: u.odontologo?.especialidad ?? null,
   dni: u.paciente?.dni ?? null,
   creado: u.createdAt.toISOString(),
+  bloqueadoHasta: bloqueadoHasta?.toISOString() ?? null, // bloqueo por intentos fallidos
 });
 const noEncontrado = () => new ErrorNegocio(404, 'USUARIO_NO_ENCONTRADO', MENSAJES.USUARIO_NO_ENCONTRADO);
 const duplicado = (e: unknown) =>
@@ -40,7 +41,8 @@ export async function listar(f: { q?: string; rol?: Rol; activo?: boolean }) {
     orderBy: [{ rol: 'asc' }, { nombres: 'asc' }],
     include: INCLUIR,
   });
-  return lista.map(formatear);
+  const bloqueos = await bloqueosVigentes(lista.map((u) => u.email));
+  return lista.map((u) => formatear(u, bloqueos.get(u.email) ?? null));
 }
 
 /** CU-34 Registrar usuario del personal. Odontólogo → también su registro de odontólogo. */

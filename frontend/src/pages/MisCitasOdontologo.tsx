@@ -39,6 +39,11 @@ export default function MisCitasOdontologo() {
                 Registrar atención
               </Link>
             )}
+            {c.atencionId && (
+              <Link className="btn btn-sm btn-outline-secondary mt-2" to={`/atencion/editar/${c.atencionId}`}>
+                Editar atención
+              </Link>
+            )}
           </div>
         ))}
       </div>

@@ -1,11 +1,13 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { atencionSchema, fechaSchema } from '@clinica/shared';
+import { atencionSchema, editarAtencionSchema, fechaSchema } from '@clinica/shared';
 import * as HistorialService from '../services/historial.service.js';
 import * as AtencionService from '../services/atencion.service.js';
 import { usuarioActual } from '../middlewares/auth.js';
 import { idParam } from './comun.js';
 import { ahoraLima } from '../lib/fechas.js';
+import { prisma } from '../lib/prisma.js';
+import { registrar as registrarAuditoria } from '../services/auditoria.service.js';
 
 /** CU-10: GET /pacientes/buscar?q= (c_buscarPaciente) */
 export async function buscarPacientes(req: Request, res: Response) {
@@ -15,7 +17,10 @@ export async function buscarPacientes(req: Request, res: Response) {
 
 /** CU-10: GET /pacientes/:id/historial (c_consultarHistorial) */
 export async function historial(req: Request, res: Response) {
-  res.json(await HistorialService.historial(idParam(req)));
+  const h = await HistorialService.historial(idParam(req));
+  // Auditoría: queda registrado quién abrió la ficha de este paciente y cuándo
+  await registrarAuditoria(prisma, { usuarioId: usuarioActual(req).id, accion: 'ver_historial', pacienteId: h.paciente.id, ip: req.ip });
+  res.json(h);
 }
 
 /** CU-11 paso 1: GET /odontologos/me/citas?fecha= (por defecto hoy) */
@@ -27,4 +32,14 @@ export async function misCitas(req: Request, res: Response) {
 /** CU-11: POST /citas/:id/atencion (c_registrarAtencion) */
 export async function registrar(req: Request, res: Response) {
   res.status(201).json(await AtencionService.registrarAtencion(idParam(req), usuarioActual(req), atencionSchema.parse(req.body)));
+}
+
+/** GET /atenciones/:id — datos para editar (solo su odontólogo) */
+export async function verParaEditar(req: Request, res: Response) {
+  res.json(await AtencionService.verParaEditar(idParam(req), usuarioActual(req)));
+}
+
+/** PATCH /atenciones/:id — corregir la atención, con motivo; se guarda la versión anterior */
+export async function editar(req: Request, res: Response) {
+  res.json(await AtencionService.editarAtencion(idParam(req), usuarioActual(req), editarAtencionSchema.parse(req.body), req.ip));
 }

@@ -7,6 +7,8 @@ import { ModalConfirmar } from '../components/ModalConfirmar';
 import { useAuth } from '../auth';
 import { camposApi, erroresZod, mensajeError } from '../formato';
 
+const horaPE = (iso: string) => new Intl.DateTimeFormat('es-PE', { timeZone: 'America/Lima', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso));
+
 const ROL_PE: Record<Rol, string> = { paciente: 'Paciente', recepcionista: 'Recepcionista', odontologo: 'Odontólogo', administrador: 'Administrador' };
 
 /** CU-34 Registrar · CU-35 Listar · CU-36 Modificar · CU-37 Desactivar usuarios. */
@@ -19,6 +21,10 @@ export default function Usuarios() {
   const [editando, setEditando] = useState<Usuario | 'nuevo' | null>(null);
   const [cambiar, setCambiar] = useState<Usuario | null>(null);
   const lista = useQuery({ queryKey: ['usuarios', q, rol, estado], queryFn: () => usuariosApi.listar({ q, rol, activo: estado }) });
+  const desbloquear = useMutation({
+    mutationFn: (u: Usuario) => usuariosApi.desbloquear(u.id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['usuarios'] }),
+  });
   const estadoMut = useMutation({
     mutationFn: (u: Usuario) => usuariosApi.cambiarEstado(u.id, !u.activo),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['usuarios'] }); setCambiar(null); },
@@ -48,11 +54,15 @@ export default function Usuarios() {
               {lista.data?.map((u) => (
                 <tr key={u.id} className={u.activo ? '' : 'text-muted'}>
                   <td>{u.nombres} {u.id === yo?.id && <span className="badge text-bg-light">Usted</span>} {!u.activo && <span className="badge text-bg-secondary">Desactivado</span>}
+                    {u.bloqueadoHasta && <span className="badge text-bg-danger">Bloqueado hasta las {horaPE(u.bloqueadoHasta)}</span>}
                     {u.cmp && <div className="small text-muted">CMP {u.cmp}{u.especialidad ? ` · ${u.especialidad}` : ''}</div>}
                   </td>
                   <td className="small">{u.email}</td>
                   <td>{ROL_PE[u.rol]}</td>
                   <td className="text-end text-nowrap">
+                    {u.bloqueadoHasta && (
+                      <button className="btn btn-sm btn-outline-primary me-1" disabled={desbloquear.isPending} onClick={() => desbloquear.mutate(u)}>Desbloquear</button>
+                    )}
                     {u.rol !== 'paciente' && <button className="btn btn-sm btn-outline-secondary me-1" onClick={() => setEditando(u)}>Modificar</button>}
                     {u.id !== yo?.id && (
                       <button className={`btn btn-sm ${u.activo ? 'btn-outline-danger' : 'btn-outline-success'}`} onClick={() => setCambiar(u)}>{u.activo ? 'Desactivar' : 'Activar'}</button>

@@ -16,7 +16,7 @@ function iniciarSesion(req: Request, usuario: NonNullable<Request['session']['us
 
 export async function login(req: Request, res: Response) {
   const { email, password } = loginSchema.parse(req.body);
-  const usuario = await AuthService.login(email, password);
+  const usuario = await AuthService.login(email, password, req.ip);
   await iniciarSesion(req, usuario);
   res.json(usuario);
 }

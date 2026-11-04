@@ -43,6 +43,15 @@ enum TipoMovimientoSaldo {
   abono_sobrante // el adelanto superó el cobro final
   abono_cancelacion // canceló con ≥ 24 h después de pagar el adelanto
   uso_en_cobro // se descontó en un cobro
+  reversion_anulacion // se anuló el comprobante que lo usó o generó
+}
+
+enum AccionAuditoria {
+  ver_historial
+  editar_atencion
+  anular_comprobante
+  bloqueo_login
+  desbloqueo_login
 }
 
 enum MetodoPagoReportado {
@@ -91,6 +100,9 @@ model Usuario {
   comprobantesEmitidos Comprobante[]
   movimientosSaldo     SaldoMovimiento[]
   devoluciones         Devolucion[]
+  comprobantesAnulados Comprobante[]      @relation("ComprobanteAnuladoPor")
+  auditoria            Auditoria[]
+  edicionesAtencion    AtencionEdicion[]
 
   @@map("usuarios")
 }
@@ -118,6 +130,7 @@ model Paciente {
   comprobantes     Comprobante[]
   movimientosSaldo SaldoMovimiento[]
   devoluciones     Devolucion[]
+  auditoria        Auditoria[]
 
   @@index([apellidos, nombres])
   @@map("pacientes")
@@ -221,6 +234,7 @@ model Atencion {
   ficha        FichaPaciente         @relation(fields: [fichaId], references: [id])
   odontologo   Odontologo            @relation(fields: [odontologoId], references: [id])
   tratamientos AtencionTratamiento[]
+  ediciones    AtencionEdicion[]
 
   @@index([fichaId])
   @@map("atenciones")
@@ -237,6 +251,22 @@ model AtencionTratamiento {
   tratamiento Tratamiento @relation(fields: [tratamientoId], references: [id])
 
   @@map("atencion_tratamiento")
+}
+
+/// Versión anterior de una atención corregida por su odontólogo (el historial conserva lo que decía antes)
+model AtencionEdicion {
+  id         Int      @id @default(autoincrement())
+  atencionId Int      @map("atencion_id")
+  usuarioId  Int      @map("usuario_id")
+  motivo     String
+  anterior   Json // { diagnostico, observaciones, tratamientos: [{ nombre, piezaDental }] }
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  atencion Atencion @relation(fields: [atencionId], references: [id])
+  usuario  Usuario  @relation(fields: [usuarioId], references: [id])
+
+  @@index([atencionId])
+  @@map("atencion_ediciones")
 }
 
 /// El tarifario (RN-08)
@@ -474,16 +504,24 @@ model Comprobante {
   vuelto           Decimal         @default(0) @db.Decimal(10, 2)
   enviadoEmail     Boolean         @default(false) @map("enviado_email")
   emitidoPorId     Int             @map("emitido_por")
+  // Anulación: el comprobante no se borra (conserva su número); deja de contar en los ingresos
+  anuladoEn        DateTime?       @map("anulado_en")
+  anuladoPorId     Int?            @map("anulado_por")
+  motivoAnulacion  String?         @map("motivo_anulacion")
   createdAt        DateTime        @default(now()) @map("created_at")
 
   cita             Cita                 @relation(fields: [citaId], references: [id])
   paciente         Paciente             @relation(fields: [pacienteId], references: [id])
   tipoPago         TipoPago             @relation(fields: [tipoPagoId], references: [id])
   emitidoPor       Usuario              @relation(fields: [emitidoPorId], references: [id])
+  anuladoPor       Usuario?             @relation("ComprobanteAnuladoPor", fields: [anuladoPorId], references: [id])
   detalles         DetalleComprobante[]
   movimientosSaldo SaldoMovimiento[]
 
-  @@unique([citaId, tipo]) // un comprobante de servicio (y a lo más uno de adelanto) por cita
+  // Un comprobante VIGENTE de servicio (y a lo más uno de adelanto) por cita:
+  // índice único parcial comprobantes_cita_tipo_vigente (WHERE anulado_en IS NULL) en la migración SQL
+  @@index([citaId])
+  @@index([createdAt])
   @@map("comprobantes")
 }
 
@@ -501,6 +539,35 @@ model DetalleComprobante {
   campana     Descuento?   @relation(fields: [descuentoId], references: [id])
 
   @@map("detalle_comprobante")
+}
+
+/// Registro de auditoría: quién vio el historial clínico de qué paciente, ediciones, anulaciones y bloqueos
+model Auditoria {
+  id         Int             @id @default(autoincrement())
+  usuarioId  Int?            @map("usuario_id")
+  accion     AccionAuditoria
+  pacienteId Int?            @map("paciente_id")
+  detalle    String?
+  ip         String?         @db.VarChar(64)
+  createdAt  DateTime        @default(now()) @map("created_at")
+
+  usuario  Usuario?  @relation(fields: [usuarioId], references: [id])
+  paciente Paciente? @relation(fields: [pacienteId], references: [id])
+
+  @@index([createdAt])
+  @@index([pacienteId, createdAt])
+  @@index([usuarioId, createdAt])
+  @@map("auditoria")
+}
+
+/// Intentos fallidos de inicio de sesión por correo (exista o no la cuenta, para no revelar cuáles existen)
+model IntentoLogin {
+  email          String    @id
+  intentos       Int       @default(0)
+  bloqueadoHasta DateTime? @map("bloqueado_hasta")
+  actualizadoEn  DateTime  @default(now()) @updatedAt @map("actualizado_en")
+
+  @@map("intentos_login")
 }
 
 /// Parámetros configurables (p. ej. monto del adelanto P6, duración del bloque P5)

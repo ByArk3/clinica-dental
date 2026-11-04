@@ -65,7 +65,7 @@ export async function responder(token: string, accion: 'confirmar' | 'cancelar')
     if (!r.puedeResponder) throw new ErrorNegocio(r.status!, r.codigo!, r.mensaje!);
     if (accion === 'cancelar') {
       // Si había pagado adelanto: cancela con ≥ 24 h (el enlace solo lo permite así) → saldo a favor
-      const c = await tx.cita.findUniqueOrThrow({ where: { id: cita.id }, include: { comprobantes: true, paciente: true } });
+      const c = await tx.cita.findUniqueOrThrow({ where: { id: cita.id }, include: { comprobantes: { where: { anuladoEn: null } }, paciente: true } });
       await resolverAdelantoAlCancelar(tx, c, c.paciente.usuarioId ?? c.creadoPorId, false);
     }
     const actualizada = await tx.cita.update({
