@@ -171,8 +171,8 @@ describe('Campañas de descuento y datos de pago (Administrador)', () => {
 
   it('datos de Yape/Plin para el adelanto', async () => {
     const admin = await sesion('administrador');
-    expect((await admin.get('/api/admin/pago')).body).toEqual({ numero: '987654321', titular: 'Clínica Dental (ficticio)' });
-    expect((await admin.put('/api/admin/pago').send({ numero: '912345678', titular: 'Clínica Dental SAC' })).body.numero).toBe('912345678');
+    expect((await admin.get('/api/admin/pago')).body).toEqual({ numero: '987654321', titular: 'Clínica Dental (ficticio)', billeteras: ['yape'], tieneQr: false });
+    expect((await admin.put('/api/admin/pago').send({ numero: '912345678', titular: 'Clínica Dental SAC', billeteras: ['yape'] })).body.numero).toBe('912345678');
     expect((await admin.put('/api/admin/pago').send({ numero: '12345', titular: 'X' })).status).toBe(422);
   });
 });

@@ -45,6 +45,9 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-Clínica Dental <no-responder@clinica.local>}
+      # Autocompletar nombres con el DNI (opcional): token del proveedor de consultas RENIEC
+      RENIEC_TOKEN: ${RENIEC_TOKEN:-}
+      RENIEC_URL: ${RENIEC_URL:-}
 
   web:
     build:

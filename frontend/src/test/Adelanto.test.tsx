@@ -12,7 +12,8 @@ const cita: Cita = {
   estado: 'pendiente_adelanto', tratamientoPrevisto: 'Extracción simple', montoAdelanto: '40.00',
   adelantoVenceEn: new Date(Date.now() + 50 * 60_000).toISOString(), adelantoPagado: null, pagoReportado: null, pagoRechazoMotivo: null,
 };
-const datosPago = { body: { numero: '987654321', titular: 'Clínica Dental (ficticio)' } };
+const datosPago = { body: { numero: '987654321', titular: 'Clínica Dental (ficticio)', billeteras: ['yape', 'plin'], tieneQr: false } };
+const soloYape = { body: { numero: '987799567', titular: 'Clínica Dental', billeteras: ['yape'], tieneQr: true } };
 
 describe('Adelanto: panel de pago', () => {
   it('web: muestra monto, plazo y datos de Yape; registra el N.° de operación', async () => {
@@ -28,6 +29,18 @@ describe('Adelanto: panel de pago', () => {
     await u.type(screen.getByLabelText('Número de operación'), '445566');
     await u.click(screen.getByRole('button', { name: 'Ya pagué: registrar mi pago' }));
     await waitFor(() => expect(llamadas.find((l) => l.metodo === 'POST')?.body).toEqual({ metodo: 'plin', numeroOperacion: '445566' }));
+  });
+
+  it('solo Yape: no pregunta la billetera, muestra el QR y envía «yape»', async () => {
+    const llamadas = simularApi({ 'GET /datos-pago': soloYape, 'POST /citas/5/pago': { body: { ...cita, estado: 'pago_en_verificacion' } } });
+    renderizar(<PanelPagoAdelanto cita={cita} modo="web" />);
+    const u = userEvent.setup();
+    expect(await screen.findByRole('img', { name: 'QR de Yape de la clínica' })).toHaveAttribute('src', '/api/datos-pago/qr');
+    expect(screen.getByText(/Escanee el QR con Yape o pague al/)).toBeInTheDocument();
+    expect(screen.queryByRole('radio')).toBeNull();
+    await u.type(screen.getByLabelText('Número de operación'), '778899');
+    await u.click(screen.getByRole('button', { name: 'Ya pagué: registrar mi pago' }));
+    await waitFor(() => expect(llamadas.find((l) => l.metodo === 'POST')?.body).toEqual({ metodo: 'yape', numeroOperacion: '778899' }));
   });
 
   it('web: rechaza una captura que no es imagen', async () => {
@@ -64,7 +77,9 @@ describe('FormReserva con tratamiento previsto', () => {
     const u = userEvent.setup();
     await u.type(screen.getByLabelText('Motivo'), 'Dolor');
     await screen.findByRole('option', { name: 'Extracción simple — S/ 80.00' });
-    expect(screen.queryByRole('option', { name: /^Consulta/ })).not.toBeInTheDocument(); // «No sé / Consulta» es la opción por defecto
+    // la consulta es la opción por defecto, con su precio y una ayuda
+    expect(screen.getByRole('option', { name: 'Consulta de evaluación — S/ 40.00' })).toBeInTheDocument();
+    expect(screen.getByText('¿No sabe qué necesita? Elija la consulta: el odontólogo lo evaluará y le indicará el tratamiento.')).toBeInTheDocument();
     await u.selectOptions(screen.getByLabelText('Tratamiento previsto'), '6');
     await u.selectOptions(screen.getByLabelText('Odontólogo'), '1');
     await u.type(screen.getByLabelText('Fecha'), '2030-01-07');

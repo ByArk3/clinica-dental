@@ -3,6 +3,7 @@ import { Link, Navigate } from 'react-router-dom';
 import { authApi } from '../api/recursos';
 import { ApiError } from '../api/cliente';
 import { useAuth } from '../auth';
+import { CampoPassword } from '../components/CampoPassword';
 import { rutaInicio } from '../routes';
 
 /** CU-01 Iniciar sesión */
@@ -39,7 +40,7 @@ export default function Login() {
         </div>
         <div className="mb-3">
           <label htmlFor="password" className="form-label">Contraseña</label>
-          <input id="password" type="password" className="form-control" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+          <CampoPassword id="password" value={password} onChange={setPassword} autoComplete="current-password" required />
         </div>
         {error && <div className="alert alert-danger" role="alert">{error}</div>}
         <button className="btn btn-acento w-100" disabled={enviando}>{enviando ? 'Ingresando…' : 'Ingresar'}</button>

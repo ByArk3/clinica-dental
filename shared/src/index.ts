@@ -56,6 +56,8 @@ export const MENSAJES = {
   HORARIO_INVALIDO: 'Horario inválido',
   FERIADO_DUPLICADO: 'Ya existe un feriado en esa fecha',
   // Seguridad y auditoría
+  BILLETERA_NO_ACEPTADA: 'La clínica no recibe pagos por esa billetera',
+  SIN_QR: 'La clínica no tiene un QR de pago cargado',
   CUENTA_BLOQUEADA: 'Cuenta bloqueada por 15 minutos por intentos fallidos',
   // Anular comprobante
   ANULACION_SOLO_HOY: 'La recepcionista solo puede anular comprobantes emitidos hoy; pida al administrador que lo anule',
@@ -214,17 +216,21 @@ export const citaSchema = z.object({
 });
 export type CitaDTO = z.infer<typeof citaSchema>;
 
+/** Imagen como data URL (png/jpeg/webp) de hasta 2 MB. */
+function imagenDataUrl(formato: string, tamano: string) {
+  return z
+    .string()
+    .regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/, formato)
+    .refine((d) => Math.floor(((d.length - d.indexOf(',') - 1) * 3) / 4) <= MAX_CAPTURA_BYTES, tamano);
+}
+
 /** El paciente reporta su pago de adelanto por Yape/Plin (opción 1: verificación manual en caja). */
 const MAX_CAPTURA_BYTES = 2 * 1024 * 1024;
 export const reportarPagoSchema = z.object({
   metodo: z.enum(['yape', 'plin'], { errorMap: () => ({ message: 'Elija Yape o Plin' }) }),
   numeroOperacion: z.string().trim().regex(/^[A-Za-z0-9-]{4,40}$/, 'Ingrese el número de operación que le dio la aplicación'),
   // Imagen opcional como data URL (png/jpeg/webp), máx. 2 MB
-  captura: z
-    .string()
-    .regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/, 'La captura debe ser una imagen PNG, JPG o WEBP')
-    .refine((d) => Math.floor(((d.length - d.indexOf(',') - 1) * 3) / 4) <= MAX_CAPTURA_BYTES, 'La captura no debe pasar de 2 MB')
-    .optional(),
+  captura: imagenDataUrl('La captura debe ser una imagen PNG, JPG o WEBP', 'La captura no debe pasar de 2 MB').optional(),
 });
 export type ReportarPagoDTO = z.infer<typeof reportarPagoSchema>;
 export const rechazarPagoSchema = z.object({ motivo: z.string().trim().min(5, 'Indique el motivo del rechazo').max(300) });
@@ -436,10 +442,19 @@ export const horarioSchema = z.object({
 export type HorarioDTO = z.infer<typeof horarioSchema>;
 
 /** Datos de Yape/Plin de la clínica que se muestran al paciente para pagar el adelanto. */
+export const BILLETERAS = ['yape', 'plin'] as const;
+export type Billetera = (typeof BILLETERAS)[number];
+export const ETIQUETA_BILLETERA: Record<Billetera, string> = { yape: 'Yape', plin: 'Plin' };
+/** Nombre del tipo de pago en caja según las billeteras aceptadas: «Yape», «Plin» o «Yape/Plin». */
+export const nombreBilleteras = (b: readonly Billetera[]) => BILLETERAS.filter((x) => b.includes(x)).map((x) => ETIQUETA_BILLETERA[x]).join('/');
 export const configPagoSchema = z.object({
   numero: z.string().regex(/^9\d{8}$/, 'Celular de 9 dígitos que empiece con 9'),
   titular: z.string().trim().min(3, 'Ingrese el titular').max(80),
+  billeteras: z.array(z.enum(BILLETERAS)).min(1, 'Marque al menos una billetera').default(['yape']),
 });
+export type ConfigPagoDTO = z.infer<typeof configPagoSchema>;
+/** QR de Yape/Plin de la clínica: imagen PNG, JPG o WEBP de hasta 2 MB (data URL). */
+export const qrPagoSchema = z.object({ qr: imagenDataUrl('El QR debe ser una imagen PNG, JPG o WEBP', 'El QR no debe pasar de 2 MB') });
 
 // ---------- Reportes ----------
 export const rangoFechasSchema = z

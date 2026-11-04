@@ -23,6 +23,7 @@ rutas.post('/auth/registro-paciente', Auth.registroPaciente);
 // CU-03 (presencial) y búsqueda por DNI (CU-06 presencial)
 rutas.post('/pacientes', requireRol('recepcionista'), Pacientes.registrar);
 rutas.get('/pacientes', requireRol('recepcionista'), Pacientes.buscarPorDni);
+rutas.get('/reniec/:dni', requireRol('recepcionista'), Pacientes.reniec); // autocompletar nombres (opcional)
 
 // CU-10 Historial clínico — RN-07: solo Odontólogo y Administrador
 const soloClinico = requireRolConMensaje(MENSAJES.SIN_PERMISO_HISTORIAL, 'odontologo', 'administrador');
@@ -50,7 +51,8 @@ rutas.patch('/citas/:id/cancelar', requireRol('paciente', 'recepcionista'), Cita
 // Adelanto: el paciente reporta su pago por Yape/Plin (con captura opcional, hasta 2 MB)
 rutas.post('/citas/:id/pago', express.json({ limit: '3mb' }), requireRol('paciente'), Citas.reportarPago);
 rutas.get('/tarifario', requireRol('paciente', 'recepcionista'), Citas.tarifarioPublico);
-rutas.get('/datos-pago', requireRol('paciente', 'recepcionista'), Citas.datosPago);
+rutas.get('/datos-pago', requireRol('paciente', 'recepcionista', 'administrador'), Citas.datosPago);
+rutas.get('/datos-pago/qr', requireRol('paciente', 'recepcionista', 'administrador'), Citas.qrPago);
 
 // CU-09 Citas del día e inasistencias
 rutas.get('/citas', requireRol('recepcionista'), Citas.delDia);
@@ -133,6 +135,8 @@ rutas.patch('/admin/descuentos/:id/desactivar', admin, Admin.desactivarDescuento
 rutas.patch('/admin/descuentos/:id/activar', admin, Admin.activarDescuento);
 rutas.get('/admin/pago', admin, Admin.verDatosPago);
 rutas.put('/admin/pago', admin, Admin.guardarDatosPago);
+rutas.put('/admin/pago/qr', express.json({ limit: '3mb' }), admin, Admin.guardarQrPago);
+rutas.delete('/admin/pago/qr', admin, Admin.quitarQrPago);
 // Feriados y horario de cada odontólogo
 rutas.get('/admin/feriados', admin, Admin.listarFeriados);
 rutas.post('/admin/feriados', admin, Admin.crearFeriado);

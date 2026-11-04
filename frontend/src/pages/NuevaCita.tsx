@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { dniSchema } from '@clinica/shared';
 import { pacientesApi, type Paciente } from '../api/recursos';
 import { ApiError } from '../api/cliente';
@@ -13,6 +13,24 @@ export default function NuevaCita() {
   const [noEncontrado, setNoEncontrado] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editando, setEditando] = useState(false);
+  // Autocompletar con RENIEC (si la clínica configuró un proveedor): null = no se consultó o no hubo datos
+  const [reniec, setReniec] = useState<{ estado: 'buscando' | 'ok' | 'sin_datos' | 'no_disponible'; nombres?: string; apellidos?: string } | null>(null);
+
+  const datosReniec = useMemo(
+    () => (reniec?.estado === 'ok' ? { nombres: reniec.nombres!, apellidos: reniec.apellidos! } : undefined),
+    [reniec],
+  );
+
+  async function consultarReniec(d: string) {
+    setReniec({ estado: 'buscando' });
+    try {
+      const r = await pacientesApi.reniec(d);
+      if (r.encontrado) setReniec({ estado: 'ok', nombres: r.nombres, apellidos: r.apellidos });
+      else setReniec(r.motivo === 'no_configurado' ? null : { estado: r.motivo === 'no_encontrado' ? 'sin_datos' : 'no_disponible' });
+    } catch {
+      setReniec(null); // si falla, se escriben los datos a mano
+    }
+  }
 
   async function buscar(e: FormEvent) {
     e.preventDefault();
@@ -20,13 +38,17 @@ export default function NuevaCita() {
     setPaciente(null);
     setNoEncontrado(false);
     setEditando(false);
+    setReniec(null);
     const v = dniSchema.safeParse(dni);
     if (!v.success) return setError(v.error.issues[0].message);
     try {
       setPaciente(await pacientesApi.porDni(dni));
     } catch (err) {
       // 4.1: DNI no registrado → formulario de paciente nuevo (CU-03)
-      if (err instanceof ApiError && err.status === 404) setNoEncontrado(true);
+      if (err instanceof ApiError && err.status === 404) {
+        setNoEncontrado(true);
+        void consultarReniec(dni);
+      }
       else setError(err instanceof ApiError ? err.datos.mensaje : 'No se pudo conectar con el servidor');
     }
   }
@@ -46,8 +68,13 @@ export default function NuevaCita() {
       {noEncontrado && (
         <div className="tarjeta mb-3">
           <div className="alert alert-info">Paciente no encontrado. Regístrelo para continuar con la cita.</div>
+          {reniec?.estado === 'buscando' && <p className="small text-muted" role="status">Buscando nombres en RENIEC…</p>}
+          {reniec?.estado === 'ok' && <p className="small text-success" role="status">Nombres y apellidos completados con RENIEC. Verifíquelos con el DNI del paciente.</p>}
+          {reniec?.estado === 'sin_datos' && <p className="small text-muted" role="status">RENIEC no devolvió datos para ese DNI; escríbalos a mano.</p>}
+          {reniec?.estado === 'no_disponible' && <p className="small text-muted" role="status">No se pudo consultar RENIEC ahora; escriba los datos a mano.</p>}
           <FormPaciente
             dniInicial={dni}
+            inicial={datosReniec}
             textoBoton="Registrar paciente"
             onCancelar={() => setNoEncontrado(false)}
             onEnviar={async (datos) => {

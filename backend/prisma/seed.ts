@@ -53,6 +53,7 @@ export async function sembrar(prisma: PrismaClient<any>, { silencioso = false, h
     ['duracion_bloque_min', '30'],
     ['pago_numero', '987654321'],
     ['pago_titular', 'Clínica Dental (ficticio)'],
+    ['pago_billeteras', 'yape'], // billeteras aceptadas: yape, plin o ambas (Configuración → Pagos)
   ]) {
     await prisma.configuracion.upsert({ where: { clave }, update: {}, create: { clave, valor } });
   }
@@ -187,8 +188,12 @@ export async function sembrar(prisma: PrismaClient<any>, { silencioso = false, h
   });
 
   // --- Tipos de pago ---
-  for (const nombre of ['Efectivo', 'Tarjeta', 'Yape/Plin']) {
+  for (const nombre of ['Efectivo', 'Tarjeta']) {
     await prisma.tipoPago.upsert({ where: { nombre }, update: {}, create: { nombre } });
+  }
+  // Billetera digital: se llama «Yape», «Plin» o «Yape/Plin» según lo que acepte la clínica (no se duplica al renombrarla)
+  if (!(await prisma.tipoPago.findFirst({ where: { nombre: { in: ['Yape', 'Plin', 'Yape/Plin'] } } }))) {
+    await prisma.tipoPago.create({ data: { nombre: 'Yape' } });
   }
 
   const anio = Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima', year: 'numeric' }).format(new Date()));

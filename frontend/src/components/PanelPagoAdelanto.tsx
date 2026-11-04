@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { reportarPagoSchema } from '@clinica/shared';
+import { ETIQUETA_BILLETERA, reportarPagoSchema, type Billetera } from '@clinica/shared';
 import { citasApi, type Cita } from '../api/recursos';
 import { erroresZod, mensajeError, solesPE } from '../formato';
 
@@ -27,7 +27,11 @@ export function PanelPagoAdelanto({ cita, modo, onReportado }: { cita: Cita; mod
   const qc = useQueryClient();
   const datos = useQuery({ queryKey: ['datos-pago'], queryFn: citasApi.datosPago, staleTime: 5 * 60_000 });
   const minutos = useMinutosRestantes(cita.adelantoVenceEn);
-  const [metodo, setMetodo] = useState<'yape' | 'plin'>('yape');
+  const billeteras: Billetera[] = datos.data?.billeteras ?? ['yape'];
+  const [elegido, setMetodo] = useState<Billetera>('yape');
+  // Si la clínica acepta una sola billetera, no se pregunta
+  const metodo: Billetera = billeteras.includes(elegido) ? elegido : billeteras[0];
+  const nombres = billeteras.map((b) => ETIQUETA_BILLETERA[b]).join(' o ');
   const [numero, setNumero] = useState('');
   const [captura, setCaptura] = useState<string | undefined>();
   const [errores, setErrores] = useState<Record<string, string>>({});
@@ -60,7 +64,7 @@ export function PanelPagoAdelanto({ cita, modo, onReportado }: { cita: Cita; mod
   if (cita.estado === 'pago_en_verificacion') {
     return (
       <div className="alert alert-info mb-0" role="status">
-        Recibimos su reporte de pago ({cita.pagoReportado?.metodo === 'plin' ? 'Plin' : 'Yape'}, operación {cita.pagoReportado?.numeroOperacion}). La clínica lo verificará y su cita quedará confirmada.
+        Recibimos su reporte de pago ({ETIQUETA_BILLETERA[cita.pagoReportado?.metodo ?? 'yape']}, operación {cita.pagoReportado?.numeroOperacion}). La clínica lo verificará y su cita quedará confirmada.
       </div>
     );
   }
@@ -82,16 +86,24 @@ export function PanelPagoAdelanto({ cita, modo, onReportado }: { cita: Cita; mod
         <Link to="/caja" className="btn btn-acento btn-sm">Cobrar ahora en Caja</Link>
       ) : (
         <form onSubmit={enviar} noValidate>
-          <p className="mb-2">
-            Yape o Plin al <strong>{datos.data?.numero ?? '…'}</strong> a nombre de <strong>{datos.data?.titular ?? '…'}</strong>. Luego registre aquí su pago:
-          </p>
-          <div className="btn-group mb-2" role="radiogroup" aria-label="Medio de pago">
-            {(['yape', 'plin'] as const).map((m) => (
-              <button key={m} type="button" role="radio" aria-checked={metodo === m} className={`btn btn-sm ${metodo === m ? 'btn-acento' : 'btn-outline-secondary'}`} onClick={() => setMetodo(m)}>
-                {m === 'yape' ? 'Yape' : 'Plin'}
-              </button>
-            ))}
+          <div className="d-flex flex-wrap gap-3 align-items-start mb-2">
+            {datos.data?.tieneQr && (
+              <img src={citasApi.qrUrl()} alt={`QR de ${nombres} de la clínica`} className="border rounded bg-white p-1" style={{ width: 160, height: 160, objectFit: 'contain' }} />
+            )}
+            <p className="mb-0" style={{ flex: '1 1 200px' }}>
+              {datos.data?.tieneQr ? `Escanee el QR con ${nombres} o pague` : `Pague por ${nombres}`} al <strong>{datos.data?.numero ?? '…'}</strong> a nombre de{' '}
+              <strong>{datos.data?.titular ?? '…'}</strong> el monto de <strong>{solesPE(cita.montoAdelanto ?? 0)}</strong>. Luego registre aquí su pago:
+            </p>
           </div>
+          {billeteras.length > 1 && (
+            <div className="btn-group mb-2" role="radiogroup" aria-label="Medio de pago">
+              {billeteras.map((m) => (
+                <button key={m} type="button" role="radio" aria-checked={metodo === m} className={`btn btn-sm ${metodo === m ? 'btn-acento' : 'btn-outline-secondary'}`} onClick={() => setMetodo(m)}>
+                  {ETIQUETA_BILLETERA[m]}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="mb-2">
             <label htmlFor={`op-${cita.id}`} className="form-label small mb-1">Número de operación</label>
             <input id={`op-${cita.id}`} className={`form-control ${errores.numeroOperacion ? 'is-invalid' : ''}`} value={numero} onChange={(e) => setNumero(e.target.value)} inputMode="numeric" />

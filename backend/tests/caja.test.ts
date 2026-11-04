@@ -96,7 +96,7 @@ describe('CU-13 Emitir comprobante', () => {
   it('tarjeta o Yape/Plin: se cobra el total exacto, sin vuelto', async () => {
     const id = await citaAtendida(['Profilaxis']);
     const recep = await sesion('recepcionista');
-    const r = await recep.post(`/api/caja/citas/${id}/comprobante`).send({ tipoPagoId: await tipoPago('Yape/Plin'), montoRecibido: 500 });
+    const r = await recep.post(`/api/caja/citas/${id}/comprobante`).send({ tipoPagoId: await tipoPago('Yape'), montoRecibido: 500 });
     expect(r.body).toMatchObject({ total: '80.00', montoRecibido: '80.00', vuelto: '0.00' });
   });
 

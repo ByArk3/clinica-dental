@@ -1,4 +1,4 @@
-// Campañas de descuento (fechas + tratamientos + edad máxima) y datos de pago Yape/Plin. Administrador.
+// Campañas de descuento (fechas + tratamientos + edad máxima). Administrador.
 import { Prisma } from '@prisma/client';
 import { MENSAJES, type DescuentoDTO } from '@clinica/shared';
 import { prisma } from '../lib/prisma.js';
@@ -71,17 +71,4 @@ export async function modificar(id: number, d: DescuentoDTO) {
 export async function cambiarEstado(id: number, activo: boolean) {
   await existe(id);
   return formatear(await prisma.descuento.update({ where: { id }, data: { activo }, include: INCLUIR }));
-}
-
-/** Datos de Yape/Plin que ve el paciente para pagar el adelanto */
-export async function datosPago() {
-  const filas = await prisma.configuracion.findMany({ where: { clave: { in: ['pago_numero', 'pago_titular'] } } });
-  const v = Object.fromEntries(filas.map((f) => [f.clave, f.valor]));
-  return { numero: v.pago_numero ?? '', titular: v.pago_titular ?? '' };
-}
-export async function guardarDatosPago(numero: string, titular: string) {
-  for (const [clave, valor] of [['pago_numero', numero], ['pago_titular', titular]]) {
-    await prisma.configuracion.upsert({ where: { clave }, update: { valor }, create: { clave, valor } });
-  }
-  return datosPago();
 }

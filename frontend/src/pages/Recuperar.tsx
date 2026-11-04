@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { passwordSchema } from '@clinica/shared';
 import { authApi } from '../api/recursos';
 import { ApiError } from '../api/cliente';
+import { CampoPassword } from '../components/CampoPassword';
 
 /** CU-02 Recuperar contraseña: paso 1, pedir el enlace por correo. */
 export function Recuperar() {
@@ -56,7 +57,7 @@ export function Restablecer() {
         ) : (
           <>
             <label htmlFor="password" className="form-label">Contraseña nueva</label>
-            <input id="password" type="password" className="form-control" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
+            <CampoPassword id="password" value={password} onChange={setPassword} autoComplete="new-password" />
             <p className="small text-muted mt-1">Mínimo 8 caracteres, con letras y números.</p>
             {error && <div className="alert alert-danger">{error}</div>}
             <button className="btn btn-acento w-100">Guardar</button>

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { MENSAJES, rechazarPagoSchema } from '@clinica/shared';
+import { ETIQUETA_BILLETERA, MENSAJES, rechazarPagoSchema } from '@clinica/shared';
 import { cajaApi, type Comprobante, type ComprobanteDelDia, type PendienteCaja } from '../api/recursos';
 import { ModalAnular } from '../components/ModalAnular';
 import { ModalConfirmar } from '../components/ModalConfirmar';
@@ -41,7 +41,7 @@ export default function Caja() {
                 </div>
                 <div className="small">
                   {p.estado === 'pago_en_verificacion' ? (
-                    <span className="badge text-bg-primary me-1">Verificar {p.pagoReportado?.metodo === 'plin' ? 'Plin' : 'Yape'}</span>
+                    <span className="badge text-bg-primary me-1">Verificar {ETIQUETA_BILLETERA[p.pagoReportado?.metodo ?? 'yape']}</span>
                   ) : p.tipo === 'adelanto' ? (
                     <span className="badge text-bg-warning me-1">Adelanto</span>
                   ) : (
@@ -153,7 +153,7 @@ function Cobro({ pendiente, onEmitido, onCerrado }: { pendiente: PendienteCaja; 
       {reportado ? (
         <>
           <div className="border rounded p-2 mb-3 small">
-            Reportó <strong>{reportado.metodo === 'plin' ? 'Plin' : 'Yape'}</strong> · operación <strong>{reportado.numeroOperacion}</strong> · {fechaHoraPE(reportado.reportadoEn)}
+            Reportó <strong>{ETIQUETA_BILLETERA[reportado.metodo]}</strong> · operación <strong>{reportado.numeroOperacion}</strong> · {fechaHoraPE(reportado.reportadoEn)}
             {reportado.tieneCaptura && (
               <> · <a href={cajaApi.capturaUrl(pendiente.citaId)} target="_blank" rel="noreferrer">Ver captura</a></>
             )}

@@ -18,7 +18,10 @@ export interface Adjunto {
 export async function enviarCorreo(para: string, asunto: string, html: string, adjuntos: Adjunto[] = []) {
   const info = await transporte.sendMail({ from: process.env.MAIL_FROM, to: para, subject: asunto, html, attachments: adjuntos });
   if (!process.env.SMTP_HOST && process.env.NODE_ENV !== 'test') {
-    console.info(`[correo] para=${para} asunto="${asunto}"`);
+    // Sin SMTP el correo no sale: se muestran sus enlaces en el log para poder probar (recuperar contraseña, confirmar cita)
+    const enlaces = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
+    console.info(`[correo] (no enviado: SMTP sin configurar) para=${para} asunto="${asunto}"${adjuntos.length ? ` adjuntos=${adjuntos.map((a) => a.filename).join(',')}` : ''}`);
+    for (const e of enlaces) console.info(`[correo]   enlace: ${e}`);
   }
   return info;
 }

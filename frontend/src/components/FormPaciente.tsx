@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { pacienteSchema, registroPacienteSchema } from '@clinica/shared';
 import { ApiError } from '../api/cliente';
+import { CampoPassword } from './CampoPassword';
 
 type Valores = Record<string, string>;
 
@@ -8,6 +9,8 @@ interface Props {
   /** true = registro web (pide correo y contraseña para crear la cuenta) */
   conCuenta?: boolean;
   dniInicial?: string;
+  /** Valores precargados (p. ej. nombres y apellidos obtenidos de RENIEC) */
+  inicial?: Valores;
   textoBoton: string;
   onEnviar: (datos: any) => Promise<unknown>; // eslint-disable-line @typescript-eslint/no-explicit-any
   onCancelar?: () => void;
@@ -27,14 +30,21 @@ const CAMPOS: { nombre: string; etiqueta: string; tipo?: string; col: string; op
 ];
 
 /** CU-03 Registrar paciente (crea también su ficha en el servidor, RN-05). */
-export function FormPaciente({ conCuenta, dniInicial = '', textoBoton, onEnviar, onCancelar }: Props) {
-  const [v, setV] = useState<Valores>({ dni: dniInicial });
+export function FormPaciente({ conCuenta, dniInicial = '', inicial, textoBoton, onEnviar, onCancelar }: Props) {
+  const [v, setV] = useState<Valores>({ ...inicial, dni: dniInicial });
+  // Si los datos precargados llegan después (RENIEC), solo se completan los campos que siguen vacíos
+  useEffect(() => {
+    if (inicial) setV((prev) => ({ ...prev, ...Object.fromEntries(Object.entries(inicial).filter(([k]) => !prev[k])) }));
+  }, [inicial]);
   const [errores, setErrores] = useState<Valores>({});
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
   const campos = conCuenta
-    ? [...CAMPOS.map((c) => (c.nombre === 'email' ? { ...c, opcional: false } : c)), { nombre: 'password', etiqueta: 'Contraseña', tipo: 'password', col: 'col-sm-6' }]
+    ? [
+        ...CAMPOS.map((c) => (c.nombre === 'email' ? { ...c, opcional: false } : c)),
+        { nombre: 'password', etiqueta: 'Contraseña', tipo: 'password', col: 'col-sm-6' },
+      ]
     : CAMPOS;
 
   async function enviar(e: FormEvent) {
@@ -69,24 +79,44 @@ export function FormPaciente({ conCuenta, dniInicial = '', textoBoton, onEnviar,
             <label htmlFor={`p-${c.nombre}`} className="form-label">
               {c.etiqueta} {c.opcional && <small className="text-muted">(opcional)</small>}
             </label>
-            <input
-              id={`p-${c.nombre}`}
-              type={c.tipo ?? 'text'}
-              className={`form-control ${errores[c.nombre] ? 'is-invalid' : ''}`}
-              value={v[c.nombre] ?? ''}
-              onChange={(e) => setV({ ...v, [c.nombre]: e.target.value })}
-              autoComplete={c.nombre === 'password' ? 'new-password' : undefined}
-              inputMode={c.nombre === 'dni' || c.nombre === 'telefono' ? 'numeric' : undefined}
-            />
-            <div className="invalid-feedback">{errores[c.nombre]}</div>
+            {c.nombre === 'password' ? (
+              <CampoPassword
+                id="p-password"
+                value={v.password ?? ''}
+                onChange={(x) => setV({ ...v, password: x })}
+                autoComplete="new-password"
+                error={errores.password}
+              />
+            ) : (
+              <input
+                id={`p-${c.nombre}`}
+                type={c.tipo ?? 'text'}
+                className={`form-control ${errores[c.nombre] ? 'is-invalid' : ''}`}
+                value={v[c.nombre] ?? ''}
+                onChange={(e) => setV({ ...v, [c.nombre]: e.target.value })}
+                autoComplete={c.nombre === 'password' ? 'new-password' : undefined}
+                inputMode={c.nombre === 'dni' || c.nombre === 'telefono' ? 'numeric' : undefined}
+              />
+            )}
+            {c.nombre !== 'password' && <div className="invalid-feedback">{errores[c.nombre]}</div>}
           </div>
         ))}
       </div>
       {conCuenta && <p className="small text-muted mt-2 mb-0">Mínimo 8 caracteres, con letras y números.</p>}
-      {error && <div className="alert alert-danger mt-3" role="alert">{error}</div>}
+      {error && (
+        <div className="alert alert-danger mt-3" role="alert">
+          {error}
+        </div>
+      )}
       <div className="d-flex gap-2 mt-3">
-        <button type="submit" className="btn btn-acento" disabled={enviando}>{enviando ? 'Guardando…' : textoBoton}</button>
-        {onCancelar && <button type="button" className="btn btn-outline-secondary" onClick={onCancelar}>Cancelar</button>}
+        <button type="submit" className="btn btn-acento" disabled={enviando}>
+          {enviando ? 'Guardando…' : textoBoton}
+        </button>
+        {onCancelar && (
+          <button type="button" className="btn btn-outline-secondary" onClick={onCancelar}>
+            Cancelar
+          </button>
+        )}
       </div>
     </form>
   );

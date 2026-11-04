@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { configPagoSchema, descuentoSchema, feriadoSchema, HORARIO_CLINICA, type DescuentoDTO } from '@clinica/shared';
-import { citasApi, configApi, tarifarioApi, type Descuento } from '../api/recursos';
+import { BILLETERAS, configPagoSchema, descuentoSchema, ETIQUETA_BILLETERA, feriadoSchema, HORARIO_CLINICA, nombreBilleteras, type Billetera, type DescuentoDTO } from '@clinica/shared';
+import { citasApi, configApi, tarifarioApi, type DatosPago, type Descuento } from '../api/recursos';
 import { camposApi, erroresZod, fechaPE, hoyLima, mensajeError } from '../formato';
 
 type Pestana = 'campanas' | 'feriados' | 'horarios' | 'pagos';
@@ -10,7 +10,7 @@ const PESTANAS: [Pestana, string][] = [
   ['campanas', 'Campañas de descuento'],
   ['feriados', 'Feriados'],
   ['horarios', 'Horarios de odontólogos'],
-  ['pagos', 'Pagos con Yape/Plin'],
+  ['pagos', 'Pagos (Yape / Plin)'],
 ];
 
 /** Configuración del Administrador: campañas, feriados, horario de cada odontólogo y datos de pago del adelanto. */
@@ -296,36 +296,93 @@ function Horarios() {
 
 // ---------------------------------------------------------------- Pagos
 function Pagos() {
+  const qc = useQueryClient();
   const datos = useQuery({ queryKey: ['admin-pago'], queryFn: configApi.datosPago });
-  const [v, setV] = useState({ numero: '', titular: '' });
+  const [v, setV] = useState<{ numero: string; titular: string; billeteras: Billetera[] }>({ numero: '', titular: '', billeteras: ['yape'] });
   const [errores, setErrores] = useState<Record<string, string>>({});
-  const [ok, setOk] = useState(false);
-  useEffect(() => { if (datos.data) setV(datos.data); }, [datos.data]);
-  const guardar = useMutation({ mutationFn: configApi.guardarDatosPago, onSuccess: () => setOk(true), onError: (e) => setErrores(camposApi(e)) });
+  const [ok, setOk] = useState<string | null>(null);
+  const [version, setVersion] = useState(() => String(Date.now()));
+  useEffect(() => {
+    if (datos.data) setV({ numero: datos.data.numero ?? '', titular: datos.data.titular ?? '', billeteras: datos.data.billeteras });
+  }, [datos.data]);
+  const alGuardar = (texto: string) => (d: DatosPago) => {
+    qc.setQueryData(['admin-pago'], d);
+    qc.invalidateQueries({ queryKey: ['datos-pago'] });
+    setVersion(String(Date.now()));
+    setOk(texto);
+  };
+  const guardar = useMutation({ mutationFn: configApi.guardarDatosPago, onSuccess: alGuardar('Datos guardados.'), onError: (e) => setErrores(camposApi(e)) });
+  const subir = useMutation({ mutationFn: configApi.subirQr, onSuccess: alGuardar('QR actualizado.'), onError: (e) => setErrores({ qr: mensajeError(e) }) });
+  const quitar = useMutation({ mutationFn: configApi.quitarQr, onSuccess: alGuardar('QR quitado.') });
+
   function enviar(e: FormEvent) {
     e.preventDefault();
-    setOk(false);
+    setOk(null);
     const r = configPagoSchema.safeParse(v);
     if (!r.success) return setErrores(erroresZod(r.error.issues));
     setErrores({});
     guardar.mutate(r.data);
   }
+  function elegirQr(f: File | undefined) {
+    setOk(null);
+    if (!f) return;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(f.type)) return setErrores({ qr: 'El QR debe ser una imagen PNG, JPG o WEBP' });
+    if (f.size > 2 * 1024 * 1024) return setErrores({ qr: 'El QR no debe pasar de 2 MB' });
+    setErrores({});
+    const lector = new FileReader();
+    lector.onload = () => subir.mutate(String(lector.result));
+    lector.readAsDataURL(f);
+  }
+  const marcar = (b: Billetera, si: boolean) => setV({ ...v, billeteras: si ? [...v.billeteras, b] : v.billeteras.filter((x) => x !== b) });
+
   return (
-    <form className="tarjeta" style={{ maxWidth: 520 }} onSubmit={enviar} noValidate>
-      <h2 className="h6">Yape / Plin de la clínica</h2>
-      <p className="small text-muted">Se muestra al paciente para pagar el adelanto (50 % del tratamiento, plazo de 1 hora). La recepcionista verifica cada pago en Caja.</p>
-      <div className="mb-2">
-        <label htmlFor="p-numero" className="form-label">Celular</label>
-        <input id="p-numero" inputMode="numeric" className={`form-control ${errores.numero ? 'is-invalid' : ''}`} value={v.numero} onChange={(e) => setV({ ...v, numero: e.target.value })} />
-        <div className="invalid-feedback">{errores.numero}</div>
+    <div className="row g-3">
+      <div className="col-lg-6">
+        <form className="tarjeta h-100" onSubmit={enviar} noValidate>
+          <h2 className="h6">Billetera digital de la clínica</h2>
+          <p className="small text-muted">Se muestra al paciente para pagar el adelanto (50 % del tratamiento, plazo de 1 hora). La recepcionista verifica cada pago en Caja.</p>
+          <span className="form-label d-block">Billeteras que acepta la clínica</span>
+          <div className="mb-2">
+            {BILLETERAS.map((b) => (
+              <div className="form-check form-check-inline" key={b}>
+                <input id={`b-${b}`} type="checkbox" className={`form-check-input ${errores.billeteras ? 'is-invalid' : ''}`} checked={v.billeteras.includes(b)} onChange={(e) => marcar(b, e.target.checked)} />
+                <label htmlFor={`b-${b}`} className="form-check-label">{ETIQUETA_BILLETERA[b]}</label>
+              </div>
+            ))}
+            {errores.billeteras && <div className="text-danger small">{errores.billeteras}</div>}
+            <div className="form-text">En Caja, el tipo de pago se llamará «{nombreBilleteras(v.billeteras) || '—'}».</div>
+          </div>
+          <div className="mb-2">
+            <label htmlFor="p-numero" className="form-label">Celular</label>
+            <input id="p-numero" inputMode="numeric" className={`form-control ${errores.numero ? 'is-invalid' : ''}`} value={v.numero} onChange={(e) => setV({ ...v, numero: e.target.value })} />
+            <div className="invalid-feedback">{errores.numero}</div>
+          </div>
+          <div className="mb-3">
+            <label htmlFor="p-titular" className="form-label">Titular</label>
+            <input id="p-titular" className={`form-control ${errores.titular ? 'is-invalid' : ''}`} value={v.titular} onChange={(e) => setV({ ...v, titular: e.target.value })} />
+            <div className="invalid-feedback">{errores.titular}</div>
+          </div>
+          <button className="btn btn-acento" disabled={guardar.isPending}>Guardar</button>
+        </form>
       </div>
-      <div className="mb-3">
-        <label htmlFor="p-titular" className="form-label">Titular</label>
-        <input id="p-titular" className={`form-control ${errores.titular ? 'is-invalid' : ''}`} value={v.titular} onChange={(e) => setV({ ...v, titular: e.target.value })} />
-        <div className="invalid-feedback">{errores.titular}</div>
+      <div className="col-lg-6">
+        <div className="tarjeta h-100">
+          <h2 className="h6">QR de pago</h2>
+          <p className="small text-muted">El paciente lo escanea desde su app en vez de escribir el número. En Yape: «Mi QR» → Compartir o Descargar.</p>
+          {datos.data?.tieneQr ? (
+            <img src={citasApi.qrUrl(version)} alt="QR de pago de la clínica" className="border rounded bg-white p-1 mb-2 d-block" style={{ width: 180, height: 180, objectFit: 'contain' }} />
+          ) : (
+            <p className="text-muted small">Todavía no hay un QR cargado.</p>
+          )}
+          <label htmlFor="p-qr" className="form-label">{datos.data?.tieneQr ? 'Reemplazar QR' : 'Subir QR'} (PNG, JPG o WEBP, máx. 2 MB)</label>
+          <input id="p-qr" type="file" accept="image/png,image/jpeg,image/webp" className={`form-control ${errores.qr ? 'is-invalid' : ''}`} disabled={subir.isPending} onChange={(e) => { elegirQr(e.target.files?.[0]); e.target.value = ''; }} />
+          <div className="invalid-feedback">{errores.qr}</div>
+          {datos.data?.tieneQr && (
+            <button type="button" className="btn btn-sm btn-outline-danger mt-2" disabled={quitar.isPending} onClick={() => { setOk(null); quitar.mutate(); }}>Quitar QR</button>
+          )}
+        </div>
       </div>
-      {ok && <div className="alert alert-success py-2">Datos guardados.</div>}
-      <button className="btn btn-acento" disabled={guardar.isPending}>Guardar</button>
-    </form>
+      {ok && <div className="col-12"><div className="alert alert-success py-2 mb-0" role="status">{ok}</div></div>}
+    </div>
   );
 }

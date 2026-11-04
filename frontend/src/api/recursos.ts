@@ -1,4 +1,4 @@
-import type { AccionAuditoria, EditarAtencionDTO, HorarioDTO, ReportarPagoDTO, AjusteDTO, DescuentoDTO, EstadoPedido, PedidoDTO, ProveedorDTO, RecepcionDTO, Rol, UsuarioModificarDTO, UsuarioNuevoDTO, ComprobanteDTO, Importe, TipoCobro, AtencionDTO, InsumoDTO, InsumoNuevoDTO, TratamientoDTO, CitaConfirmacion, CitaDTO, ContactoDTO, Disponibilidad, PacienteDTO, RegistroPacienteDTO, ReprogramarDTO, UsuarioSesion, EstadoCita, Canal } from '@clinica/shared';
+import type { Billetera, ConfigPagoDTO, AccionAuditoria, EditarAtencionDTO, HorarioDTO, ReportarPagoDTO, AjusteDTO, DescuentoDTO, EstadoPedido, PedidoDTO, ProveedorDTO, RecepcionDTO, Rol, UsuarioModificarDTO, UsuarioNuevoDTO, ComprobanteDTO, Importe, TipoCobro, AtencionDTO, InsumoDTO, InsumoNuevoDTO, TratamientoDTO, CitaConfirmacion, CitaDTO, ContactoDTO, Disponibilidad, PacienteDTO, RegistroPacienteDTO, ReprogramarDTO, UsuarioSesion, EstadoCita, Canal } from '@clinica/shared';
 import { api } from './cliente';
 
 export interface Paciente {
@@ -37,7 +37,7 @@ export interface Cita {
   pagoReportado: { metodo: 'yape' | 'plin'; numeroOperacion: string; reportadoEn: string } | null;
   pagoRechazoMotivo: string | null;
 }
-export interface DatosPago { numero: string | null; titular: string | null }
+export interface DatosPago { numero: string | null; titular: string | null; billeteras: Billetera[]; tieneQr: boolean }
 export interface ResultadoCancelacion extends Cita {
   adelanto: { monto: string; resultado: 'saldo_a_favor' | 'devuelto' | 'perdido' } | null;
 }
@@ -61,6 +61,8 @@ export const authApi = {
 
 export const pacientesApi = {
   porDni: (dni: string) => api<Paciente>(`/pacientes?dni=${encodeURIComponent(dni)}`),
+  reniec: (dni: string) =>
+    api<{ encontrado: true; nombres: string; apellidos: string } | { encontrado: false; motivo: 'no_configurado' | 'no_encontrado' | 'no_disponible' }>(`/reniec/${dni}`),
   registrar: (datos: PacienteDTO) => api<Paciente>('/pacientes', { method: 'POST', body: datos }),
   miPerfil: () => api<Paciente>('/pacientes/me'),
   actualizarMiContacto: (datos: ContactoDTO) => api<Paciente>('/pacientes/me', { method: 'PATCH', body: datos }),
@@ -75,6 +77,8 @@ export const citasApi = {
   registrar: (datos: CitaDTO) => api<{ cita: Cita; aviso?: string; pago?: DatosPago }>('/citas', { method: 'POST', body: datos }),
   tarifario: () => api<{ id: number; nombre: string; precio: string }[]>('/tarifario'),
   datosPago: () => api<DatosPago>('/datos-pago'),
+  /** URL de la imagen del QR (con ?v= para refrescarla al cambiarla) */
+  qrUrl: (v = '') => `/api/datos-pago/qr${v ? `?v=${v}` : ''}`,
   reportarPago: (id: number, d: ReportarPagoDTO) => api<Cita>(`/citas/${id}/pago`, { method: 'POST', body: d }),
   mias: () => api<Cita[]>('/citas/mias'),
   reprogramar: (id: number, datos: ReprogramarDTO) => api<Cita>(`/citas/${id}/reprogramar`, { method: 'PATCH', body: datos }),
@@ -425,8 +429,10 @@ export const configApi = {
   crearDescuento: (d: DescuentoDTO) => api<Descuento>('/admin/descuentos', { method: 'POST', body: d }),
   modificarDescuento: (id: number, d: DescuentoDTO) => api<Descuento>(`/admin/descuentos/${id}`, { method: 'PATCH', body: d }),
   estadoDescuento: (id: number, activo: boolean) => api<Descuento>(`/admin/descuentos/${id}/${activo ? 'activar' : 'desactivar'}`, { method: 'PATCH' }),
-  datosPago: () => api<{ numero: string; titular: string }>('/admin/pago'),
-  guardarDatosPago: (d: { numero: string; titular: string }) => api<{ numero: string; titular: string }>('/admin/pago', { method: 'PUT', body: d }),
+  datosPago: () => api<DatosPago>('/admin/pago'),
+  guardarDatosPago: (d: ConfigPagoDTO) => api<DatosPago>('/admin/pago', { method: 'PUT', body: d }),
+  subirQr: (qr: string) => api<DatosPago>('/admin/pago/qr', { method: 'PUT', body: { qr } }),
+  quitarQr: () => api<DatosPago>('/admin/pago/qr', { method: 'DELETE' }),
   feriados: (anio: number) => api<Feriado[]>(`/admin/feriados?anio=${anio}`),
   crearFeriado: (d: { fecha: string; nombre: string }) =>
     api<{ feriado: Feriado; citasAfectadas: { id: number; hora: string; paciente: string; telefono: string; odontologo: string }[] }>('/admin/feriados', { method: 'POST', body: d }),

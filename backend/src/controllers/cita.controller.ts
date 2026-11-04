@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma.js';
 import * as CitaService from '../services/cita.service.js';
 import * as DisponibilidadService from '../services/disponibilidad.service.js';
 import * as OdontologoService from '../services/odontologo.service.js';
+import * as PagoService from '../services/pago.service.js';
 import { usuarioActual } from '../middlewares/auth.js';
 
 /** CU-05 (c_consultarDisponibilidad) */
@@ -44,7 +45,7 @@ export async function reportarPago(req: Request, res: Response) {
 }
 
 /** Datos de Yape/Plin de la clínica para pagar el adelanto */
-export const datosPago = async (_req: Request, res: Response) => res.json(await CitaService.datosPago());
+export const datosPago = async (_req: Request, res: Response) => res.json(await PagoService.datosPago());
 
 /** Tarifario activo (nombre y precio) para elegir el tratamiento previsto al reservar */
 export async function tarifarioPublico(_req: Request, res: Response) {
@@ -68,4 +69,12 @@ export async function verConfirmacion(req: Request, res: Response) {
 export async function responderConfirmacion(req: Request, res: Response) {
   const { accion } = confirmacionSchema.parse(req.body);
   res.json(await ConfirmacionService.responder(String(req.params.token), accion));
+}
+
+/** GET /datos-pago/qr — imagen del QR de pago de la clínica */
+export async function qrPago(_req: Request, res: Response) {
+  const q = await PagoService.qr();
+  res.setHeader('Content-Type', q.tipo);
+  res.setHeader('Cache-Control', 'private, max-age=60');
+  res.send(q.datos);
 }

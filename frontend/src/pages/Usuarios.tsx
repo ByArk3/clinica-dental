@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usuarioModificarSchema, usuarioNuevoSchema, type Rol, type UsuarioModificarDTO, type UsuarioNuevoDTO } from '@clinica/shared';
 import { usuariosApi, type Usuario } from '../api/recursos';
 import { ModalConfirmar } from '../components/ModalConfirmar';
+import { CampoPassword } from '../components/CampoPassword';
 import { useAuth } from '../auth';
 import { camposApi, erroresZod, mensajeError } from '../formato';
 
@@ -118,8 +119,14 @@ function FormUsuario({ usuario, esYo, onCerrar }: { usuario: Usuario | null; esY
   const campo = (k: keyof typeof v, etiqueta: string, col: string, tipo = 'text') => (
     <div className={col}>
       <label htmlFor={`u-${k}`} className="form-label">{etiqueta}</label>
-      <input id={`u-${k}`} type={tipo} autoComplete={tipo === 'password' ? 'new-password' : undefined} className={`form-control ${errores[k] ? 'is-invalid' : ''}`} value={v[k]} onChange={(e) => setV({ ...v, [k]: e.target.value })} />
-      <div className="invalid-feedback">{errores[k]}</div>
+      {tipo === 'password' ? (
+        <CampoPassword id={`u-${k}`} value={v[k]} onChange={(x) => setV({ ...v, [k]: x })} autoComplete="new-password" error={errores[k]} />
+      ) : (
+        <>
+          <input id={`u-${k}`} type={tipo} className={`form-control ${errores[k] ? 'is-invalid' : ''}`} value={v[k]} onChange={(e) => setV({ ...v, [k]: e.target.value })} />
+          <div className="invalid-feedback">{errores[k]}</div>
+        </>
+      )}
     </div>
   );
   // El rol de odontólogo no se asigna ni se quita a una cuenta existente; el admin no se quita su rol

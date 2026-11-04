@@ -140,6 +140,6 @@ describe('Reservas de último momento (< 24 h)', () => {
     const vence = new Date(r.body.cita.adelantoVenceEn).getTime();
     expect(vence - antes).toBeGreaterThanOrEqual(59 * 60_000);
     expect(vence - antes).toBeLessThanOrEqual(61 * 60_000);
-    expect(r.body.pago).toEqual({ numero: '987654321', titular: 'Clínica Dental (ficticio)' });
+    expect(r.body.pago).toEqual({ numero: '987654321', titular: 'Clínica Dental (ficticio)', billeteras: ['yape'], tieneQr: false });
   });
 });

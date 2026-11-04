@@ -36,7 +36,7 @@ describe('Quién paga adelanto y cuánto', () => {
     const { cita, body } = await reservaRestringida('Extracción simple');
     expect(cita).toMatchObject({ estado: 'pendiente_adelanto', tratamientoPrevisto: 'Extracción simple', montoAdelanto: '40.00' });
     expect(body.aviso).toBe(MENSAJES.ADELANTO_OBLIGATORIO);
-    expect(body.pago).toEqual({ numero: '987654321', titular: 'Clínica Dental (ficticio)' });
+    expect(body.pago).toEqual({ numero: '987654321', titular: 'Clínica Dental (ficticio)', billeteras: ['yape'], tieneQr: false });
   });
 
   it('sin tratamiento elegido se usa la Consulta (S/ 40 → S/ 20)', async () => {
@@ -89,14 +89,14 @@ describe('Pago reportado por el paciente (Yape/Plin) y verificación en caja', (
 
     const ok = await recep.post(`/api/caja/citas/${cita.id}/aprobar-pago`);
     expect(ok.status).toBe(201);
-    expect(ok.body).toMatchObject({ tipo: 'adelanto', total: '40.00', tipoPago: 'Yape/Plin', operacion: '12345678', estadoCita: 'confirmada' });
+    expect(ok.body).toMatchObject({ tipo: 'adelanto', total: '40.00', tipoPago: 'Yape', operacion: '12345678', estadoCita: 'confirmada' });
     // ya no necesita el enlace de confirmación: el recordatorio solo va a las «Pendiente de confirmación»
     expect((await prisma.cita.findUniqueOrThrow({ where: { id: cita.id } })).estado).toBe('confirmada');
   });
 
   it('caja rechaza el pago (no llegó) → la cita se libera con el motivo', async () => {
     const { pac, cita } = await reservaRestringida();
-    await pac.post(`/api/citas/${cita.id}/pago`).send({ metodo: 'plin', numeroOperacion: 'ABC-999' });
+    await pac.post(`/api/citas/${cita.id}/pago`).send({ metodo: 'yape', numeroOperacion: 'ABC-999' });
     const recep = await sesion('recepcionista');
     const sin = await recep.post(`/api/caja/citas/${cita.id}/rechazar-pago`).send({ motivo: '' });
     expect(sin.status).toBe(422);

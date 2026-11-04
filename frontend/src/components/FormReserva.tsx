@@ -26,6 +26,7 @@ export function FormReserva({ pacienteId, onRegistrada }: Props) {
   const [registrada, setRegistrada] = useState<{ cita: Cita; aviso?: string } | null>(null);
   const [tratamientoId, setTratamientoId] = useState<number | ''>('');
   const tarifario = useQuery({ queryKey: ['tarifario-publico'], queryFn: citasApi.tarifario, staleTime: 5 * 60_000 });
+  const consulta = tarifario.data?.find((t) => t.nombre === 'Consulta');
 
   const odontologos = useQuery({ queryKey: ['odontologos'], queryFn: citasApi.odontologos });
   const disponibilidad = useQuery({
@@ -114,12 +115,13 @@ export function FormReserva({ pacienteId, onRegistrada }: Props) {
       <div className="mb-3">
         <label htmlFor="tratamiento-previsto" className="form-label">Tratamiento previsto</label>
         <select id="tratamiento-previsto" className={`form-select ${errores.tratamientoPrevistoId ? 'is-invalid' : ''}`} value={tratamientoId} onChange={(e) => setTratamientoId(e.target.value ? Number(e.target.value) : '')}>
-          <option value="">No sé / Consulta</option>
+          <option value="">Consulta de evaluación{consulta ? ` — ${solesPE(consulta.precio)}` : ''}</option>
           {tarifario.data?.filter((t) => t.nombre !== 'Consulta').map((t) => (
             <option key={t.id} value={t.id}>{t.nombre} — {solesPE(t.precio)}</option>
           ))}
         </select>
         <div className="invalid-feedback">{errores.tratamientoPrevistoId}</div>
+        <div className="form-text">¿No sabe qué necesita? Elija la consulta: el odontólogo lo evaluará y le indicará el tratamiento.</div>
         <div className="form-text">Si la cita es en menos de 24 horas (o tiene 3 faltas), se pide un adelanto del 50 % de este tratamiento.</div>
       </div>
       <div className="row g-3 mb-3">

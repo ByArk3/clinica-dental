@@ -41,14 +41,14 @@ describe('CU-38 Panel de control', () => {
 describe('CU-39 Reporte de ingresos', () => {
   it('totaliza por tipo de pago y por tratamiento en el rango, con detalle de comprobantes', async () => {
     await cobrada(['Curación con resina', 'Profilaxis'], 'Efectivo', 1);
-    await cobrada(['Profilaxis'], 'Yape/Plin', 2, '70112233');
+    await cobrada(['Profilaxis'], 'Yape', 2, '70112233');
     const admin = await sesion('administrador');
     const hoy = ahoraLima().fecha;
     const r = await admin.get(`/api/reportes/ingresos?desde=${hoy}&hasta=${hoy}`);
     expect(r.body.resumen).toMatchObject({ total: '280.00', comprobantes: 2, ticketPromedio: '140.00' });
     expect(r.body.porTipoPago).toEqual([
       { tipo: 'Efectivo', total: '200.00', cantidad: 1 },
-      { tipo: 'Yape/Plin', total: '80.00', cantidad: 1 },
+      { tipo: 'Yape', total: '80.00', cantidad: 1 },
     ]);
     expect(r.body.porTratamiento).toEqual([
       { tratamiento: 'Profilaxis', cantidad: 2, importe: '160.00' },

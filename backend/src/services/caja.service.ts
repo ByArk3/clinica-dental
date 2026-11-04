@@ -10,6 +10,7 @@ import { enviarCorreo } from '../lib/correo.js';
 import { horasParaCita } from './cita.service.js';
 import { aplicarCampanas, campanasVigentes, edadEn } from './precio.service.js';
 import { moverSaldo } from './saldo.service.js';
+import { tipoPagoBilletera } from './pago.service.js';
 import { ahoraLima } from '../lib/fechas.js';
 import { registrar as registrarAuditoria } from './auditoria.service.js';
 import { MINUTOS_PAGO_ADELANTO } from '@clinica/shared';
@@ -220,7 +221,7 @@ export async function emitirComprobante(citaId: number, dto: ComprobanteDTO, usu
 export async function aprobarPago(citaId: number, usuario: UsuarioSesion) {
   const cita = await prisma.cita.findUnique({ where: { id: citaId } });
   if (!cita || cita.estado !== 'pago_en_verificacion') throw new ErrorNegocio(409, 'PAGO_NO_VERIFICABLE', MENSAJES.PAGO_NO_VERIFICABLE);
-  const tipo = await prisma.tipoPago.findFirst({ where: { nombre: { contains: 'Yape', mode: 'insensitive' } } });
+  const tipo = await tipoPagoBilletera();
   if (!tipo) throw new ErrorNegocio(422, 'TIPO_PAGO_NO_VALIDO', MENSAJES.TIPO_PAGO_NO_VALIDO);
   return emitirComprobante(citaId, { tipoPagoId: tipo.id }, usuario, { operacion: cita.pagoOperacion ?? undefined });
 }

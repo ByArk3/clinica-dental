@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { contactoSchema, dniSchema, pacienteSchema } from '@clinica/shared';
 import { usuarioActual } from '../middlewares/auth.js';
+import * as ReniecService from '../services/reniec.service.js';
 import * as PacienteService from '../services/paciente.service.js';
 
 /** CU-03 Registrar paciente (recepcionista) — flujo alterno 4.1 de CU-06 */
@@ -29,4 +30,9 @@ export async function miPerfil(req: Request, res: Response) {
 }
 export async function actualizarMiContacto(req: Request, res: Response) {
   res.json(await PacienteService.actualizarContacto(usuarioActual(req).pacienteId!, contactoSchema.parse(req.body)));
+}
+
+/** GET /reniec/:dni — nombres y apellidos para autocompletar el registro presencial (si hay proveedor configurado) */
+export async function reniec(req: Request, res: Response) {
+  res.json(await ReniecService.consultarDni(dniSchema.parse(req.params.dni)));
 }

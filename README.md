@@ -172,6 +172,23 @@ Dr. Paredes L–V 08:00–14:00 y Dra. Díaz L–S 14:00–20:00. Sin horario pr
 | **Editar una atención** | Solo el odontólogo que la registró, con **motivo** obligatorio. Se guarda la versión anterior: el historial muestra «Editado el … por … – motivo: …» y lo que decía antes. Si cambian los tratamientos, el stock se corrige con la diferencia y los que se mantienen conservan su precio congelado. Si ya se cobró, solo se corrigen diagnóstico y observaciones |
 | **Anular un comprobante** | No se borra: conserva su número (sin huecos), queda «Anulado», no cuenta en ingresos y su PDF muestra el sello. Recepcionista: solo los del día; Administrador: cualquiera; siempre con motivo. **Servicio**: la cita vuelve a «Atendida», el saldo a favor usado vuelve al paciente y el generado se retira (si ya se usó en otro cobro, primero se anula ese). **Adelanto**: si la cita aún no ocurre, vuelve a «Pendiente de adelanto» con 1 hora nueva |
 
+| **Mostrar contraseña** | Botón con un ojo en todos los campos de contraseña (inicio de sesión, recuperación, registro y usuarios) |
+| **Sesión** | «Cerrar sesión» vuelve al login de inmediato; si la sesión vence (15 min sin uso), cualquier pantalla lleva al login |
+
+**Pagos del adelanto (Configuración → Pagos)**: el Administrador marca las billeteras que acepta (hoy solo **Yape**; Plin se
+activa con una casilla) y en Caja el tipo de pago toma ese nombre («Yape», «Plin» o «Yape/Plin»). También sube el **QR** de la
+clínica (PNG, JPG o WEBP, máx. 2 MB; en Yape: «Mi QR» → Compartir), que el paciente ve junto al número y al monto. El QR personal
+de Yape no vence; se reemplaza o quita desde la misma pantalla. La semilla usa un número **ficticio**: el real se pone ahí.
+
+**Correo**: con `SMTP_*` en `.env` (p. ej. un Gmail de la clínica con *contraseña de aplicación*) se envían recuperación de
+contraseña, recordatorios, comprobantes y avisos. Sin SMTP los correos no salen y sus **enlaces se muestran en el log de la API**
+(`docker compose logs api`), para poder probar.
+
+**Autocompletar con el DNI (RENIEC)**: en Nueva cita, si el DNI no está registrado, se completan nombres y apellidos con un
+proveedor de consultas RENIEC (RENIEC no da acceso directo a clínicas privadas). Requiere `RENIEC_TOKEN` en `.env` (por defecto
+[Decolecta](https://decolecta.com); `RENIEC_URL` permite otro proveedor). Sin token, sin consultas o si no responde en 5 s, la
+recepcionista escribe los datos. Para el informe: el tratamiento de datos personales se rige por la **Ley 29733**.
+
 > Supuesto para el informe: los comprobantes son **internos** (P2). En una boleta electrónica real de SUNAT, la anulación se hace con una **nota de crédito**.
 
 ## Decisiones y supuestos

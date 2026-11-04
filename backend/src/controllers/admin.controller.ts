@@ -5,6 +5,7 @@ import {
   ACCIONES_AUDITORIA,
   ajusteSchema,
   configPagoSchema,
+  qrPagoSchema,
   feriadoSchema,
   horarioSchema,
   anularPedidoSchema,
@@ -29,6 +30,7 @@ import * as ReporteService from '../services/reporte.service.js';
 import * as AgendaService from '../services/agenda.service.js';
 import * as AuthService from '../services/auth.service.js';
 import * as AuditoriaService from '../services/auditoria.service.js';
+import * as PagoService from '../services/pago.service.js';
 import { pdfPedido } from '../lib/pdf-pedido.js';
 import { enviarCorreo } from '../lib/correo.js';
 import { ErrorNegocio } from '../lib/errores.js';
@@ -128,11 +130,13 @@ export const crearDescuento = async (req: Request, res: Response) => res.status(
 export const modificarDescuento = async (req: Request, res: Response) => res.json(await DescuentoService.modificar(idParam(req), descuentoSchema.parse(req.body)));
 export const desactivarDescuento = async (req: Request, res: Response) => res.json(await DescuentoService.cambiarEstado(idParam(req), false));
 export const activarDescuento = async (req: Request, res: Response) => res.json(await DescuentoService.cambiarEstado(idParam(req), true));
-export const verDatosPago = async (_req: Request, res: Response) => res.json(await DescuentoService.datosPago());
+export const verDatosPago = async (_req: Request, res: Response) => res.json(await PagoService.datosPago());
 export async function guardarDatosPago(req: Request, res: Response) {
-  const d = configPagoSchema.parse(req.body);
-  res.json(await DescuentoService.guardarDatosPago(d.numero, d.titular));
+  res.json(await PagoService.guardarDatosPago(configPagoSchema.parse(req.body)));
 }
+/** QR de Yape/Plin de la clínica (imagen de hasta 2 MB) */
+export const guardarQrPago = async (req: Request, res: Response) => res.json(await PagoService.guardarQr(qrPagoSchema.parse(req.body).qr));
+export const quitarQrPago = async (_req: Request, res: Response) => res.json(await PagoService.quitarQr());
 
 export async function listarFeriados(req: Request, res: Response) {
   const anio = req.query.anio ? z.coerce.number().int().min(2000).max(2100).parse(req.query.anio) : undefined;

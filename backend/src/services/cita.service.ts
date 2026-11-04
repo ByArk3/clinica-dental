@@ -16,6 +16,7 @@ import { ahoraLima, dateAFecha, dateAHora, fechaADate, fechaPE, horaADate, insta
 import { bloquesDelHorario, feriadoEn, horasOcupadas } from './disponibilidad.service.js';
 import { calcularAdelanto, edadEn } from './precio.service.js';
 import { moverSaldo } from './saldo.service.js';
+import { billeterasAceptadas, datosPago } from './pago.service.js';
 
 const HORA_MS = 3_600_000;
 const horarioTomado = () => new ErrorNegocio(409, 'HORARIO_NO_DISPONIBLE', MENSAJES.HORARIO_NO_DISPONIBLE);
@@ -100,12 +101,6 @@ const conCarrera = async <T>(fn: () => Promise<T>) => {
   }
 };
 
-/** Datos de Yape/Plin de la clínica para pagar el adelanto. */
-export async function datosPago() {
-  const filas = await prisma.configuracion.findMany({ where: { clave: { in: ['pago_numero', 'pago_titular'] } } });
-  const v = Object.fromEntries(filas.map((f) => [f.clave, f.valor]));
-  return { numero: v.pago_numero ?? null, titular: v.pago_titular ?? null };
-}
 
 /**
  * CU-06 Registrar cita (c_grabarCita).
@@ -250,6 +245,7 @@ export async function reportarPago(citaId: number, usuario: UsuarioSesion, dto: 
     const c = await tx.cita.findUnique({ where: { id: citaId } });
     if (!c || c.pacienteId !== usuario.pacienteId) throw citaNoEncontrada();
     if (c.estado !== 'pendiente_adelanto') throw new ErrorNegocio(409, 'PAGO_NO_REPORTABLE', MENSAJES.PAGO_NO_REPORTABLE);
+    if (!(await billeterasAceptadas(tx)).includes(dto.metodo)) throw new ErrorNegocio(422, 'BILLETERA_NO_ACEPTADA', MENSAJES.BILLETERA_NO_ACEPTADA, { metodo: MENSAJES.BILLETERA_NO_ACEPTADA });
     if (c.adelantoVenceEn && c.adelantoVenceEn < new Date()) throw new ErrorNegocio(422, 'ADELANTO_VENCIDO', MENSAJES.ADELANTO_VENCIDO);
     return tx.cita.update({
       where: { id: citaId },
