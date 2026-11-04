@@ -17,10 +17,11 @@ const CONTACTO = {
   apoderado: true,
   inasistencias: true,
   restringido: true,
+  saldoFavor: true,
 } as const;
 
-type Contacto = { fechaNacimiento: Date } & Record<string, unknown>;
-const formatear = <T extends Contacto>(p: T) => ({ ...p, fechaNacimiento: dateAFecha(p.fechaNacimiento) });
+type Contacto = { fechaNacimiento: Date; saldoFavor: { toFixed: (n: number) => string } } & Record<string, unknown>;
+const formatear = <T extends Contacto>(p: T) => ({ ...p, fechaNacimiento: dateAFecha(p.fechaNacimiento), saldoFavor: p.saldoFavor.toFixed(2) });
 
 async function crearConFicha(tx: Tx, dto: PacienteDTO, usuarioId?: number) {
   // RN-05: todo paciente tiene ficha antes de su primera atención → se crea junto con el paciente

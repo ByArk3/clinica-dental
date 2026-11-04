@@ -1,11 +1,12 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ESTADOS_MODIFICABLES } from '@clinica/shared';
 import { citasApi, type CitaDelDia } from '../api/recursos';
 import { ChipEstado } from '../components/ChipEstado';
 import { ModalConfirmar } from '../components/ModalConfirmar';
 import { ModalReprogramar } from '../components/ModalReprogramar';
-import { fechaPE, hoyLima, horasPara, mensajeError } from '../formato';
+import { fechaPE, hoyLima, horasPara, mensajeError, solesPE } from '../formato';
 
 /** CU-09 (i_citasDelDia): agenda del día, inasistencias y acciones de CU-07 para la recepcionista. */
 export default function CitasDelDia() {
@@ -15,6 +16,7 @@ export default function CitasDelDia() {
   const [cancelar, setCancelar] = useState<CitaDelDia | null>(null);
   const [reprogramar, setReprogramar] = useState<CitaDelDia | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [porClinica, setPorClinica] = useState(false);
 
   const citas = useQuery({ queryKey: ['citas-del-dia', fecha], queryFn: () => citasApi.delDia(fecha), refetchInterval: 60_000 });
   const registrar = useMutation({
@@ -26,9 +28,14 @@ export default function CitasDelDia() {
     },
   });
   const cancelacion = useMutation({
-    mutationFn: (id: number) => citasApi.cancelar(id),
-    onSuccess: () => {
+    mutationFn: (id: number) => citasApi.cancelar(id, porClinica),
+    onSuccess: (r) => {
       setCancelar(null);
+      setPorClinica(false);
+      if (r.adelanto) {
+        const que = { saldo_a_favor: 'quedó como saldo a favor del paciente', devuelto: 'debe devolverse al paciente (quedó registrado)', perdido: 'se pierde por cancelar con menos de 24 h' }[r.adelanto.resultado];
+        setAviso(`Cita cancelada. El adelanto de ${solesPE(r.adelanto.monto)} ${que}.`);
+      }
       qc.invalidateQueries({ queryKey: ['citas-del-dia'] });
     },
   });
@@ -76,6 +83,9 @@ export default function CitasDelDia() {
                     <button className="btn btn-sm btn-outline-secondary" onClick={() => setCancelar(c)}>Cancelar</button>
                   </>
                 )}
+                {c.estado === 'pendiente_adelanto' && c.montoAdelanto && (
+                  <Link className="btn btn-sm btn-outline-warning" to="/caja">Cobrar adelanto {solesPE(c.montoAdelanto)}</Link>
+                )}
                 {c.whatsapp && (
                   <a className="btn btn-sm btn-outline-success" href={c.whatsapp} target="_blank" rel="noreferrer">
                     Recordar por WhatsApp
@@ -120,6 +130,16 @@ export default function CitasDelDia() {
         onCerrar={() => { setCancelar(null); cancelacion.reset(); }}
       >
         {cancelar && <p className="mb-0">¿Cancelar la cita de {cancelar.paciente.nombres} a las {cancelar.hora}?</p>}
+        {cancelar?.adelantoPagado && (
+          <div className="mt-3">
+            <p className="small mb-2">Pagó un adelanto de <strong>{solesPE(cancelar.adelantoPagado)}</strong>.</p>
+            <div className="form-check">
+              <input id="por-clinica" type="checkbox" className="form-check-input" checked={porClinica} onChange={(e) => setPorClinica(e.target.checked)} />
+              <label htmlFor="por-clinica" className="form-check-label">La cancela la clínica (se devuelve el adelanto)</label>
+            </div>
+            {!porClinica && <p className="small text-muted mt-1 mb-0">Si la cancela el paciente: con 24 h o más queda como saldo a favor; con menos, lo pierde.</p>}
+          </div>
+        )}
       </ModalConfirmar>
 
       <ModalReprogramar cita={reprogramar} onCerrar={() => setReprogramar(null)} />

@@ -18,7 +18,7 @@ export async function panel() {
   const inicioMes = `${hoy.slice(0, 8)}01`;
   const fechaHoy = new Date(`${hoy}T00:00:00Z`);
 
-  const [citasHoy, ingresosHoy, ingresosMes, alertas, pedidosPendientes, porConfirmar, inasistenciasMes, restringidos, serie] = await Promise.all([
+  const [citasHoy, ingresosHoy, ingresosMes, alertas, pedidosPendientes, porConfirmar, inasistenciasMes, restringidos, serie, pagosPorVerificar, devHoy, devMes] = await Promise.all([
     prisma.cita.groupBy({ by: ['estado'], where: { fecha: fechaHoy }, _count: true }),
     prisma.comprobante.aggregate({ where: { createdAt: rango(hoy, hoy) }, _sum: { total: true }, _count: true }),
     prisma.comprobante.aggregate({ where: { createdAt: rango(inicioMes, hoy) }, _sum: { total: true }, _count: true }),
@@ -32,6 +32,9 @@ export async function panel() {
         FROM comprobantes
        WHERE created_at >= ${rango(sumarDias(hoy, -6), hoy).gte}
        GROUP BY 1 ORDER BY 1`,
+    prisma.cita.count({ where: { estado: 'pago_en_verificacion' } }),
+    prisma.devolucion.aggregate({ where: { createdAt: rango(hoy, hoy) }, _sum: { monto: true } }),
+    prisma.devolucion.aggregate({ where: { createdAt: rango(inicioMes, hoy) }, _sum: { monto: true } }),
   ]);
 
   const porDia = new Map(serie.map((s) => [s.dia.toISOString().slice(0, 10), D2(s.total)]));
@@ -42,9 +45,10 @@ export async function panel() {
       porEstado: Object.fromEntries(citasHoy.map((c) => [c.estado, c._count])),
     },
     ingresos: {
-      hoy: D2(ingresosHoy._sum.total),
+      // neto: cobros − devoluciones de adelantos
+      hoy: D2(new Prisma.Decimal(ingresosHoy._sum.total ?? 0).minus(devHoy._sum.monto ?? 0)),
       comprobantesHoy: ingresosHoy._count,
-      mes: D2(ingresosMes._sum.total),
+      mes: D2(new Prisma.Decimal(ingresosMes._sum.total ?? 0).minus(devMes._sum.monto ?? 0)),
       comprobantesMes: ingresosMes._count,
       ultimos7Dias: Array.from({ length: 7 }, (_, i) => {
         const f = sumarDias(hoy, i - 6);
@@ -56,13 +60,14 @@ export async function panel() {
       alertas: alertas.slice(0, 8).map((a) => ({ id: a.id, insumo: a.insumo.nombre, unidad: a.insumo.unidad, stockActual: D2(a.insumo.stockActual), stockMinimo: D2(a.insumo.stockMinimo) })),
       pedidosPendientes,
     },
-    agenda: { porConfirmar48h: porConfirmar, inasistenciasMes, pacientesRestringidos: restringidos },
+    agenda: { porConfirmar48h: porConfirmar, inasistenciasMes, pacientesRestringidos: restringidos, pagosPorVerificar },
   };
 }
 
 /** CU-39 Reporte de ingresos del rango (por tipo de pago, por día, por tratamiento y detalle de comprobantes). */
 export async function ingresos(desde: string, hasta: string) {
   const r = rango(desde, hasta);
+  const devoluciones = await prisma.devolucion.findMany({ where: { createdAt: r }, include: { paciente: { select: { nombres: true, apellidos: true } } }, orderBy: { id: 'asc' } });
   const comprobantes = await prisma.comprobante.findMany({
     where: { createdAt: r },
     orderBy: { id: 'asc' },
@@ -95,7 +100,11 @@ export async function ingresos(desde: string, hasta: string) {
     desde,
     hasta,
     resumen: {
-      total: D2(total),
+      // total neto = cobrado − devoluciones de adelantos (citas canceladas por la clínica)
+      total: D2(total.minus(devoluciones.reduce((s, d) => s.plus(d.monto), cero()))),
+      cobrado: D2(total),
+      devoluciones: D2(devoluciones.reduce((s, d) => s.plus(d.monto), cero())),
+      saldoAplicado: D2(comprobantes.reduce((s, c) => s.plus(c.saldoAplicado), cero())),
       comprobantes: comprobantes.length,
       ticketPromedio: comprobantes.length ? D2(total.dividedBy(comprobantes.length)) : '0.00',
       descuentos: D2(descuentos),
@@ -105,6 +114,7 @@ export async function ingresos(desde: string, hasta: string) {
     porDia: [...porDia].map(([fecha, v]) => ({ fecha, total: D2(v) })).sort((a, b) => a.fecha.localeCompare(b.fecha)),
     // Importe bruto según tarifario (antes de descuentos y adelantos)
     porTratamiento: [...porTratamiento].map(([tratamiento, v]) => ({ tratamiento, cantidad: v.cantidad, importe: D2(v.importe) })).sort((a, b) => Number(b.importe) - Number(a.importe)),
+    devolucionesDetalle: devoluciones.map((d) => ({ fecha: d.createdAt.toISOString(), paciente: `${d.paciente.apellidos}, ${d.paciente.nombres}`, monto: D2(d.monto), motivo: d.motivo })),
     detalle: comprobantes.map((c) => ({
       numero: c.numero,
       fecha: c.createdAt.toISOString(),

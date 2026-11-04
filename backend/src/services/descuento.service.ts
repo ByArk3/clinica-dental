@@ -1,45 +1,87 @@
-// Descuentos (P3): los gestiona el Administrador; la recepcionista elige uno activo por cobro.
+// Campañas de descuento (fechas + tratamientos + edad máxima) y datos de pago Yape/Plin. Administrador.
 import { Prisma } from '@prisma/client';
 import { MENSAJES, type DescuentoDTO } from '@clinica/shared';
 import { prisma } from '../lib/prisma.js';
 import { ErrorNegocio } from '../lib/errores.js';
+import { dateAFecha, fechaADate } from '../lib/fechas.js';
 
-const formatear = (d: Prisma.DescuentoGetPayload<object>) => ({ id: d.id, nombre: d.nombre, porcentaje: d.porcentaje.toFixed(2), activo: d.activo });
+const INCLUIR = { tratamientos: { include: { tratamiento: { select: { id: true, nombre: true } } } } } as const;
+const formatear = (d: Prisma.DescuentoGetPayload<{ include: typeof INCLUIR }>) => ({
+  id: d.id,
+  nombre: d.nombre,
+  tipo: d.tipo,
+  porcentaje: d.porcentaje?.toFixed(2) ?? null,
+  fechaInicio: dateAFecha(d.fechaInicio),
+  fechaFin: dateAFecha(d.fechaFin),
+  edadMaxima: d.edadMaxima,
+  activo: d.activo,
+  tratamientos: d.tratamientos.map((t) => ({ id: t.tratamiento.id, nombre: t.tratamiento.nombre })),
+});
 const duplicado = (e: unknown) =>
   e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002'
-    ? new ErrorNegocio(409, 'DESCUENTO_DUPLICADO', 'Ya existe un descuento con ese nombre', { nombre: 'Ya existe un descuento con ese nombre' })
+    ? new ErrorNegocio(409, 'DESCUENTO_DUPLICADO', 'Ya existe una campaña con ese nombre', { nombre: 'Ya existe una campaña con ese nombre' })
     : e;
 const existe = async (id: number) => {
   if (!(await prisma.descuento.findUnique({ where: { id } }))) throw new ErrorNegocio(404, 'DESCUENTO_NO_VALIDO', MENSAJES.DESCUENTO_NO_VALIDO);
 };
+const datos = (d: DescuentoDTO) => ({
+  nombre: d.nombre,
+  tipo: d.tipo,
+  porcentaje: d.tipo === 'porcentaje' ? d.porcentaje : null,
+  fechaInicio: fechaADate(d.fechaInicio),
+  fechaFin: fechaADate(d.fechaFin),
+  edadMaxima: d.edadMaxima ?? null,
+});
+async function validarTratamientos(ids: number[]) {
+  if ((await prisma.tratamiento.count({ where: { id: { in: ids } } })) !== new Set(ids).size) {
+    throw new ErrorNegocio(422, 'TRATAMIENTO_NO_ENCONTRADO', MENSAJES.TRATAMIENTO_NO_ENCONTRADO, { tratamientos: MENSAJES.TRATAMIENTO_NO_ENCONTRADO });
+  }
+}
 
-export const listar = async () => (await prisma.descuento.findMany({ orderBy: { nombre: 'asc' } })).map(formatear);
+export const listar = async () =>
+  (await prisma.descuento.findMany({ orderBy: [{ fechaInicio: 'asc' }, { nombre: 'asc' }], include: INCLUIR })).map(formatear);
+
 export async function crear(d: DescuentoDTO) {
+  await validarTratamientos(d.tratamientos);
   try {
-    return formatear(await prisma.descuento.create({ data: d }));
+    return formatear(
+      await prisma.descuento.create({ data: { ...datos(d), tratamientos: { create: [...new Set(d.tratamientos)].map((tratamientoId) => ({ tratamientoId })) } }, include: INCLUIR }),
+    );
   } catch (e) {
     throw duplicado(e);
   }
 }
 export async function modificar(id: number, d: DescuentoDTO) {
   await existe(id);
+  await validarTratamientos(d.tratamientos);
   try {
-    return formatear(await prisma.descuento.update({ where: { id }, data: d }));
+    const r = await prisma.$transaction(async (tx) => {
+      await tx.descuentoTratamiento.deleteMany({ where: { descuentoId: id } });
+      return tx.descuento.update({
+        where: { id },
+        data: { ...datos(d), tratamientos: { create: [...new Set(d.tratamientos)].map((tratamientoId) => ({ tratamientoId })) } },
+        include: INCLUIR,
+      });
+    });
+    return formatear(r);
   } catch (e) {
     throw duplicado(e);
   }
 }
 export async function cambiarEstado(id: number, activo: boolean) {
   await existe(id);
-  return formatear(await prisma.descuento.update({ where: { id }, data: { activo } }));
+  return formatear(await prisma.descuento.update({ where: { id }, data: { activo }, include: INCLUIR }));
 }
 
-/** P6: monto del adelanto configurable */
-export async function montoAdelanto() {
-  return (await prisma.configuracion.findUnique({ where: { clave: 'monto_adelanto' } }))?.valor ?? '30.00';
+/** Datos de Yape/Plin que ve el paciente para pagar el adelanto */
+export async function datosPago() {
+  const filas = await prisma.configuracion.findMany({ where: { clave: { in: ['pago_numero', 'pago_titular'] } } });
+  const v = Object.fromEntries(filas.map((f) => [f.clave, f.valor]));
+  return { numero: v.pago_numero ?? '', titular: v.pago_titular ?? '' };
 }
-export async function cambiarMontoAdelanto(monto: number) {
-  const valor = monto.toFixed(2);
-  await prisma.configuracion.upsert({ where: { clave: 'monto_adelanto' }, update: { valor }, create: { clave: 'monto_adelanto', valor } });
-  return valor;
+export async function guardarDatosPago(numero: string, titular: string) {
+  for (const [clave, valor] of [['pago_numero', numero], ['pago_titular', titular]]) {
+    await prisma.configuracion.upsert({ where: { clave }, update: { valor }, create: { clave, valor } });
+  }
+  return datosPago();
 }

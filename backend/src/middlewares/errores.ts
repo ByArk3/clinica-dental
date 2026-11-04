@@ -11,6 +11,12 @@ export function manejadorErrores(err: unknown, _req: Request, res: Response, _ne
   if (err instanceof ErrorNegocio) {
     return res.status(err.status).json({ codigo: err.codigo, mensaje: err.message, campos: err.campos });
   }
+  if ((err as { type?: string })?.type === 'entity.too.large') {
+    return res.status(413).json({ codigo: 'ARCHIVO_GRANDE', mensaje: 'El archivo enviado es demasiado grande (máx. 2 MB)' });
+  }
+  if ((err as { type?: string })?.type === 'entity.parse.failed') {
+    return res.status(400).json({ codigo: 'JSON_INVALIDO', mensaje: 'La solicitud no tiene un formato válido' });
+  }
   if (err instanceof ZodError) {
     const campos: Record<string, string> = {};
     for (const i of err.issues) campos[i.path.join('.')] ??= i.message;

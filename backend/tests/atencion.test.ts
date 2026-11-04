@@ -112,11 +112,11 @@ describe('CU-11 Registrar tratamiento', () => {
 
   it('RN-08: tratamiento desactivado → 422 y la transacción no deja rastro (ni stock ni estado)', async () => {
     const c = await crearCita({ horas: -1, estado: 'confirmada' });
-    await prisma.tratamiento.update({ where: { nombre: 'Extracción' }, data: { activo: false } });
+    await prisma.tratamiento.update({ where: { nombre: 'Extracción simple' }, data: { activo: false } });
     const od = await sesion('odontologo');
     const r = await od.post(`/api/citas/${c.id}/atencion`).send({
       diagnostico: 'Resto radicular',
-      tratamientos: [{ tratamientoId: await idTrat('Consulta') }, { tratamientoId: await idTrat('Extracción') }],
+      tratamientos: [{ tratamientoId: await idTrat('Consulta') }, { tratamientoId: await idTrat('Extracción simple') }],
     });
     expect(r.status).toBe(422);
     expect(r.body.mensaje).toBe(MENSAJES.TRATAMIENTO_NO_TARIFARIO);

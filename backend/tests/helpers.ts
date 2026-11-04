@@ -21,7 +21,7 @@ export async function reiniciarBD() {
   await prisma.$executeRawUnsafe(
     `TRUNCATE ${tablas.map((t) => `"${t.tablename}"`).join(', ')} RESTART IDENTITY CASCADE`,
   );
-  await sembrar(prisma, { silencioso: true });
+  await sembrar(prisma, { silencioso: true, horariosEjemplo: false, campanas: false, feriados: false });
 }
 
 /** Agente con la sesión iniciada para el rol indicado. */
@@ -54,10 +54,13 @@ export async function idPaciente(dni: string) {
  */
 export async function crearCita(opciones: {
   horas: number;
-  estado?: 'pendiente_confirmacion' | 'pendiente_adelanto' | 'confirmada' | 'atendida' | 'cancelada' | 'liberada';
+  estado?: 'pendiente_confirmacion' | 'pendiente_adelanto' | 'confirmada' | 'atendida' | 'cancelada' | 'liberada' | 'pago_en_verificacion';
   dni?: string;
   odontologoEmail?: string;
   token?: string;
+  montoAdelanto?: number;
+  /** minutos hasta que vence el plazo del adelanto (negativo = ya venció) */
+  venceEnMin?: number;
 }) {
   const instante = new Date(Date.now() + opciones.horas * 3_600_000);
   const { fecha, hora } = ahoraLima(instante);
@@ -74,7 +77,27 @@ export async function crearCita(opciones: {
       canal: 'presencial',
       estado: opciones.estado ?? 'pendiente_confirmacion',
       tokenConfirmacion: opciones.token ?? `tok${Math.random().toString(16).slice(2)}${Date.now()}`,
+      montoAdelanto: opciones.montoAdelanto ?? null,
+      adelantoVenceEn: opciones.venceEnMin !== undefined ? new Date(Date.now() + opciones.venceEnMin * 60_000) : null,
       creadoPorId: creador.id,
+    },
+  });
+}
+
+export const idTratamiento = async (nombre: string) => (await prisma.tratamiento.findUniqueOrThrow({ where: { nombre } })).id;
+export const idTipoPago = async (nombre: string) => (await prisma.tipoPago.findUniqueOrThrow({ where: { nombre } })).id;
+
+/** Crea una campaña de descuento directamente en la BD. */
+export async function crearCampana(c: { nombre: string; tratamientos: string[]; desde: string; hasta: string; porcentaje?: number; tipo?: 'porcentaje' | 'tres_por_dos'; edadMaxima?: number }) {
+  return prisma.descuento.create({
+    data: {
+      nombre: c.nombre,
+      tipo: c.tipo ?? 'porcentaje',
+      porcentaje: c.tipo === 'tres_por_dos' ? null : (c.porcentaje ?? 10),
+      fechaInicio: new Date(`${c.desde}T00:00:00Z`),
+      fechaFin: new Date(`${c.hasta}T00:00:00Z`),
+      edadMaxima: c.edadMaxima ?? null,
+      tratamientos: { create: await Promise.all(c.tratamientos.map(async (n) => ({ tratamientoId: await idTratamiento(n) }))) },
     },
   });
 }

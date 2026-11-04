@@ -1,6 +1,5 @@
 import type { Request, Response } from 'express';
-import { z } from 'zod';
-import { comprobanteSchema, MENSAJES } from '@clinica/shared';
+import { comprobanteSchema, MENSAJES, rechazarPagoSchema } from '@clinica/shared';
 import * as CajaService from '../services/caja.service.js';
 import { prisma } from '../lib/prisma.js';
 import { pdfComprobante } from '../lib/pdf.js';
@@ -11,12 +10,23 @@ import { idParam } from './comun.js';
 
 export const pendientes = async (_req: Request, res: Response) => res.json(await CajaService.pendientes());
 export const tiposPago = async (_req: Request, res: Response) => res.json(await CajaService.tiposPago());
-export const descuentos = async (_req: Request, res: Response) => res.json(await CajaService.descuentosActivos());
+/** Campañas vigentes hoy (se aplican solas en el importe) */
+export const campanas = async (_req: Request, res: Response) => res.json(await CajaService.campanasDeHoy());
 
-/** GET /caja/citas/:id/importe?descuentoId= (c_calcularImporte) */
+/** GET /caja/citas/:id/importe (c_calcularImporte) */
 export async function importe(req: Request, res: Response) {
-  const descuentoId = req.query.descuentoId ? z.coerce.number().int().positive().parse(req.query.descuentoId) : undefined;
-  res.json(await CajaService.calcularImporte(prisma, idParam(req), descuentoId));
+  res.json(await CajaService.calcularImporte(prisma, idParam(req)));
+}
+
+/** Pago de adelanto reportado por el paciente (Yape/Plin) */
+export const aprobarPago = async (req: Request, res: Response) => res.status(201).json(await CajaService.aprobarPago(idParam(req), usuarioActual(req)));
+export const rechazarPago = async (req: Request, res: Response) =>
+  res.json(await CajaService.rechazarPago(idParam(req), rechazarPagoSchema.parse(req.body).motivo));
+export async function captura(req: Request, res: Response) {
+  const c = await CajaService.capturaPago(idParam(req));
+  res.setHeader('Content-Type', c.tipo);
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(c.datos);
 }
 
 /** POST /caja/citas/:id/comprobante (c_emitirComprobante) */

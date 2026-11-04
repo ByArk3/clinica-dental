@@ -143,22 +143,36 @@ describe('Usuarios CU-34..37', () => {
   });
 });
 
-describe('Descuentos (P3) y adelanto (P6)', () => {
-  it('el Administrador crea, modifica y desactiva descuentos; la caja solo ve los activos', async () => {
+describe('Campañas de descuento y datos de pago (Administrador)', () => {
+  it('crea, modifica y desactiva campañas; la caja ve solo las vigentes hoy', async () => {
     const admin = await sesion('administrador');
-    const r = await admin.post('/api/admin/descuentos').send({ nombre: 'Estudiante UPAO', porcentaje: 15 });
-    expect(r.body).toMatchObject({ nombre: 'Estudiante UPAO', porcentaje: '15.00', activo: true });
-    expect((await admin.post('/api/admin/descuentos').send({ nombre: 'Mal', porcentaje: 150 })).body.campos.porcentaje).toBe('Máximo 100 %');
-    expect((await admin.patch(`/api/admin/descuentos/${r.body.id}`).send({ nombre: 'Estudiante', porcentaje: 12.5 })).body.porcentaje).toBe('12.50');
-    await admin.patch(`/api/admin/descuentos/${r.body.id}/desactivar`);
-    const caja = await (await sesion('recepcionista')).get('/api/descuentos');
-    expect(caja.body.map((d: { nombre: string }) => d.nombre)).toEqual(['Paciente frecuente']);
+    const hoy = ahoraLima().fecha;
+    const consulta = (await prisma.tratamiento.findUniqueOrThrow({ where: { nombre: 'Consulta' } })).id;
+    const r = await admin.post('/api/admin/descuentos').send({ nombre: 'Consulta a mitad', porcentaje: 50, fechaInicio: hoy, fechaFin: hoy, tratamientos: [consulta] });
+    expect(r.status).toBe(201);
+    expect(r.body).toMatchObject({ nombre: 'Consulta a mitad', tipo: 'porcentaje', porcentaje: '50.00', fechaInicio: hoy, tratamientos: [{ nombre: 'Consulta' }] });
+    const futura = await admin.post('/api/admin/descuentos').send({ nombre: 'Futura', porcentaje: 10, fechaInicio: '2099-01-01', fechaFin: '2099-01-31', tratamientos: [consulta] });
+    expect(futura.status).toBe(201);
+    const caja = await (await sesion('recepcionista')).get('/api/caja/campanas');
+    expect(caja.body.map((c: { nombre: string }) => c.nombre)).toEqual(['Consulta a mitad']);
+    expect((await admin.patch(`/api/admin/descuentos/${r.body.id}`).send({ nombre: 'Consulta 40 %', porcentaje: 40, fechaInicio: hoy, fechaFin: hoy, tratamientos: [consulta] })).body.porcentaje).toBe('40.00');
+    expect((await admin.patch(`/api/admin/descuentos/${r.body.id}/desactivar`)).body.activo).toBe(false);
   });
 
-  it('cambia el monto del adelanto', async () => {
+  it('valida: porcentaje en (0, 100], fechas en orden, al menos un tratamiento; 3x2 sin porcentaje', async () => {
     const admin = await sesion('administrador');
-    expect((await admin.get('/api/admin/adelanto')).body.monto).toBe('30.00');
-    expect((await admin.put('/api/admin/adelanto').send({ monto: 45 })).body.monto).toBe('45.00');
-    expect((await admin.put('/api/admin/adelanto').send({ monto: 0 })).status).toBe(422);
+    const r = await admin.post('/api/admin/descuentos').send({ nombre: 'Mal', porcentaje: 150, fechaInicio: '2026-07-31', fechaFin: '2026-07-01', tratamientos: [] });
+    expect(r.status).toBe(422);
+    expect(r.body.campos).toMatchObject({ porcentaje: 'Máximo 100 %', tratamientos: 'Elija al menos un tratamiento' });
+    const resina = (await prisma.tratamiento.findUniqueOrThrow({ where: { nombre: 'Curación con resina' } })).id;
+    const tres = await admin.post('/api/admin/descuentos').send({ nombre: 'Resinas 3x2', tipo: 'tres_por_dos', fechaInicio: '2026-07-01', fechaFin: '2026-07-31', tratamientos: [resina] });
+    expect(tres.body).toMatchObject({ tipo: 'tres_por_dos', porcentaje: null });
+  });
+
+  it('datos de Yape/Plin para el adelanto', async () => {
+    const admin = await sesion('administrador');
+    expect((await admin.get('/api/admin/pago')).body).toEqual({ numero: '987654321', titular: 'Clínica Dental (ficticio)' });
+    expect((await admin.put('/api/admin/pago').send({ numero: '912345678', titular: 'Clínica Dental SAC' })).body.numero).toBe('912345678');
+    expect((await admin.put('/api/admin/pago').send({ numero: '12345', titular: 'X' })).status).toBe(422);
   });
 });

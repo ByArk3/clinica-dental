@@ -119,7 +119,7 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | Descuentos (P3) y monto del adelanto (P6) gestionados por el Administrador | `admin.test.ts` |
 | CU-38 Panel de control · CU-39 Reporte de ingresos · CU-40 Reporte de inventario (rango de fechas, exportación CSV para Excel) | `reporte.test.ts`, `Iteracion4.test.tsx` |
 
-Total: **171 pruebas de API + 50 de interfaz**. Los 40 casos de uso del brief están implementados.
+Total: **211 pruebas de API + 58 de interfaz** (incluye las reglas acordadas en nov. 2026). Los 40 casos de uso del brief están implementados.
 
 **Tareas programadas** (`backend/src/jobs`, node-cron, cada 15 min, hora de Lima; se activan con `JOBS_ENABLED=true`):
 primero libera las citas sin confirmar a menos de 24 h y luego envía el recordatorio por correo a las que empiezan dentro de 48 h.
@@ -129,6 +129,40 @@ Si el paciente no tiene correo, «Citas del día» muestra el botón **Recordar 
 dentro de la transacción, y el índice único parcial `cita_horario_activo` (migración inicial). Si una reserva web y una
 presencial piden el mismo horario a la vez, una se graba y la otra recibe **409 «El horario ya no está disponible»**.
 
+## Reglas acordadas con el equipo (nov. 2026)
+
+**Adelanto**
+
+| Regla | Decisión |
+|---|---|
+| Quién paga | Pacientes con 3 o más inasistencias (RN-12) y reservas con menos de 24 h de anticipación |
+| Cuánto | 50 % del **tratamiento previsto** elegido al reservar (por defecto, la Consulta), con la campaña vigente el **día de la cita** |
+| Plazo | 1 hora desde la reserva. En la clínica se cobra en el momento |
+| Pago web | Yape/Plin: el paciente registra el N.° de operación (y una captura opcional) → «Pago en verificación» (ya no se libera) → la recepcionista aprueba o rechaza en Caja |
+| Sin pagar ni reportar en 1 hora | El horario se libera solo (tarea cada 5 min) |
+| Al aprobar o cobrar | Comprobante de adelanto y la cita queda **Confirmada**, sin enlace de confirmación |
+| Cobro final | Se descuentan el adelanto y el saldo a favor; si el adelanto supera el cobro, lo que sobra queda como **saldo a favor** |
+| Cancela con ≥ 24 h / con < 24 h o no asiste / cancela la clínica | Saldo a favor / se pierde / se **devuelve** (los reportes de ingresos restan las devoluciones) |
+| Reprograma | El adelanto pagado pasa a la nueva fecha |
+
+**Tarifario** (estimado para Trujillo; la clínica debe confirmarlo): Consulta S/ 40 · Profilaxis S/ 80 · Destartraje S/ 120 ·
+Curación con resina S/ 120 · Extracción simple S/ 80 · Extracción compleja S/ 250 · Blanqueamiento S/ 450 ·
+Aplicación de flúor S/ 40 · Sellante por pieza S/ 35.
+
+**Campañas de descuento** (Configuración → Campañas; se aplican solas en caja según la fecha de la cita; si dos aplican a
+la misma línea gana la mayor): Campaña escolar 1 feb–31 mar (flúor y sellantes 30 %, hasta 17 años) · Fiestas Patrias
+1–31 jul (limpieza 20 %, blanqueamiento 25 %, resinas 3x2) · Día de la Odontología Peruana 4 dic (consulta 50 %) ·
+Campaña navideña 1–31 dic (blanqueamiento y destartraje 20 %). Los porcentajes no indicados por el equipo son propuestos.
+
+**Feriados**: no se atiende. La semilla carga los feriados nacionales del año actual y el siguiente (Configuración → Feriados).
+Al agregar uno, se listan las citas de ese día para reprogramarlas.
+
+**Horarios**: cada odontólogo tiene el suyo, dentro de L–S 08:00–20:00 (Configuración → Horarios). De ejemplo:
+Dr. Paredes L–V 08:00–14:00 y Dra. Díaz L–S 14:00–20:00. Sin horario propio, usa el general.
+
+> Si ya tenías la base de datos de antes (Docker), para tener el tarifario y las campañas nuevas empieza de cero:
+> `docker compose down -v` y luego `docker compose up --build` (borra los datos de prueba anteriores).
+
 ## Decisiones y supuestos
 
 Se aplican los supuestos de la sección 14 del brief (P2–P17). Además:
@@ -137,11 +171,9 @@ Se aplican los supuestos de la sección 14 del brief (P2–P17). Además:
 - Prisma 6 (versión estable).
 - `comprobantes.tipo` (`servicio` | `adelanto`), con único `(cita_id, tipo)`, para emitir el adelanto de RN-12 y luego
   el comprobante final de la misma cita. Por eso `detalle_comprobante.tratamiento_id` admite NULL.
-- Tablas extra: `descuentos` (P3), `configuracion` (duración del bloque P5, monto del adelanto P6), `session` (sesiones).
+- Tablas extra: `descuentos` + `descuento_tratamiento` (campañas), `saldo_movimientos`, `devoluciones`, `feriados`,
+  `configuracion` (bloque de 30 min, datos de Yape/Plin), `session` (sesiones).
 - `citas.recordatorio_enviado_en` para no repetir el recordatorio de 48 h; `fichas_paciente.notas` para anotar inasistencias.
-- **Reservas de último momento:** una cita registrada (o reprogramada) con menos de 24 h de anticipación ya no tiene plazo
-  para confirmarse, así que queda directamente «Confirmada»; si no, la liberación automática la anularía al instante.
-  `TODO(decisión)`: validarlo con la clínica.
 - El enlace de confirmación (CU-08) no pide sesión y solo muestra el nombre de pila, el odontólogo, la fecha y la hora.
   Al reprogramar se genera un enlace nuevo y el anterior deja de servir.
 - **Atención:** solo el odontólogo de la cita, con la cita «Confirmada» y de hoy o de un día anterior (no futura).
@@ -150,16 +182,14 @@ Se aplican los supuestos de la sección 14 del brief (P2–P17). Además:
 - **Insumo desactivado:** un tratamiento no puede reactivarse mientras alguno de sus insumos esté desactivado.
 - **Caja:** con tarjeta o Yape/Plin se cobra el total exacto (sin vuelto). El correlativo se asigna con un bloqueo
   (`pg_advisory_xact_lock`), así no quedan números repetidos ni huecos. Una restricción `CHECK` en la base garantiza
-  `total = subtotal − descuento − adelanto` y `vuelto = recibido − total`.
-- **Adelanto (RN-12 / P6):** no admite descuentos y solo se cobra si la cita aún no pasó. Si el adelanto supera el cobro
-  final, el total queda en S/ 0.00. `TODO(decisión P6)`: ¿qué pasa con el saldo sobrante, o con el adelanto de una cita
-  cancelada? Hoy no se devuelve ni se acumula.
-- Los descuentos (P3) y el monto del adelanto (P6) se gestionan en **Configuración** (Administrador). La semilla carga
-  «Paciente frecuente», 10 %. `TODO(decisión P3)`: confirmar con la clínica qué descuentos existen.
+  `total = subtotal − descuento − adelanto − saldo a favor` y `vuelto = recibido − total`.
+- **Pago reportado:** el sistema no puede ver los pagos que llegan a Yape/Plin (no avisan a ningún programa), por eso la
+  recepcionista los verifica. Una pasarela (Culqi, Izipay, Niubiz, Mercado Pago) lo haría automático: mejora futura.
+- La captura del pago se guarda en la base (máx. 2 MB) y no se carga al listar citas (omisión global de Prisma).
 - **Alertas (CU-24):** además de marcarse como revisadas a mano, se cierran solas cuando una recepción o un ajuste
   deja el stock sobre el mínimo; queda registrado quién hizo la reposición.
 - **Pedidos:** sin precios (P13). El código `PED-0001` es correlativo sin huecos. Si un insumo no llegó, se registra 0
   y no genera movimiento.
 - **Usuarios:** los pacientes crean su cuenta en la web; el Administrador gestiona al personal. El rol de odontólogo no
   se asigna ni se quita a una cuenta existente, porque tiene citas y atenciones vinculadas: se registra un usuario nuevo.
-- Los precios de Extracción, Blanqueamiento y Consulta en la semilla son de ejemplo: `TODO(decisión)`.
+- `TODO(decisión)`: confirmar los precios del tarifario y los porcentajes de las campañas con la clínica.

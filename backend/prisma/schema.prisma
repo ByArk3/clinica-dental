@@ -31,6 +31,23 @@ enum EstadoCita {
   cancelada
   liberada
   inasistencia
+  pago_en_verificacion // el paciente reportó su pago de adelanto (Yape/Plin) y falta que caja lo verifique
+}
+
+enum TipoDescuento {
+  porcentaje
+  tres_por_dos // cada 3 unidades del mismo grupo, la de menor precio es gratis
+}
+
+enum TipoMovimientoSaldo {
+  abono_sobrante // el adelanto superó el cobro final
+  abono_cancelacion // canceló con ≥ 24 h después de pagar el adelanto
+  uso_en_cobro // se descontó en un cobro
+}
+
+enum MetodoPagoReportado {
+  yape
+  plin
 }
 
 enum TipoMovimiento {
@@ -72,6 +89,8 @@ model Usuario {
   alertasRevisadas     AlertaStock[]
   pedidosRegistrados   Pedido[]
   comprobantesEmitidos Comprobante[]
+  movimientosSaldo     SaldoMovimiento[]
+  devoluciones         Devolucion[]
 
   @@map("usuarios")
 }
@@ -89,13 +108,16 @@ model Paciente {
   apoderado       String? // P14
   inasistencias   Int      @default(0)
   restringido     Boolean  @default(false) // RN-12
+  saldoFavor      Decimal  @default(0) @map("saldo_favor") @db.Decimal(10, 2) // adelantos sobrantes o de citas canceladas a tiempo
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  usuario      Usuario?       @relation(fields: [usuarioId], references: [id])
-  ficha        FichaPaciente?
-  citas        Cita[]
-  comprobantes Comprobante[]
+  usuario          Usuario?          @relation(fields: [usuarioId], references: [id])
+  ficha            FichaPaciente?
+  citas            Cita[]
+  comprobantes     Comprobante[]
+  movimientosSaldo SaldoMovimiento[]
+  devoluciones     Devolucion[]
 
   @@index([apellidos, nombres])
   @@map("pacientes")
@@ -146,25 +168,38 @@ model HorarioAtencion {
 }
 
 model Cita {
-  id                    Int        @id @default(autoincrement())
-  pacienteId            Int        @map("paciente_id")
-  odontologoId          Int        @map("odontologo_id")
-  fecha                 DateTime   @db.Date
-  hora                  DateTime   @db.Time(0)
-  motivo                String     @db.VarChar(200)
+  id                    Int                  @id @default(autoincrement())
+  pacienteId            Int                  @map("paciente_id")
+  odontologoId          Int                  @map("odontologo_id")
+  fecha                 DateTime             @db.Date
+  hora                  DateTime             @db.Time(0)
+  motivo                String               @db.VarChar(200)
   canal                 CanalCita
   estado                EstadoCita
-  tokenConfirmacion     String?    @unique @map("token_confirmacion")
-  recordatorioEnviadoEn DateTime?  @map("recordatorio_enviado_en")
-  creadoPorId           Int        @map("creado_por")
-  createdAt             DateTime   @default(now()) @map("created_at")
-  updatedAt             DateTime   @updatedAt @map("updated_at")
+  tokenConfirmacion     String?              @unique @map("token_confirmacion")
+  recordatorioEnviadoEn DateTime?            @map("recordatorio_enviado_en")
+  // Adelanto (RN-12 y reservas con < 24 h): 50 % del tratamiento previsto, a pagar dentro de 1 hora
+  tratamientoPrevistoId Int?                 @map("tratamiento_previsto_id")
+  montoAdelanto         Decimal?             @map("monto_adelanto") @db.Decimal(10, 2)
+  adelantoVenceEn       DateTime?            @map("adelanto_vence_en")
+  pagoMetodo            MetodoPagoReportado? @map("pago_metodo")
+  pagoOperacion         String?              @map("pago_operacion") @db.VarChar(40)
+  pagoCaptura           Bytes?               @map("pago_captura")
+  pagoCapturaTipo       String?              @map("pago_captura_tipo")
+  pagoReportadoEn       DateTime?            @map("pago_reportado_en")
+  pagoRechazoMotivo     String?              @map("pago_rechazo_motivo")
+  creadoPorId           Int                  @map("creado_por")
+  createdAt             DateTime             @default(now()) @map("created_at")
+  updatedAt             DateTime             @updatedAt @map("updated_at")
 
-  paciente     Paciente      @relation(fields: [pacienteId], references: [id])
-  odontologo   Odontologo    @relation(fields: [odontologoId], references: [id])
-  creadoPor    Usuario       @relation("CitaCreadaPor", fields: [creadoPorId], references: [id])
-  atencion     Atencion?
-  comprobantes Comprobante[]
+  paciente            Paciente          @relation(fields: [pacienteId], references: [id])
+  odontologo          Odontologo        @relation(fields: [odontologoId], references: [id])
+  creadoPor           Usuario           @relation("CitaCreadaPor", fields: [creadoPorId], references: [id])
+  tratamientoPrevisto Tratamiento?      @relation(fields: [tratamientoPrevistoId], references: [id])
+  atencion            Atencion?
+  comprobantes        Comprobante[]
+  movimientosSaldo    SaldoMovimiento[]
+  devoluciones        Devolucion[]
 
   @@index([fecha, estado])
   @@index([pacienteId])
@@ -216,6 +251,8 @@ model Tratamiento {
   insumos             TratamientoInsumo[]
   atenciones          AtencionTratamiento[]
   detallesComprobante DetalleComprobante[]
+  citasPrevistas      Cita[]
+  campanas            DescuentoTratamiento[]
 
   @@map("tratamientos")
 }
@@ -343,14 +380,81 @@ model TipoPago {
 }
 
 /// P3: descuentos gestionados por el Administrador; uno por cobro
+/// Campañas de descuento: vigencia por fechas, tratamientos a los que aplican y edad máxima opcional.
+/// Se aplican solas en caja según la fecha de la CITA; si dos aplican a la misma línea, gana la mayor.
 model Descuento {
-  id           Int           @id @default(autoincrement())
-  nombre       String        @unique
-  porcentaje   Decimal       @db.Decimal(5, 2)
-  activo       Boolean       @default(true)
-  comprobantes Comprobante[]
+  id          Int           @id @default(autoincrement())
+  nombre      String        @unique
+  tipo        TipoDescuento @default(porcentaje)
+  porcentaje  Decimal?      @db.Decimal(5, 2) // NULL en 3x2
+  fechaInicio DateTime      @map("fecha_inicio") @db.Date
+  fechaFin    DateTime      @map("fecha_fin") @db.Date
+  edadMaxima  Int?          @map("edad_maxima") // p. ej. 17 = solo menores de 18
+  activo      Boolean       @default(true)
+
+  tratamientos DescuentoTratamiento[]
+  detalles     DetalleComprobante[]
 
   @@map("descuentos")
+}
+
+model DescuentoTratamiento {
+  descuentoId   Int @map("descuento_id")
+  tratamientoId Int @map("tratamiento_id")
+
+  descuento   Descuento   @relation(fields: [descuentoId], references: [id], onDelete: Cascade)
+  tratamiento Tratamiento @relation(fields: [tratamientoId], references: [id])
+
+  @@id([descuentoId, tratamientoId])
+  @@map("descuento_tratamiento")
+}
+
+/// Movimientos del saldo a favor del paciente (libro mayor; pacientes.saldo_favor es el acumulado)
+model SaldoMovimiento {
+  id            Int                 @id @default(autoincrement())
+  pacienteId    Int                 @map("paciente_id")
+  tipo          TipoMovimientoSaldo
+  monto         Decimal             @db.Decimal(10, 2) // + abono, − uso
+  saldo         Decimal             @db.Decimal(10, 2)
+  citaId        Int?                @map("cita_id")
+  comprobanteId Int?                @map("comprobante_id")
+  motivo        String?
+  usuarioId     Int                 @map("usuario_id")
+  createdAt     DateTime            @default(now()) @map("created_at")
+
+  paciente    Paciente     @relation(fields: [pacienteId], references: [id])
+  cita        Cita?        @relation(fields: [citaId], references: [id])
+  comprobante Comprobante? @relation(fields: [comprobanteId], references: [id])
+  usuario     Usuario      @relation(fields: [usuarioId], references: [id])
+
+  @@index([pacienteId, createdAt])
+  @@map("saldo_movimientos")
+}
+
+/// Devolución del adelanto cuando la clínica cancela la cita
+model Devolucion {
+  id         Int      @id @default(autoincrement())
+  citaId     Int      @unique @map("cita_id")
+  pacienteId Int      @map("paciente_id")
+  monto      Decimal  @db.Decimal(10, 2)
+  motivo     String
+  usuarioId  Int      @map("usuario_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  cita     Cita     @relation(fields: [citaId], references: [id])
+  paciente Paciente @relation(fields: [pacienteId], references: [id])
+  usuario  Usuario  @relation(fields: [usuarioId], references: [id])
+
+  @@map("devoluciones")
+}
+
+/// Días sin atención (feriados nacionales y los que agregue el Administrador)
+model Feriado {
+  id     Int      @id @default(autoincrement())
+  fecha  DateTime @unique @db.Date
+  nombre String
+
+  @@map("feriados")
 }
 
 model Comprobante {
@@ -360,10 +464,11 @@ model Comprobante {
   citaId           Int             @map("cita_id")
   pacienteId       Int             @map("paciente_id")
   tipoPagoId       Int             @map("tipo_pago_id")
-  descuentoId      Int?            @map("descuento_id")
   subtotal         Decimal         @db.Decimal(10, 2)
   descuento        Decimal         @default(0) @db.Decimal(10, 2)
-  adelantoAplicado Decimal         @default(0) @map("adelanto_aplicado") @db.Decimal(10, 2) // P6: adelanto ya pagado que se descuenta
+  adelantoAplicado Decimal         @default(0) @map("adelanto_aplicado") @db.Decimal(10, 2) // adelanto ya pagado que se descuenta
+  saldoAplicado    Decimal         @default(0) @map("saldo_aplicado") @db.Decimal(10, 2) // saldo a favor usado
+  operacion        String?         @db.VarChar(40) // N.° de operación de Yape/Plin, si aplica
   total            Decimal         @db.Decimal(10, 2)
   montoRecibido    Decimal         @map("monto_recibido") @db.Decimal(10, 2)
   vuelto           Decimal         @default(0) @db.Decimal(10, 2)
@@ -371,12 +476,12 @@ model Comprobante {
   emitidoPorId     Int             @map("emitido_por")
   createdAt        DateTime        @default(now()) @map("created_at")
 
-  cita              Cita                 @relation(fields: [citaId], references: [id])
-  paciente          Paciente             @relation(fields: [pacienteId], references: [id])
-  tipoPago          TipoPago             @relation(fields: [tipoPagoId], references: [id])
-  descuentoAplicado Descuento?           @relation(fields: [descuentoId], references: [id])
-  emitidoPor        Usuario              @relation(fields: [emitidoPorId], references: [id])
-  detalles          DetalleComprobante[]
+  cita             Cita                 @relation(fields: [citaId], references: [id])
+  paciente         Paciente             @relation(fields: [pacienteId], references: [id])
+  tipoPago         TipoPago             @relation(fields: [tipoPagoId], references: [id])
+  emitidoPor       Usuario              @relation(fields: [emitidoPorId], references: [id])
+  detalles         DetalleComprobante[]
+  movimientosSaldo SaldoMovimiento[]
 
   @@unique([citaId, tipo]) // un comprobante de servicio (y a lo más uno de adelanto) por cita
   @@map("comprobantes")
@@ -387,10 +492,13 @@ model DetalleComprobante {
   comprobanteId Int     @map("comprobante_id")
   tratamientoId Int?    @map("tratamiento_id") // NULL en el comprobante de adelanto
   descripcion   String
-  precio        Decimal @db.Decimal(10, 2)
+  precio        Decimal @db.Decimal(10, 2) // precio de lista (congelado en la atención)
+  descuento     Decimal @default(0) @db.Decimal(10, 2) // descuento de campaña de esta línea
+  descuentoId   Int?    @map("descuento_id")
 
   comprobante Comprobante  @relation(fields: [comprobanteId], references: [id])
   tratamiento Tratamiento? @relation(fields: [tratamientoId], references: [id])
+  campana     Descuento?   @relation(fields: [descuentoId], references: [id])
 
   @@map("detalle_comprobante")
 }

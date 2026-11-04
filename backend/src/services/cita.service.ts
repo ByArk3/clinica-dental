@@ -4,22 +4,31 @@ import {
   ESTADOS_MODIFICABLES,
   HORAS_LIMITE_PACIENTE,
   MENSAJES,
+  MINUTOS_PAGO_ADELANTO,
   type CitaDTO,
+  type ReportarPagoDTO,
   type ReprogramarDTO,
   type UsuarioSesion,
 } from '@clinica/shared';
 import { prisma, type Tx } from '../lib/prisma.js';
 import { ErrorNegocio } from '../lib/errores.js';
 import { ahoraLima, dateAFecha, dateAHora, fechaADate, fechaPE, horaADate, instanteCita } from '../lib/fechas.js';
-import { bloquesDelHorario, horasOcupadas } from './disponibilidad.service.js';
+import { bloquesDelHorario, feriadoEn, horasOcupadas } from './disponibilidad.service.js';
+import { calcularAdelanto, edadEn } from './precio.service.js';
+import { moverSaldo } from './saldo.service.js';
 
 const HORA_MS = 3_600_000;
 const horarioTomado = () => new ErrorNegocio(409, 'HORARIO_NO_DISPONIBLE', MENSAJES.HORARIO_NO_DISPONIBLE);
 const citaNoEncontrada = () => new ErrorNegocio(404, 'CITA_NO_ENCONTRADA', MENSAJES.CITA_NO_ENCONTRADA);
 const nuevoToken = () => crypto.randomBytes(24).toString('hex');
 
-const INCLUIR = { odontologo: { include: { usuario: { select: { nombres: true } } } } } as const;
-type CitaConOdontologo = Prisma.CitaGetPayload<{ include: typeof INCLUIR }>;
+const INCLUIR = {
+  odontologo: { include: { usuario: { select: { nombres: true } } } },
+  tratamientoPrevisto: { select: { id: true, nombre: true } },
+  comprobantes: { select: { tipo: true, total: true } },
+} as const;
+// pagoCaptura se omite de forma global (lib/prisma.ts)
+type CitaCompleta = Omit<Prisma.CitaGetPayload<{ include: typeof INCLUIR }>, 'pagoCaptura'>;
 
 /** Horas que faltan para la cita (negativo si ya pasó). */
 export const horasParaCita = (fecha: Date, hora: Date, ahora = new Date()) =>
@@ -27,7 +36,7 @@ export const horasParaCita = (fecha: Date, hora: Date, ahora = new Date()) =>
 
 /**
  * Valida un horario dentro de la transacción: odontólogo activo (con bloqueo de fila → RN-02),
- * dentro del horario de atención (RN-03) y libre (RN-02). `excluirCitaId`: la propia cita al reprogramar.
+ * no feriado, dentro del horario de atención (RN-03) y libre (RN-02). `excluirCitaId`: la propia cita al reprogramar.
  */
 async function validarHorario(tx: Tx, odontologoId: number, fecha: string, hora: string, excluirCitaId?: number) {
   const ahora = ahoraLima();
@@ -40,6 +49,8 @@ async function validarHorario(tx: Tx, odontologoId: number, fecha: string, hora:
     SELECT id, activo FROM odontologos WHERE id = ${odontologoId} FOR UPDATE`;
   if (!odontologo?.activo) throw new ErrorNegocio(422, 'ODONTOLOGO_NO_DISPONIBLE', MENSAJES.ODONTOLOGO_NO_DISPONIBLE);
 
+  const feriado = await feriadoEn(tx, fecha);
+  if (feriado) throw new ErrorNegocio(422, 'CLINICA_FERIADO', `${MENSAJES.CLINICA_FERIADO}: ${feriado}`);
   const bloques = await bloquesDelHorario(tx, odontologoId, fecha);
   if (bloques.length === 0) throw new ErrorNegocio(422, 'CLINICA_NO_ATIENDE', MENSAJES.CLINICA_NO_ATIENDE);
   if (!bloques.includes(hora)) throw new ErrorNegocio(422, 'FUERA_DE_HORARIO', MENSAJES.FUERA_DE_HORARIO);
@@ -48,17 +59,35 @@ async function validarHorario(tx: Tx, odontologoId: number, fecha: string, hora:
   if (ocupadas.has(hora)) throw horarioTomado();
 }
 
-/**
- * Estado inicial de una cita (nueva o reprogramada).
- * RN-12: paciente restringido → pendiente de adelanto.
- * RN-04: debe confirmarse con ≥ 24 h. Si se reserva con menos de 24 h de anticipación ya no hay plazo
- * para confirmar: se registra directamente como confirmada (la tarea programada la liberaría de inmediato).
- * TODO(decisión): validar con la clínica el tratamiento de las reservas de último momento.
- */
-export function estadoInicial(restringido: boolean, fecha: string, hora: string): EstadoCita {
-  if (restringido) return 'pendiente_adelanto';
-  const horas = (instanteCita(fecha, hora).getTime() - Date.now()) / HORA_MS;
-  return horas < 24 ? 'confirmada' : 'pendiente_confirmacion';
+/** Regla acordada: pagan adelanto los pacientes con 3+ inasistencias (RN-12) y las reservas con < 24 h. */
+export function requiereAdelanto(restringido: boolean, fecha: string, hora: string, ahora = new Date()) {
+  return restringido || (instanteCita(fecha, hora).getTime() - ahora.getTime()) / HORA_MS < 24;
+}
+
+/** Tratamiento previsto: el elegido (activo) o, si no se eligió, la Consulta. */
+async function resolverTratamientoPrevisto(tx: Tx, id: number | null | undefined) {
+  if (id) {
+    const t = await tx.tratamiento.findUnique({ where: { id } });
+    if (!t?.activo) throw new ErrorNegocio(422, 'TRATAMIENTO_NO_TARIFARIO', MENSAJES.TRATAMIENTO_NO_TARIFARIO, { tratamientoPrevistoId: MENSAJES.TRATAMIENTO_NO_TARIFARIO });
+    return t.id;
+  }
+  const consulta = await tx.tratamiento.findFirst({ where: { nombre: { equals: 'Consulta', mode: 'insensitive' }, activo: true } });
+  return consulta?.id ?? null;
+}
+
+/** Estado y datos de adelanto de una cita nueva (o reprogramada sin adelanto pagado). */
+async function estadoYAdelanto(tx: Tx, p: { restringido: boolean; fechaNacimiento: Date }, tratamientoId: number | null, fecha: string, hora: string) {
+  if (!requiereAdelanto(p.restringido, fecha, hora)) {
+    return { estado: 'pendiente_confirmacion' as EstadoCita, montoAdelanto: null, adelantoVenceEn: null };
+  }
+  if (!tratamientoId) {
+    throw new ErrorNegocio(422, 'TRATAMIENTO_PREVISTO_REQUERIDO', MENSAJES.TRATAMIENTO_PREVISTO_REQUERIDO, { tratamientoPrevistoId: MENSAJES.TRATAMIENTO_PREVISTO_REQUERIDO });
+  }
+  return {
+    estado: 'pendiente_adelanto' as EstadoCita,
+    montoAdelanto: await calcularAdelanto(tx, tratamientoId, fecha, edadEn(p.fechaNacimiento, fecha)),
+    adelantoVenceEn: new Date(Date.now() + MINUTOS_PAGO_ADELANTO * 60_000),
+  };
 }
 
 const conCarrera = async <T>(fn: () => Promise<T>) => {
@@ -70,6 +99,13 @@ const conCarrera = async <T>(fn: () => Promise<T>) => {
     throw e;
   }
 };
+
+/** Datos de Yape/Plin de la clínica para pagar el adelanto. */
+export async function datosPago() {
+  const filas = await prisma.configuracion.findMany({ where: { clave: { in: ['pago_numero', 'pago_titular'] } } });
+  const v = Object.fromEntries(filas.map((f) => [f.clave, f.valor]));
+  return { numero: v.pago_numero ?? null, titular: v.pago_titular ?? null };
+}
 
 /**
  * CU-06 Registrar cita (c_grabarCita).
@@ -88,6 +124,8 @@ export async function registrarCita(dto: CitaDTO, usuario: UsuarioSesion) {
       const paciente = await tx.paciente.findUnique({ where: { id: pacienteId } });
       if (!paciente) throw new ErrorNegocio(404, 'PACIENTE_NO_ENCONTRADO', MENSAJES.PACIENTE_NO_ENCONTRADO);
       await validarHorario(tx, dto.odontologoId, dto.fecha, dto.hora);
+      const tratamientoPrevistoId = await resolverTratamientoPrevisto(tx, dto.tratamientoPrevistoId);
+      const adelanto = await estadoYAdelanto(tx, paciente, tratamientoPrevistoId, dto.fecha, dto.hora); // 8.2 / RN-12 / < 24 h
       return tx.cita.create({
         data: {
           pacienteId,
@@ -96,7 +134,8 @@ export async function registrarCita(dto: CitaDTO, usuario: UsuarioSesion) {
           hora: horaADate(dto.hora),
           motivo: dto.motivo,
           canal,
-          estado: estadoInicial(paciente.restringido, dto.fecha, dto.hora), // 8.2 / RN-12
+          tratamientoPrevistoId,
+          ...adelanto,
           tokenConfirmacion: nuevoToken(),
           creadoPorId: usuario.id,
         },
@@ -105,9 +144,11 @@ export async function registrarCita(dto: CitaDTO, usuario: UsuarioSesion) {
     }),
   );
 
+  const pendiente = cita.estado === 'pendiente_adelanto';
   return {
     cita: formatearCita(cita),
-    aviso: cita.estado === 'pendiente_adelanto' ? MENSAJES.ADELANTO_OBLIGATORIO : undefined,
+    aviso: pendiente ? MENSAJES.ADELANTO_OBLIGATORIO : undefined,
+    pago: pendiente ? await datosPago() : undefined,
   };
 }
 
@@ -117,9 +158,10 @@ export async function registrarCita(dto: CitaDTO, usuario: UsuarioSesion) {
  */
 async function citaModificable(tx: Tx, citaId: number, usuario: UsuarioSesion) {
   await tx.$queryRaw`SELECT id FROM citas WHERE id = ${citaId} FOR UPDATE`;
-  const cita = await tx.cita.findUnique({ where: { id: citaId }, include: { paciente: true } });
+  const cita = await tx.cita.findUnique({ where: { id: citaId }, include: { paciente: true, comprobantes: true } });
   // Al paciente no se le revela si existe la cita de otra persona
   if (!cita || (usuario.rol === 'paciente' && cita.pacienteId !== usuario.pacienteId)) throw citaNoEncontrada();
+  if (cita.estado === 'pago_en_verificacion') throw new ErrorNegocio(409, 'PAGO_EN_VERIFICACION', MENSAJES.PAGO_EN_VERIFICACION);
   const horas = horasParaCita(cita.fecha, cita.hora);
   if (!ESTADOS_MODIFICABLES.includes(cita.estado) || horas <= 0) {
     throw new ErrorNegocio(409, 'CITA_NO_MODIFICABLE', MENSAJES.CITA_NO_MODIFICABLE);
@@ -130,22 +172,27 @@ async function citaModificable(tx: Tx, citaId: number, usuario: UsuarioSesion) {
   return cita;
 }
 
-/** CU-07 Reprogramar cita: nuevo horario (CU-05), nuevo enlace de confirmación. */
+const adelantoPagadoDe = (comprobantes: { tipo: string; total: Prisma.Decimal }[]) => comprobantes.find((c) => c.tipo === 'adelanto')?.total ?? null;
+
+/**
+ * CU-07 Reprogramar cita: nuevo horario (CU-05), nuevo enlace de confirmación.
+ * Si ya pagó el adelanto, el adelanto pasa a la nueva fecha y la cita sigue «Confirmada».
+ */
 export async function reprogramarCita(citaId: number, dto: ReprogramarDTO, usuario: UsuarioSesion) {
   const cita = await conCarrera(() =>
     prisma.$transaction(async (tx) => {
       const actual = await citaModificable(tx, citaId, usuario);
       await validarHorario(tx, dto.odontologoId, dto.fecha, dto.hora, citaId);
-      // Si aún debe el adelanto (RN-12) lo sigue debiendo; si no, vuelve a requerir confirmación
-      const estado =
-        actual.estado === 'pendiente_adelanto' ? 'pendiente_adelanto' : estadoInicial(false, dto.fecha, dto.hora);
+      const datos = adelantoPagadoDe(actual.comprobantes)
+        ? { estado: 'confirmada' as EstadoCita, adelantoVenceEn: null }
+        : await estadoYAdelanto(tx, actual.paciente, actual.tratamientoPrevistoId ?? (await resolverTratamientoPrevisto(tx, null)), dto.fecha, dto.hora);
       return tx.cita.update({
         where: { id: citaId },
         data: {
           odontologoId: dto.odontologoId,
           fecha: fechaADate(dto.fecha),
           hora: horaADate(dto.hora),
-          estado,
+          ...datos,
           tokenConfirmacion: nuevoToken(), // el enlace anterior deja de servir
           recordatorioEnviadoEn: null,
         },
@@ -156,11 +203,67 @@ export async function reprogramarCita(citaId: number, dto: ReprogramarDTO, usuar
   return formatearCita(cita);
 }
 
-/** CU-07 Cancelar cita: estado «Cancelada» y el horario queda libre (índice parcial). */
-export async function cancelarCita(citaId: number, usuario: UsuarioSesion) {
+export type ResultadoAdelanto = { monto: string; resultado: 'saldo_a_favor' | 'devuelto' | 'perdido' } | null;
+
+/**
+ * Qué pasa con el adelanto pagado al cancelar (regla acordada):
+ * cancela la clínica → se devuelve; cancela el paciente con ≥ 24 h → saldo a favor; con < 24 h → se pierde.
+ */
+export async function resolverAdelantoAlCancelar(
+  tx: Tx,
+  cita: { id: number; pacienteId: number; fecha: Date; hora: Date; comprobantes: { tipo: string; total: Prisma.Decimal }[] },
+  usuarioId: number,
+  porClinica: boolean,
+): Promise<ResultadoAdelanto> {
+  const pagado = adelantoPagadoDe(cita.comprobantes);
+  if (!pagado || pagado.isZero()) return null;
+  if (porClinica) {
+    await tx.devolucion.create({ data: { citaId: cita.id, pacienteId: cita.pacienteId, monto: pagado, motivo: 'Cita cancelada por la clínica', usuarioId } });
+    return { monto: pagado.toFixed(2), resultado: 'devuelto' };
+  }
+  if (horasParaCita(cita.fecha, cita.hora) >= 24) {
+    await moverSaldo(tx, { pacienteId: cita.pacienteId, tipo: 'abono_cancelacion', monto: pagado, usuarioId, citaId: cita.id, motivo: 'Adelanto de cita cancelada con 24 h o más' });
+    return { monto: pagado.toFixed(2), resultado: 'saldo_a_favor' };
+  }
+  return { monto: pagado.toFixed(2), resultado: 'perdido' };
+}
+
+/** CU-07 Cancelar cita: estado «Cancelada», el horario queda libre y se resuelve el adelanto si lo hubo. */
+export async function cancelarCita(citaId: number, usuario: UsuarioSesion, opciones: { porClinica?: boolean } = {}) {
+  const porClinica = usuario.rol === 'recepcionista' && !!opciones.porClinica;
+  return prisma.$transaction(async (tx) => {
+    const actual = await citaModificable(tx, citaId, usuario);
+    const adelanto = await resolverAdelantoAlCancelar(tx, actual, usuario.id, porClinica);
+    const cita = await tx.cita.update({ where: { id: citaId }, data: { estado: 'cancelada', adelantoVenceEn: null }, include: INCLUIR });
+    return { ...formatearCita(cita), adelanto };
+  });
+}
+
+/**
+ * El paciente reporta que pagó el adelanto por Yape/Plin (opción 1). La cita pasa a «Pago en verificación»
+ * y ya no se libera sola; la recepcionista aprueba o rechaza en Caja.
+ */
+export async function reportarPago(citaId: number, usuario: UsuarioSesion, dto: ReportarPagoDTO) {
+  const captura = dto.captura ? dto.captura.slice(dto.captura.indexOf(',') + 1) : null;
   const cita = await prisma.$transaction(async (tx) => {
-    await citaModificable(tx, citaId, usuario);
-    return tx.cita.update({ where: { id: citaId }, data: { estado: 'cancelada' }, include: INCLUIR });
+    await tx.$queryRaw`SELECT id FROM citas WHERE id = ${citaId} FOR UPDATE`;
+    const c = await tx.cita.findUnique({ where: { id: citaId } });
+    if (!c || c.pacienteId !== usuario.pacienteId) throw citaNoEncontrada();
+    if (c.estado !== 'pendiente_adelanto') throw new ErrorNegocio(409, 'PAGO_NO_REPORTABLE', MENSAJES.PAGO_NO_REPORTABLE);
+    if (c.adelantoVenceEn && c.adelantoVenceEn < new Date()) throw new ErrorNegocio(422, 'ADELANTO_VENCIDO', MENSAJES.ADELANTO_VENCIDO);
+    return tx.cita.update({
+      where: { id: citaId },
+      data: {
+        estado: 'pago_en_verificacion',
+        pagoMetodo: dto.metodo,
+        pagoOperacion: dto.numeroOperacion,
+        pagoCaptura: captura ? Buffer.from(captura, 'base64') : null,
+        pagoCapturaTipo: dto.captura ? dto.captura.slice(5, dto.captura.indexOf(';')) : null,
+        pagoReportadoEn: new Date(),
+        pagoRechazoMotivo: null,
+      },
+      include: INCLUIR,
+    });
   });
   return formatearCita(cita);
 }
@@ -214,11 +317,12 @@ export function enlaceWhatsapp(telefono: string, nombres: string, fecha: string,
 /**
  * CU-09 Registrar inasistencia (c_registrarInasistencia).
  * En una transacción: cita → «Inasistencia», contador +1, nota en la ficha y, a la 3.ª, paciente restringido (RN-12).
+ * Si había pagado adelanto, lo pierde (regla acordada).
  */
 export async function registrarInasistencia(citaId: number) {
   return prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM citas WHERE id = ${citaId} FOR UPDATE`;
-    const cita = await tx.cita.findUnique({ where: { id: citaId } });
+    const cita = await tx.cita.findUnique({ where: { id: citaId }, include: { comprobantes: true } });
     if (!cita) throw citaNoEncontrada();
     if (cita.estado !== 'confirmada') {
       throw new ErrorNegocio(409, 'INASISTENCIA_SOLO_CONFIRMADA', MENSAJES.INASISTENCIA_SOLO_CONFIRMADA);
@@ -235,9 +339,12 @@ export async function registrarInasistencia(citaId: number) {
     if (restringido && !paciente.restringido) {
       await tx.paciente.update({ where: { id: paciente.id }, data: { restringido: true } });
     }
+    const perdido = adelantoPagadoDe(cita.comprobantes);
     // Anotar en la ficha (CU-09 paso 3)
     const ficha = await tx.fichaPaciente.findUniqueOrThrow({ where: { pacienteId: paciente.id } });
-    const nota = `${fechaPE(dateAFecha(cita.fecha))} ${dateAHora(cita.hora)}: inasistencia (${paciente.inasistencias}.ª)`;
+    const nota =
+      `${fechaPE(dateAFecha(cita.fecha))} ${dateAHora(cita.hora)}: inasistencia (${paciente.inasistencias}.ª)` +
+      (perdido ? `; pierde el adelanto de S/ ${perdido.toFixed(2)}` : '');
     await tx.fichaPaciente.update({
       where: { id: ficha.id },
       data: { notas: ficha.notas ? `${ficha.notas}\n${nota}` : nota },
@@ -247,13 +354,15 @@ export async function registrarInasistencia(citaId: number) {
       estado: 'inasistencia' as const,
       inasistencias: paciente.inasistencias,
       restringido,
+      adelantoPerdido: perdido?.toFixed(2) ?? null,
       aviso: restringido ? MENSAJES.PACIENTE_RESTRINGIDO : undefined,
     };
   });
 }
 
-// No se expone token_confirmacion: solo viaja en el recordatorio (RNF08)
-function formatearCita(c: CitaConOdontologo) {
+// No se expone token_confirmacion ni la captura del pago (RNF08)
+export function formatearCita(c: CitaCompleta) {
+  const pagado = adelantoPagadoDe(c.comprobantes);
   return {
     id: c.id,
     pacienteId: c.pacienteId,
@@ -264,5 +373,11 @@ function formatearCita(c: CitaConOdontologo) {
     motivo: c.motivo,
     canal: c.canal,
     estado: c.estado,
+    tratamientoPrevisto: c.tratamientoPrevisto?.nombre ?? null,
+    montoAdelanto: c.montoAdelanto?.toFixed(2) ?? null,
+    adelantoVenceEn: c.adelantoVenceEn?.toISOString() ?? null,
+    adelantoPagado: pagado?.toFixed(2) ?? null,
+    pagoReportado: c.pagoOperacion && c.pagoReportadoEn ? { metodo: c.pagoMetodo, numeroOperacion: c.pagoOperacion, reportadoEn: c.pagoReportadoEn.toISOString() } : null,
+    pagoRechazoMotivo: c.pagoRechazoMotivo,
   };
 }

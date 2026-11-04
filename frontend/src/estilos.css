@@ -63,3 +63,4 @@ body { background: var(--fondo); }
 }
 
 .list-group-item.active { background: var(--acento); border-color: var(--acento); }
+.chip-pago_en_verificacion { background: #e2d9f3; color: #4a2a86; }

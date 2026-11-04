@@ -60,17 +60,21 @@ export function pdfComprobante(c: ComprobanteCompleto): Promise<Buffer> {
     doc.font('Helvetica-Bold').fontSize(9).fillColor('#555');
     fila('Descripción', 'Importe');
     doc.fillColor('#000');
-    for (const d of c.detalles) fila(d.descripcion, soles(d.precio));
+    for (const d of c.detalles) {
+      fila(d.descripcion, soles(d.precio));
+      if (d.descuento.greaterThan(0)) fila(`   ${d.campana?.nombre ?? 'Descuento'}`, `- ${soles(d.descuento)}`);
+    }
     linea();
 
     fila('Subtotal', soles(c.subtotal));
-    if (c.descuento.greaterThan(0)) fila(`Descuento${c.descuentoAplicado ? ` (${c.descuentoAplicado.nombre} ${Number(c.descuentoAplicado.porcentaje)} %)` : ''}`, `- ${soles(c.descuento)}`);
+    if (c.descuento.greaterThan(0)) fila('Descuentos de campaña', `- ${soles(c.descuento)}`);
     if (c.adelantoAplicado.greaterThan(0)) fila('Adelanto pagado', `- ${soles(c.adelantoAplicado)}`);
+    if (c.saldoAplicado.greaterThan(0)) fila('Saldo a favor aplicado', `- ${soles(c.saldoAplicado)}`);
     doc.moveDown(0.2);
     fila('TOTAL', soles(c.total), true);
     linea();
 
-    fila(`Forma de pago: ${c.tipoPago.nombre}`, '');
+    fila(`Forma de pago: ${c.tipoPago.nombre}${c.operacion ? ` (op. ${c.operacion})` : ''}`, '');
     if (c.tipoPago.nombre.toLowerCase() === 'efectivo') {
       fila('Recibido', soles(c.montoRecibido));
       fila('Vuelto', soles(c.vuelto));

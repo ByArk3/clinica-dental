@@ -1,4 +1,4 @@
-import type { AjusteDTO, DescuentoDTO, EstadoPedido, PedidoDTO, ProveedorDTO, RecepcionDTO, Rol, UsuarioModificarDTO, UsuarioNuevoDTO, ComprobanteDTO, Importe, TipoCobro, AtencionDTO, InsumoDTO, InsumoNuevoDTO, TratamientoDTO, CitaConfirmacion, CitaDTO, ContactoDTO, Disponibilidad, PacienteDTO, RegistroPacienteDTO, ReprogramarDTO, UsuarioSesion, EstadoCita, Canal } from '@clinica/shared';
+import type { HorarioDTO, ReportarPagoDTO, AjusteDTO, DescuentoDTO, EstadoPedido, PedidoDTO, ProveedorDTO, RecepcionDTO, Rol, UsuarioModificarDTO, UsuarioNuevoDTO, ComprobanteDTO, Importe, TipoCobro, AtencionDTO, InsumoDTO, InsumoNuevoDTO, TratamientoDTO, CitaConfirmacion, CitaDTO, ContactoDTO, Disponibilidad, PacienteDTO, RegistroPacienteDTO, ReprogramarDTO, UsuarioSesion, EstadoCita, Canal } from '@clinica/shared';
 import { api } from './cliente';
 
 export interface Paciente {
@@ -9,6 +9,7 @@ export interface Paciente {
   fechaNacimiento: string;
   telefono: string;
   email: string | null;
+  saldoFavor?: string;
   direccion?: string | null;
   apoderado?: string | null;
   inasistencias: number;
@@ -29,6 +30,16 @@ export interface Cita {
   motivo: string;
   canal: Canal;
   estado: EstadoCita;
+  tratamientoPrevisto: string | null;
+  montoAdelanto: string | null;
+  adelantoVenceEn: string | null;
+  adelantoPagado: string | null;
+  pagoReportado: { metodo: 'yape' | 'plin'; numeroOperacion: string; reportadoEn: string } | null;
+  pagoRechazoMotivo: string | null;
+}
+export interface DatosPago { numero: string | null; titular: string | null }
+export interface ResultadoCancelacion extends Cita {
+  adelanto: { monto: string; resultado: 'saldo_a_favor' | 'devuelto' | 'perdido' } | null;
 }
 
 export interface CitaDelDia extends Cita {
@@ -61,13 +72,16 @@ export const citasApi = {
   odontologos: () => api<Odontologo[]>('/odontologos'),
   disponibilidad: (odontologoId: number, fecha: string) =>
     api<Disponibilidad>(`/disponibilidad?odontologoId=${odontologoId}&fecha=${fecha}`),
-  registrar: (datos: CitaDTO) => api<{ cita: Cita; aviso?: string }>('/citas', { method: 'POST', body: datos }),
+  registrar: (datos: CitaDTO) => api<{ cita: Cita; aviso?: string; pago?: DatosPago }>('/citas', { method: 'POST', body: datos }),
+  tarifario: () => api<{ id: number; nombre: string; precio: string }[]>('/tarifario'),
+  datosPago: () => api<DatosPago>('/datos-pago'),
+  reportarPago: (id: number, d: ReportarPagoDTO) => api<Cita>(`/citas/${id}/pago`, { method: 'POST', body: d }),
   mias: () => api<Cita[]>('/citas/mias'),
   reprogramar: (id: number, datos: ReprogramarDTO) => api<Cita>(`/citas/${id}/reprogramar`, { method: 'PATCH', body: datos }),
-  cancelar: (id: number) => api<Cita>(`/citas/${id}/cancelar`, { method: 'PATCH' }),
+  cancelar: (id: number, porClinica = false) => api<ResultadoCancelacion>(`/citas/${id}/cancelar`, { method: 'PATCH', body: { porClinica } }),
   delDia: (fecha: string) => api<CitaDelDia[]>(`/citas?fecha=${fecha}`),
   inasistencia: (id: number) =>
-    api<{ inasistencias: number; restringido: boolean; aviso?: string }>(`/citas/${id}/inasistencia`, { method: 'POST' }),
+    api<{ inasistencias: number; restringido: boolean; aviso?: string; adelantoPerdido: string | null }>(`/citas/${id}/inasistencia`, { method: 'POST' }),
   verConfirmacion: (token: string) => api<CitaConfirmacion>(`/citas/confirmar/${encodeURIComponent(token)}`),
   responderConfirmacion: (token: string, accion: 'confirmar' | 'cancelar') =>
     api<CitaConfirmacion>(`/citas/confirmar/${encodeURIComponent(token)}`, { method: 'POST', body: { accion } }),
@@ -199,6 +213,11 @@ export const atencionApi = {
 export interface PendienteCaja {
   citaId: number;
   tipo: TipoCobro;
+  estado: EstadoCita;
+  saldoFavor: string;
+  tratamientoPrevisto: string | null;
+  adelantoVenceEn: string | null;
+  pagoReportado: { metodo: 'yape' | 'plin'; numeroOperacion: string } | null;
   fecha: string;
   hora: string;
   odontologo: string;
@@ -212,12 +231,15 @@ export interface Comprobante {
   citaId: number;
   estadoCita: EstadoCita;
   fecha: string;
-  paciente: { dni: string; nombres: string; apellidos: string; tieneCorreo: boolean };
+  paciente: { dni: string; nombres: string; apellidos: string; tieneCorreo: boolean; saldoFavor: string };
   tipoPago: string;
-  descuento: { nombre: string; monto: string } | null;
-  lineas: { descripcion: string; precio: string }[];
+  operacion: string | null;
+  lineas: { descripcion: string; precio: string; descuento: string; campana: string | null }[];
   subtotal: string;
+  descuento: string;
   adelantoAplicado: string;
+  saldoAplicado: string;
+  saldoGenerado: string;
   total: string;
   montoRecibido: string;
   vuelto: string;
@@ -227,11 +249,13 @@ export interface Comprobante {
 
 export const cajaApi = {
   pendientes: () => api<PendienteCaja[]>('/caja/pendientes'),
-  importe: (citaId: number, descuentoId?: number) =>
-    api<Importe>(`/caja/citas/${citaId}/importe${qs({ descuentoId: descuentoId ? String(descuentoId) : undefined })}`),
+  importe: (citaId: number) => api<Importe>(`/caja/citas/${citaId}/importe`),
+  aprobarPago: (citaId: number) => api<Comprobante>(`/caja/citas/${citaId}/aprobar-pago`, { method: 'POST' }),
+  rechazarPago: (citaId: number, motivo: string) => api<{ estado: string }>(`/caja/citas/${citaId}/rechazar-pago`, { method: 'POST', body: { motivo } }),
+  capturaUrl: (citaId: number) => `/api/caja/citas/${citaId}/captura`,
+  campanas: () => api<{ id: number; nombre: string; tipo: string; porcentaje: string | null; hasta: string; edadMaxima: number | null; tratamientos: string[] }[]>('/caja/campanas'),
   emitir: (citaId: number, d: ComprobanteDTO) => api<Comprobante>(`/caja/citas/${citaId}/comprobante`, { method: 'POST', body: d }),
   tiposPago: () => api<{ id: number; nombre: string }[]>('/tipos-pago'),
-  descuentos: () => api<{ id: number; nombre: string; porcentaje: string }[]>('/descuentos'),
   enviar: (id: number) => api<{ mensaje: string }>(`/comprobantes/${id}/enviar`, { method: 'POST' }),
   /** Descarga el PDF; si falla, lanza error (10.1: el comprobante ya está registrado y se puede reintentar). */
   pdf: async (id: number) => {
@@ -273,18 +297,35 @@ export interface Usuario {
   especialidad: string | null;
   dni: string | null;
 }
-export interface Descuento { id: number; nombre: string; porcentaje: string; activo: boolean }
+export interface Descuento {
+  id: number;
+  nombre: string;
+  tipo: 'porcentaje' | 'tres_por_dos';
+  porcentaje: string | null;
+  fechaInicio: string;
+  fechaFin: string;
+  edadMaxima: number | null;
+  activo: boolean;
+  tratamientos: { id: number; nombre: string }[];
+}
+export interface Feriado { id: number; fecha: string; nombre: string }
+export interface HorarioOdontologo {
+  odontologoId: number;
+  nombres: string;
+  usaHorarioGeneral: boolean;
+  tramos: { diaSemana: number; horaInicio: string; horaFin: string }[];
+}
 export interface Panel {
   fecha: string;
   citasHoy: { total: number; porEstado: Partial<Record<EstadoCita, number>> };
   ingresos: { hoy: string; comprobantesHoy: number; mes: string; comprobantesMes: number; ultimos7Dias: { fecha: string; total: string }[] };
   inventario: { alertasPendientes: number; alertas: { id: number; insumo: string; unidad: string; stockActual: string; stockMinimo: string }[]; pedidosPendientes: number };
-  agenda: { porConfirmar48h: number; inasistenciasMes: number; pacientesRestringidos: number };
+  agenda: { porConfirmar48h: number; inasistenciasMes: number; pacientesRestringidos: number; pagosPorVerificar: number };
 }
 export interface ReporteIngresos {
   desde: string;
   hasta: string;
-  resumen: { total: string; comprobantes: number; ticketPromedio: string; descuentos: string; adelantos: string };
+  resumen: { total: string; cobrado: string; devoluciones: string; saldoAplicado: string; comprobantes: number; ticketPromedio: string; descuentos: string; adelantos: string };
   porTipoPago: { tipo: string; total: string; cantidad: number }[];
   porDia: { fecha: string; total: string }[];
   porTratamiento: { tratamiento: string; cantidad: number; importe: string }[];
@@ -326,8 +367,14 @@ export const configApi = {
   crearDescuento: (d: DescuentoDTO) => api<Descuento>('/admin/descuentos', { method: 'POST', body: d }),
   modificarDescuento: (id: number, d: DescuentoDTO) => api<Descuento>(`/admin/descuentos/${id}`, { method: 'PATCH', body: d }),
   estadoDescuento: (id: number, activo: boolean) => api<Descuento>(`/admin/descuentos/${id}/${activo ? 'activar' : 'desactivar'}`, { method: 'PATCH' }),
-  adelanto: () => api<{ monto: string }>('/admin/adelanto'),
-  cambiarAdelanto: (monto: number) => api<{ monto: string }>('/admin/adelanto', { method: 'PUT', body: { monto } }),
+  datosPago: () => api<{ numero: string; titular: string }>('/admin/pago'),
+  guardarDatosPago: (d: { numero: string; titular: string }) => api<{ numero: string; titular: string }>('/admin/pago', { method: 'PUT', body: d }),
+  feriados: (anio: number) => api<Feriado[]>(`/admin/feriados?anio=${anio}`),
+  crearFeriado: (d: { fecha: string; nombre: string }) =>
+    api<{ feriado: Feriado; citasAfectadas: { id: number; hora: string; paciente: string; telefono: string; odontologo: string }[] }>('/admin/feriados', { method: 'POST', body: d }),
+  eliminarFeriado: (id: number) => api<void>(`/admin/feriados/${id}`, { method: 'DELETE' }),
+  horario: (odontologoId: number) => api<HorarioOdontologo>(`/admin/odontologos/${odontologoId}/horario`),
+  guardarHorario: (odontologoId: number, d: HorarioDTO) => api<HorarioOdontologo>(`/admin/odontologos/${odontologoId}/horario`, { method: 'PUT', body: d }),
 };
 
 export const reportesApi = {

@@ -6,7 +6,8 @@ import { FormReserva } from '../components/FormReserva';
 import { ChipEstado } from '../components/ChipEstado';
 import { ModalReprogramar } from '../components/ModalReprogramar';
 import { ModalConfirmar } from '../components/ModalConfirmar';
-import { fechaPE, horasPara, mensajeError } from '../formato';
+import { PanelPagoAdelanto } from '../components/PanelPagoAdelanto';
+import { fechaPE, horasPara, mensajeError, solesPE } from '../formato';
 
 /** CU-06 canal web (i_cita): el paciente reserva desde su celular (RNF02). */
 export function ReservaWeb() {
@@ -47,7 +48,12 @@ export function MisCitas() {
                 <strong>{fechaPE(c.fecha)} · {c.hora}</strong>
                 <ChipEstado estado={c.estado} />
               </div>
-              <div className="text-muted small">{c.odontologo} — {c.motivo}</div>
+              <div className="text-muted small">{c.odontologo} — {c.motivo}{c.tratamientoPrevisto && ` · ${c.tratamientoPrevisto}`}</div>
+              {(c.estado === 'pendiente_adelanto' || c.estado === 'pago_en_verificacion') && (
+                <div className="mt-2"><PanelPagoAdelanto cita={c} modo="web" /></div>
+              )}
+              {c.adelantoPagado && c.estado === 'confirmada' && <div className="small text-success mt-1">Adelanto pagado: {solesPE(c.adelantoPagado)}</div>}
+              {c.estado === 'liberada' && c.pagoRechazoMotivo && <div className="small text-danger mt-1">Pago no verificado: {c.pagoRechazoMotivo}</div>}
               {modificable &&
                 (aTiempo ? (
                   <div className="d-flex gap-2 mt-2">
@@ -72,7 +78,12 @@ export function MisCitas() {
         onConfirmar={() => cancelar && cancelacion.mutate(cancelar.id)}
         onCerrar={() => { setCancelar(null); cancelacion.reset(); }}
       >
-        {cancelar && <p className="mb-0">¿Cancelar su cita del {fechaPE(cancelar.fecha)} a las {cancelar.hora}? El horario quedará libre.</p>}
+        {cancelar && (
+          <>
+            <p className="mb-0">¿Cancelar su cita del {fechaPE(cancelar.fecha)} a las {cancelar.hora}? El horario quedará libre.</p>
+            {cancelar.adelantoPagado && <p className="small text-muted mt-2 mb-0">Su adelanto de {solesPE(cancelar.adelantoPagado)} quedará como saldo a favor para su próxima cita.</p>}
+          </>
+        )}
       </ModalConfirmar>
     </>
   );

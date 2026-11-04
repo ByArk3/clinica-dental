@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { citaSchema, confirmacionSchema, disponibilidadQuerySchema, fechaSchema, reprogramarSchema } from '@clinica/shared';
+import { cancelarCitaSchema, reportarPagoSchema, citaSchema, confirmacionSchema, disponibilidadQuerySchema, fechaSchema, reprogramarSchema } from '@clinica/shared';
 import * as ConfirmacionService from '../services/confirmacion.service.js';
+import { prisma } from '../lib/prisma.js';
 import * as CitaService from '../services/cita.service.js';
 import * as DisponibilidadService from '../services/disponibilidad.service.js';
 import * as OdontologoService from '../services/odontologo.service.js';
@@ -34,7 +35,21 @@ export async function reprogramar(req: Request, res: Response) {
   res.json(await CitaService.reprogramarCita(idParam(req), reprogramarSchema.parse(req.body), usuarioActual(req)));
 }
 export async function cancelar(req: Request, res: Response) {
-  res.json(await CitaService.cancelarCita(idParam(req), usuarioActual(req)));
+  res.json(await CitaService.cancelarCita(idParam(req), usuarioActual(req), cancelarCitaSchema.parse(req.body ?? {})));
+}
+
+/** El paciente reporta el pago del adelanto (Yape/Plin) */
+export async function reportarPago(req: Request, res: Response) {
+  res.json(await CitaService.reportarPago(idParam(req), usuarioActual(req), reportarPagoSchema.parse(req.body)));
+}
+
+/** Datos de Yape/Plin de la clínica para pagar el adelanto */
+export const datosPago = async (_req: Request, res: Response) => res.json(await CitaService.datosPago());
+
+/** Tarifario activo (nombre y precio) para elegir el tratamiento previsto al reservar */
+export async function tarifarioPublico(_req: Request, res: Response) {
+  const lista = await prisma.tratamiento.findMany({ where: { activo: true }, orderBy: { nombre: 'asc' }, select: { id: true, nombre: true, precio: true } });
+  res.json(lista.map((t) => ({ id: t.id, nombre: t.nombre, precio: t.precio.toFixed(2) })));
 }
 
 /** CU-09: GET /citas?fecha= */

@@ -1,14 +1,17 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { MENSAJES } from '@clinica/shared';
+import { MENSAJES, rechazarPagoSchema } from '@clinica/shared';
 import { cajaApi, type Comprobante, type PendienteCaja } from '../api/recursos';
-import { fechaPE, mensajeError, solesPE } from '../formato';
+import { ModalConfirmar } from '../components/ModalConfirmar';
+import { fechaHoraPE, fechaPE, mensajeError, solesPE } from '../formato';
 
-/** CU-13 (i_caja): cobrar citas atendidas y adelantos (RN-12), emitir comprobante, imprimir o enviar. */
+/** CU-13 (i_caja): cobrar citas atendidas y adelantos, verificar pagos reportados (Yape/Plin), emitir comprobante. */
 export default function Caja() {
   const pendientes = useQuery({ queryKey: ['caja-pendientes'], queryFn: cajaApi.pendientes, refetchInterval: 30_000 });
+  const campanas = useQuery({ queryKey: ['caja-campanas'], queryFn: cajaApi.campanas, staleTime: 5 * 60_000 });
   const [elegida, setElegida] = useState<PendienteCaja | null>(null);
   const [emitido, setEmitido] = useState<Comprobante | null>(null);
+  const porVerificar = pendientes.data?.filter((p) => p.estado === 'pago_en_verificacion').length ?? 0;
 
   const elegir = (p: PendienteCaja) => {
     setEmitido(null);
@@ -18,25 +21,31 @@ export default function Caja() {
   return (
     <>
       <h1 className="h4 mb-3">Caja</h1>
+      {!!campanas.data?.length && (
+        <div className="alert alert-info small py-2">
+          Campañas vigentes hoy (se aplican solas según la fecha de la cita): {campanas.data.map((c) => `${c.nombre}${c.porcentaje ? ` (${Number(c.porcentaje)} %)` : ' (3x2)'}`).join(' · ')}
+        </div>
+      )}
       <div className="row g-3">
         <div className="col-lg-5">
-          <h2 className="h6 text-uppercase text-muted">Por cobrar</h2>
+          <h2 className="h6 text-uppercase text-muted">Por cobrar {porVerificar > 0 && <span className="badge text-bg-primary ms-1">{porVerificar} pago(s) por verificar</span>}</h2>
           {pendientes.isLoading && <p className="text-muted">Cargando…</p>}
           {pendientes.data?.length === 0 && <div className="tarjeta text-muted">No hay cobros pendientes.</div>}
           <div className="list-group">
             {pendientes.data?.map((p) => (
-              <button
-                key={p.citaId}
-                type="button"
-                className={`list-group-item list-group-item-action ${elegida?.citaId === p.citaId ? 'active' : ''}`}
-                onClick={() => elegir(p)}
-              >
+              <button key={p.citaId} type="button" className={`list-group-item list-group-item-action ${elegida?.citaId === p.citaId ? 'active' : ''}`} onClick={() => elegir(p)}>
                 <div className="d-flex justify-content-between gap-2">
                   <strong>{p.paciente.nombres} {p.paciente.apellidos}</strong>
                   <span className="text-nowrap">{solesPE(p.importe)}</span>
                 </div>
                 <div className="small">
-                  {p.tipo === 'adelanto' ? <span className="badge text-bg-warning me-1">Adelanto</span> : <span className="badge text-bg-info me-1">Servicio</span>}
+                  {p.estado === 'pago_en_verificacion' ? (
+                    <span className="badge text-bg-primary me-1">Verificar {p.pagoReportado?.metodo === 'plin' ? 'Plin' : 'Yape'}</span>
+                  ) : p.tipo === 'adelanto' ? (
+                    <span className="badge text-bg-warning me-1">Adelanto</span>
+                  ) : (
+                    <span className="badge text-bg-info me-1">Servicio</span>
+                  )}
                   {fechaPE(p.fecha)} {p.hora} · {p.odontologo}
                 </div>
               </button>
@@ -47,7 +56,7 @@ export default function Caja() {
           {emitido ? (
             <ComprobanteEmitido c={emitido} onSiguiente={() => { setEmitido(null); setElegida(null); }} />
           ) : elegida ? (
-            <Cobro key={elegida.citaId} pendiente={elegida} onEmitido={setEmitido} />
+            <Cobro key={elegida.citaId} pendiente={elegida} onEmitido={setEmitido} onCerrado={() => setElegida(null)} />
           ) : (
             <div className="tarjeta text-muted">Seleccione una cita para cobrar.</div>
           )}
@@ -57,27 +66,35 @@ export default function Caja() {
   );
 }
 
-function Cobro({ pendiente, onEmitido }: { pendiente: PendienteCaja; onEmitido: (c: Comprobante) => void }) {
+function Cobro({ pendiente, onEmitido, onCerrado }: { pendiente: PendienteCaja; onEmitido: (c: Comprobante) => void; onCerrado: () => void }) {
   const qc = useQueryClient();
-  const [descuentoId, setDescuentoId] = useState<number | undefined>();
   const [tipoPagoId, setTipoPagoId] = useState<number | undefined>();
   const [monto, setMonto] = useState('');
   const [errores, setErrores] = useState<Record<string, string>>({});
+  const [rechazar, setRechazar] = useState(false);
+  const [motivo, setMotivo] = useState('');
+  const [errMotivo, setErrMotivo] = useState<string | null>(null);
 
-  const importe = useQuery({ queryKey: ['importe', pendiente.citaId, descuentoId], queryFn: () => cajaApi.importe(pendiente.citaId, descuentoId), placeholderData: (prev) => prev });
+  const importe = useQuery({ queryKey: ['importe', pendiente.citaId], queryFn: () => cajaApi.importe(pendiente.citaId) });
   const tipos = useQuery({ queryKey: ['tipos-pago'], queryFn: cajaApi.tiposPago, staleTime: Infinity });
-  const descuentos = useQuery({ queryKey: ['descuentos'], queryFn: cajaApi.descuentos, enabled: pendiente.tipo === 'servicio' });
 
   const efectivo = tipos.data?.find((t) => t.id === tipoPagoId)?.nombre.toLowerCase() === 'efectivo';
   const total = Number(importe.data?.total ?? 0);
   const recibido = Number(monto.replace(',', '.'));
   const vuelto = efectivo && monto !== '' && recibido >= total ? recibido - total : null;
+  const listo = (c: Comprobante) => {
+    qc.invalidateQueries({ queryKey: ['caja-pendientes'] });
+    onEmitido(c);
+  };
 
-  const emitir = useMutation({
-    mutationFn: () => cajaApi.emitir(pendiente.citaId, { tipoPagoId: tipoPagoId!, montoRecibido: efectivo ? recibido : undefined, descuentoId: descuentoId ?? null }),
-    onSuccess: (c) => {
+  const emitir = useMutation({ mutationFn: () => cajaApi.emitir(pendiente.citaId, { tipoPagoId: tipoPagoId!, montoRecibido: efectivo ? recibido : undefined }), onSuccess: listo });
+  const aprobar = useMutation({ mutationFn: () => cajaApi.aprobarPago(pendiente.citaId), onSuccess: listo });
+  const rechazo = useMutation({
+    mutationFn: () => cajaApi.rechazarPago(pendiente.citaId, motivo),
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['caja-pendientes'] });
-      onEmitido(c);
+      setRechazar(false);
+      onCerrado();
     },
   });
 
@@ -94,65 +111,105 @@ function Cobro({ pendiente, onEmitido }: { pendiente: PendienteCaja; onEmitido: 
   if (importe.isError) return <div className="alert alert-danger" role="alert">{mensajeError(importe.error)}</div>;
   if (!importe.data) return <p className="text-muted">Calculando importe…</p>;
   const imp = importe.data;
+  const reportado = imp.pagoReportado;
 
   return (
     <form className="tarjeta" onSubmit={enviar} noValidate>
-      <h2 className="h5 mb-1">{imp.tipo === 'adelanto' ? 'Cobro de adelanto' : 'Cobro de servicio'}</h2>
-      <p className="small text-muted">{imp.paciente.nombres} {imp.paciente.apellidos} · DNI {imp.paciente.dni}</p>
-      {imp.tipo === 'adelanto' && (
-        <div className="alert alert-warning small py-2">El paciente tiene 3 o más inasistencias (RN-12). Al pagar el adelanto, su cita sigue el flujo normal de confirmación.</div>
+      <h2 className="h5 mb-1">{reportado ? 'Verificar pago de adelanto' : imp.tipo === 'adelanto' ? 'Cobro de adelanto' : 'Cobro de servicio'}</h2>
+      <p className="small text-muted">
+        {imp.paciente.nombres} {imp.paciente.apellidos} · DNI {imp.paciente.dni}
+        {Number(pendiente.saldoFavor) > 0 && <> · <span className="text-success">saldo a favor {solesPE(pendiente.saldoFavor)}</span></>}
+      </p>
+      {imp.tipo === 'adelanto' && !reportado && (
+        <div className="alert alert-warning small py-2">
+          Adelanto del 50 % ({pendiente.tratamientoPrevisto ?? 'consulta'}). Al pagarlo la cita queda confirmada.
+          {pendiente.adelantoVenceEn && <> Vence a las {fechaHoraPE(pendiente.adelantoVenceEn).slice(-5)}.</>}
+        </div>
       )}
 
       <table className="table table-sm">
         <tbody>
           {imp.lineas.map((l, i) => (
-            <tr key={i}><td>{l.descripcion}</td><td className="text-end text-nowrap">{solesPE(l.precio)}</td></tr>
+            <tr key={i}>
+              <td>
+                {l.descripcion}
+                {l.campana && <div className="small text-success">{l.campana}: − {solesPE(l.descuento)}</div>}
+              </td>
+              <td className="text-end text-nowrap">{solesPE(l.precio)}</td>
+            </tr>
           ))}
           <tr className="border-top"><td>Subtotal</td><td className="text-end">{solesPE(imp.subtotal)}</td></tr>
-          {Number(imp.descuento) > 0 && <tr><td>Descuento ({imp.descuentoAplicado?.nombre})</td><td className="text-end text-success">− {solesPE(imp.descuento)}</td></tr>}
+          {Number(imp.descuento) > 0 && <tr><td>Descuentos de campaña</td><td className="text-end text-success">− {solesPE(imp.descuento)}</td></tr>}
           {Number(imp.adelantoAplicado) > 0 && <tr><td>Adelanto pagado</td><td className="text-end text-success">− {solesPE(imp.adelantoAplicado)}</td></tr>}
-          <tr className="fs-5"><th>Total</th><th className="text-end" data-testid="total">{solesPE(imp.total)}</th></tr>
+          {Number(imp.saldoAplicado) > 0 && <tr><td>Saldo a favor</td><td className="text-end text-success">− {solesPE(imp.saldoAplicado)}</td></tr>}
+          <tr className="fs-5"><th>Total</th><th className="text-end text-nowrap" data-testid="total">{solesPE(imp.total)}</th></tr>
         </tbody>
       </table>
+      {Number(imp.sobrante) > 0 && <div className="alert alert-success small py-2">El adelanto supera el cobro: {solesPE(imp.sobrante)} quedarán como saldo a favor del paciente.</div>}
 
-      {imp.tipo === 'servicio' && !!descuentos.data?.length && (
-        <div className="mb-3">
-          <label htmlFor="descuento" className="form-label">Descuento</label>
-          <select id="descuento" className="form-select" value={descuentoId ?? ''} onChange={(e) => setDescuentoId(e.target.value ? Number(e.target.value) : undefined)}>
-            <option value="">Sin descuento</option>
-            {descuentos.data.map((d) => <option key={d.id} value={d.id}>{d.nombre} ({Number(d.porcentaje)} %)</option>)}
-          </select>
-        </div>
-      )}
-
-      <span className="form-label d-block">Tipo de pago</span>
-      <div className="d-flex flex-wrap gap-2 mb-1" role="radiogroup" aria-label="Tipo de pago">
-        {tipos.data?.map((t) => (
-          <button key={t.id} type="button" role="radio" aria-checked={tipoPagoId === t.id} className={`btn ${tipoPagoId === t.id ? 'btn-acento' : 'btn-outline-secondary'}`} onClick={() => setTipoPagoId(t.id)}>
-            {t.nombre}
+      {reportado ? (
+        <>
+          <div className="border rounded p-2 mb-3 small">
+            Reportó <strong>{reportado.metodo === 'plin' ? 'Plin' : 'Yape'}</strong> · operación <strong>{reportado.numeroOperacion}</strong> · {fechaHoraPE(reportado.reportadoEn)}
+            {reportado.tieneCaptura && (
+              <> · <a href={cajaApi.capturaUrl(pendiente.citaId)} target="_blank" rel="noreferrer">Ver captura</a></>
+            )}
+            <div className="text-muted">Revise en el celular de la clínica que llegó ese pago antes de aprobar.</div>
+          </div>
+          {(aprobar.isError || rechazo.isError) && <div className="alert alert-danger" role="alert">{mensajeError(aprobar.error ?? rechazo.error)}</div>}
+          <div className="d-flex gap-2">
+            <button type="button" className="btn btn-acento flex-grow-1" disabled={aprobar.isPending} onClick={() => aprobar.mutate()}>Aprobar pago y emitir comprobante</button>
+            <button type="button" className="btn btn-outline-danger" onClick={() => setRechazar(true)}>Rechazar</button>
+          </div>
+          <ModalConfirmar
+            abierto={rechazar}
+            titulo="Rechazar pago"
+            textoConfirmar="Rechazar y liberar el horario"
+            peligro
+            procesando={rechazo.isPending}
+            error={errMotivo ?? (rechazo.isError ? mensajeError(rechazo.error) : null)}
+            onConfirmar={() => {
+              const v = rechazarPagoSchema.safeParse({ motivo });
+              if (!v.success) return setErrMotivo(v.error.issues[0].message);
+              setErrMotivo(null);
+              rechazo.mutate();
+            }}
+            onCerrar={() => setRechazar(false)}
+          >
+            <label htmlFor="motivo-rechazo" className="form-label">Motivo (se le enviará al paciente)</label>
+            <input id="motivo-rechazo" className="form-control" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej.: no llegó ningún pago con ese número" />
+          </ModalConfirmar>
+        </>
+      ) : (
+        <>
+          <span className="form-label d-block">Tipo de pago</span>
+          <div className="d-flex flex-wrap gap-2 mb-1" role="radiogroup" aria-label="Tipo de pago">
+            {tipos.data?.map((t) => (
+              <button key={t.id} type="button" role="radio" aria-checked={tipoPagoId === t.id} className={`btn ${tipoPagoId === t.id ? 'btn-acento' : 'btn-outline-secondary'}`} onClick={() => setTipoPagoId(t.id)}>
+                {t.nombre}
+              </button>
+            ))}
+          </div>
+          {errores.tipoPagoId && <div className="text-danger small">{errores.tipoPagoId}</div>}
+          {efectivo && (
+            <div className="row g-2 mt-2 align-items-end">
+              <div className="col-6">
+                <label htmlFor="monto" className="form-label">Monto recibido (S/)</label>
+                <input id="monto" inputMode="decimal" className={`form-control ${errores.montoRecibido ? 'is-invalid' : ''}`} value={monto} onChange={(e) => setMonto(e.target.value)} />
+                <div className="invalid-feedback">{errores.montoRecibido}</div>
+              </div>
+              <div className="col-6">
+                <span className="form-label d-block">Vuelto</span>
+                <div className="fs-5 fw-semibold" data-testid="vuelto">{vuelto !== null ? solesPE(vuelto) : '—'}</div>
+              </div>
+            </div>
+          )}
+          {emitir.isError && <div className="alert alert-danger mt-3" role="alert">{mensajeError(emitir.error)}</div>}
+          <button type="submit" className="btn btn-acento w-100 mt-3" disabled={emitir.isPending}>
+            {emitir.isPending ? 'Emitiendo…' : `Emitir comprobante por ${solesPE(imp.total)}`}
           </button>
-        ))}
-      </div>
-      {errores.tipoPagoId && <div className="text-danger small">{errores.tipoPagoId}</div>}
-
-      {efectivo && (
-        <div className="row g-2 mt-2 align-items-end">
-          <div className="col-6">
-            <label htmlFor="monto" className="form-label">Monto recibido (S/)</label>
-            <input id="monto" inputMode="decimal" className={`form-control ${errores.montoRecibido ? 'is-invalid' : ''}`} value={monto} onChange={(e) => setMonto(e.target.value)} />
-            <div className="invalid-feedback">{errores.montoRecibido}</div>
-          </div>
-          <div className="col-6">
-            <span className="form-label d-block">Vuelto</span>
-            <div className="fs-5 fw-semibold" data-testid="vuelto">{vuelto !== null ? solesPE(vuelto) : '—'}</div>
-          </div>
-        </div>
+        </>
       )}
-
-      {emitir.isError && <div className="alert alert-danger mt-3" role="alert">{mensajeError(emitir.error)}</div>}
-      <button type="submit" className="btn btn-acento w-100 mt-3" disabled={emitir.isPending}>
-        {emitir.isPending ? 'Emitiendo…' : `Emitir comprobante por ${solesPE(imp.total)}`}
-      </button>
     </form>
   );
 }
@@ -179,20 +236,16 @@ function ComprobanteEmitido({ c, onSiguiente }: { c: Comprobante; onSiguiente: (
   return (
     <div className="tarjeta">
       <h2 className="h5">Comprobante {c.numero} emitido</h2>
-      <p className="mb-1">{c.paciente.nombres} {c.paciente.apellidos} · {c.tipoPago}</p>
+      <p className="mb-1">{c.paciente.nombres} {c.paciente.apellidos} · {c.tipoPago}{c.operacion && ` (op. ${c.operacion})`}</p>
       <p className="fs-5 mb-1">Total: <strong>{solesPE(c.total)}</strong></p>
       {Number(c.vuelto) > 0 && <p className="fs-5">Vuelto: <strong>{solesPE(c.vuelto)}</strong></p>}
-      {c.tipo === 'adelanto' && <p className="small text-muted">La cita quedó «{c.estadoCita === 'confirmada' ? 'Confirmada' : 'Pendiente de confirmación'}».</p>}
+      {c.tipo === 'adelanto' && <p className="small text-muted">La cita quedó «Confirmada».</p>}
+      {Number(c.saldoGenerado) > 0 && <p className="small text-success">{solesPE(c.saldoGenerado)} quedaron como saldo a favor (saldo actual: {solesPE(c.paciente.saldoFavor)}).</p>}
       <div className="d-flex flex-wrap gap-2 mt-3">
         <button className="btn btn-outline-secondary" onClick={() => imprimir.mutate()} disabled={imprimir.isPending}>
           {imprimir.isError ? 'Reintentar impresión' : 'Imprimir (PDF)'}
         </button>
-        <button
-          className="btn btn-outline-secondary"
-          disabled={!c.paciente.tieneCorreo || correo.isPending}
-          title={c.paciente.tieneCorreo ? undefined : MENSAJES.PACIENTE_SIN_CORREO}
-          onClick={() => correo.mutate()}
-        >
+        <button className="btn btn-outline-secondary" disabled={!c.paciente.tieneCorreo || correo.isPending} title={c.paciente.tieneCorreo ? undefined : MENSAJES.PACIENTE_SIN_CORREO} onClick={() => correo.mutate()}>
           {enviado ? 'Reenviar por correo' : 'Enviar por correo'}
         </button>
         <button className="btn btn-acento ms-auto" onClick={onSiguiente}>Siguiente cobro</button>

@@ -10,15 +10,15 @@ const ejecutar = (nombre: string, tarea: () => Promise<unknown>) => async () => 
   }
 };
 
-/** Sección 11: cada 15 min, en hora de Lima. Primero se libera y luego se recuerda. */
+/** Cada 5 min (el adelanto vence en 1 hora), en hora de Lima. Primero se libera y luego se recuerda. */
 export function iniciarTareas() {
   cron.schedule(
-    '*/15 * * * *',
+    '*/5 * * * *',
     async () => {
       await ejecutar('liberar citas (RN-04)', liberarCitas)();
       await ejecutar('enviar recordatorios (CU-08)', enviarRecordatorios)();
     },
     { timezone: 'America/Lima' },
   );
-  console.info('[tarea] programadas: liberar citas y recordatorios cada 15 min');
+  console.info('[tarea] programadas: liberar citas y recordatorios cada 5 min');
 }

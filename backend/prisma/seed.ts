@@ -8,7 +8,8 @@ export const PASSWORD = 'Clinica2026';
 const t = (h: string) => new Date(`1970-01-01T${h}:00Z`);
 const d = (f: string) => new Date(`${f}T00:00:00Z`);
 
-async function usuario(prisma: PrismaClient, nombres: string, email: string, rol: Rol, hash: string) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function usuario(prisma: PrismaClient<any>, nombres: string, email: string, rol: Rol, hash: string) {
   return prisma.usuario.upsert({
     where: { email },
     update: {},
@@ -16,15 +17,44 @@ async function usuario(prisma: PrismaClient, nombres: string, email: string, rol
   });
 }
 
-export async function sembrar(prisma: PrismaClient, { silencioso = false } = {}) {
+/** Feriados nacionales del Perú (no se atiende). Semana Santa: 2026 → 2 y 3 abr; 2027 → 25 y 26 mar. */
+const FERIADOS: [string, string][] = [
+  ['01-01', 'Año Nuevo'],
+  ['05-01', 'Día del Trabajo'],
+  ['06-07', 'Batalla de Arica y Día de la Bandera'],
+  ['06-29', 'San Pedro y San Pablo'],
+  ['07-23', 'Día de la Fuerza Aérea del Perú'],
+  ['07-28', 'Fiestas Patrias'],
+  ['07-29', 'Fiestas Patrias'],
+  ['08-06', 'Batalla de Junín'],
+  ['08-30', 'Santa Rosa de Lima'],
+  ['10-08', 'Combate de Angamos'],
+  ['11-01', 'Día de Todos los Santos'],
+  ['12-08', 'Inmaculada Concepción'],
+  ['12-09', 'Batalla de Ayacucho'],
+  ['12-25', 'Navidad'],
+];
+const SEMANA_SANTA: Record<number, [string, string]> = { 2026: ['04-02', '04-03'], 2027: ['03-25', '03-26'] };
+
+interface OpcionesSemilla {
+  silencioso?: boolean;
+  /** Horario propio de cada odontólogo (si no, todos usan el general L–S 08:00–20:00) */
+  horariosEjemplo?: boolean;
+  campanas?: boolean;
+  feriados?: boolean;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function sembrar(prisma: PrismaClient<any>, { silencioso = false, horariosEjemplo = true, campanas = true, feriados = true }: OpcionesSemilla = {}) {
   const hash = await bcrypt.hash(PASSWORD, 10);
 
-  // --- Configuración (P5, P6) ---
+  // --- Configuración: bloques de 30 min (P5) y datos de Yape/Plin para el adelanto (FICTICIOS) ---
   for (const [clave, valor] of [
     ['duracion_bloque_min', '30'],
-    ['monto_adelanto', '30.00'],
+    ['pago_numero', '987654321'],
+    ['pago_titular', 'Clínica Dental (ficticio)'],
   ]) {
-    await prisma.configuracion.upsert({ where: { clave }, update: { valor }, create: { clave, valor } });
+    await prisma.configuracion.upsert({ where: { clave }, update: {}, create: { clave, valor } });
   }
 
   // --- Usuarios del personal ---
@@ -48,6 +78,18 @@ export async function sembrar(prisma: PrismaClient, { silencioso = false } = {})
     await prisma.horarioAtencion.createMany({
       data: [1, 2, 3, 4, 5, 6].map((dia) => ({ odontologoId: null, diaSemana: dia, horaInicio: t('08:00'), horaFin: t('20:00') })),
     });
+  }
+  // Horario propio de ejemplo: Dr. Paredes L–V 08:00–14:00 · Dra. Díaz L–S 14:00–20:00 (el Administrador lo cambia)
+  if (horariosEjemplo) {
+    const ejemplo: [string, number[], string, string][] = [
+      ['luis.paredes@clinica.local', [1, 2, 3, 4, 5], '08:00', '14:00'],
+      ['carmen.diaz@clinica.local', [1, 2, 3, 4, 5, 6], '14:00', '20:00'],
+    ];
+    for (const [email, dias, inicio, fin] of ejemplo) {
+      const o = await prisma.odontologo.findFirstOrThrow({ where: { usuario: { email } } });
+      if ((await prisma.horarioAtencion.count({ where: { odontologoId: o.id } })) > 0) continue;
+      await prisma.horarioAtencion.createMany({ data: dias.map((dia) => ({ odontologoId: o.id, diaSemana: dia, horaInicio: t(inicio), horaFin: t(fin) })) });
+    }
   }
 
   // --- Pacientes (ficticios). María Quispe tiene cuenta web. ---
@@ -87,6 +129,8 @@ export async function sembrar(prisma: PrismaClient, { silencioso = false } = {})
     { nombre: 'Pasta profiláctica', unidad: 'pote', stock: 6, minimo: 3 },
     { nombre: 'Gel blanqueador', unidad: 'jeringa', stock: 4, minimo: 2 },
     { nombre: 'Gasa estéril', unidad: 'paquete', stock: 20, minimo: 8 },
+    { nombre: 'Barniz de flúor', unidad: 'dosis', stock: 30, minimo: 10 },
+    { nombre: 'Sellante de fosas y fisuras', unidad: 'jeringa', stock: 6, minimo: 2 },
   ];
   const admin = await prisma.usuario.findUniqueOrThrow({ where: { email: 'carlos.vega@clinica.local' } });
   const idInsumo: Record<string, number> = {};
@@ -107,13 +151,17 @@ export async function sembrar(prisma: PrismaClient, { silencioso = false } = {})
   }
 
   // --- Tarifario (RN-08) con los insumos que consume cada tratamiento ---
-  // TODO(decisión): precios de Extracción, Blanqueamiento y Consulta no figuran en el informe; valores de ejemplo.
+  // Precios estimados para Trujillo (nov. 2026), acordados con el equipo; la clínica debe confirmarlos.
   const tarifario: { nombre: string; precio: number; insumos: [string, number][] }[] = [
-    { nombre: 'Curación con resina', precio: 120, insumos: [['Resina compuesta A2', 1], ['Anestesia lidocaína 2 %', 1], ['Guantes de nitrilo M', 1]] },
-    { nombre: 'Profilaxis', precio: 80, insumos: [['Pasta profiláctica', 1], ['Copa de goma', 1]] },
-    { nombre: 'Extracción', precio: 100, insumos: [['Anestesia lidocaína 2 %', 1], ['Gasa estéril', 1], ['Guantes de nitrilo M', 1]] },
-    { nombre: 'Blanqueamiento', precio: 350, insumos: [['Gel blanqueador', 1], ['Guantes de nitrilo M', 1]] },
     { nombre: 'Consulta', precio: 40, insumos: [['Guantes de nitrilo M', 1]] },
+    { nombre: 'Profilaxis', precio: 80, insumos: [['Pasta profiláctica', 1], ['Copa de goma', 1]] },
+    { nombre: 'Destartraje', precio: 120, insumos: [['Pasta profiláctica', 1], ['Copa de goma', 1], ['Guantes de nitrilo M', 1]] },
+    { nombre: 'Curación con resina', precio: 120, insumos: [['Resina compuesta A2', 1], ['Anestesia lidocaína 2 %', 1], ['Guantes de nitrilo M', 1]] },
+    { nombre: 'Extracción simple', precio: 80, insumos: [['Anestesia lidocaína 2 %', 1], ['Gasa estéril', 1], ['Guantes de nitrilo M', 1]] },
+    { nombre: 'Extracción compleja', precio: 250, insumos: [['Anestesia lidocaína 2 %', 2], ['Gasa estéril', 2], ['Guantes de nitrilo M', 1]] },
+    { nombre: 'Blanqueamiento', precio: 450, insumos: [['Gel blanqueador', 1], ['Guantes de nitrilo M', 1]] },
+    { nombre: 'Aplicación de flúor', precio: 40, insumos: [['Barniz de flúor', 1], ['Guantes de nitrilo M', 1]] },
+    { nombre: 'Sellante (por pieza)', precio: 35, insumos: [['Sellante de fosas y fisuras', 0.25]] },
   ];
   for (const tr of tarifario) {
     if (await prisma.tratamiento.findUnique({ where: { nombre: tr.nombre } })) continue;
@@ -138,16 +186,51 @@ export async function sembrar(prisma: PrismaClient, { silencioso = false } = {})
     create: { ruc: '20487654321', razonSocial: 'Dental Sur E.I.R.L.', telefono: '044205678' },
   });
 
-  // --- Tipos de pago y descuentos (P3) ---
+  // --- Tipos de pago ---
   for (const nombre of ['Efectivo', 'Tarjeta', 'Yape/Plin']) {
     await prisma.tipoPago.upsert({ where: { nombre }, update: {}, create: { nombre } });
   }
-  // TODO(decisión P3): descuentos reales por definir con la clínica
-  await prisma.descuento.upsert({
-    where: { nombre: 'Paciente frecuente' },
-    update: {},
-    create: { nombre: 'Paciente frecuente', porcentaje: 10 },
-  });
+
+  const anio = Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima', year: 'numeric' }).format(new Date()));
+  const idTrat = async (nombre: string) => (await prisma.tratamiento.findUniqueOrThrow({ where: { nombre } })).id;
+
+  // --- Campañas de descuento (acordadas con el equipo; porcentajes editables por el Administrador) ---
+  if (campanas) {
+    for (const a of [anio, anio + 1]) {
+      const lista: { nombre: string; tipo?: 'porcentaje' | 'tres_por_dos'; porcentaje?: number; desde: string; hasta: string; edadMaxima?: number; tratamientos: string[] }[] = [
+        { nombre: `Campaña escolar ${a}`, porcentaje: 30, desde: `${a}-02-01`, hasta: `${a}-03-31`, edadMaxima: 17, tratamientos: ['Aplicación de flúor', 'Sellante (por pieza)'] },
+        { nombre: `Fiestas Patrias ${a} — limpieza`, porcentaje: 20, desde: `${a}-07-01`, hasta: `${a}-07-31`, tratamientos: ['Profilaxis', 'Destartraje'] },
+        { nombre: `Fiestas Patrias ${a} — blanqueamiento`, porcentaje: 25, desde: `${a}-07-01`, hasta: `${a}-07-31`, tratamientos: ['Blanqueamiento'] },
+        { nombre: `Fiestas Patrias ${a} — resinas 3x2`, tipo: 'tres_por_dos', desde: `${a}-07-01`, hasta: `${a}-07-31`, tratamientos: ['Curación con resina'] },
+        { nombre: `Día de la Odontología Peruana ${a}`, porcentaje: 50, desde: `${a}-12-04`, hasta: `${a}-12-04`, tratamientos: ['Consulta'] },
+        { nombre: `Campaña navideña ${a}`, porcentaje: 20, desde: `${a}-12-01`, hasta: `${a}-12-31`, tratamientos: ['Blanqueamiento', 'Destartraje'] },
+      ];
+      for (const c of lista) {
+        if (await prisma.descuento.findUnique({ where: { nombre: c.nombre } })) continue;
+        await prisma.descuento.create({
+          data: {
+            nombre: c.nombre,
+            tipo: c.tipo ?? 'porcentaje',
+            porcentaje: c.tipo === 'tres_por_dos' ? null : c.porcentaje,
+            fechaInicio: d(c.desde),
+            fechaFin: d(c.hasta),
+            edadMaxima: c.edadMaxima ?? null,
+            tratamientos: { create: await Promise.all(c.tratamientos.map(async (n) => ({ tratamientoId: await idTrat(n) }))) },
+          },
+        });
+      }
+    }
+  }
+
+  // --- Feriados nacionales (no se atiende) ---
+  if (feriados) {
+    for (const a of [anio, anio + 1]) {
+      const dias = [...FERIADOS, ...(SEMANA_SANTA[a] ? [[SEMANA_SANTA[a][0], 'Jueves Santo'], [SEMANA_SANTA[a][1], 'Viernes Santo']] : [])] as [string, string][];
+      for (const [md, nombre] of dias) {
+        await prisma.feriado.upsert({ where: { fecha: d(`${a}-${md}`) }, update: {}, create: { fecha: d(`${a}-${md}`), nombre } });
+      }
+    }
+  }
 
   if (!silencioso) console.info(`Semilla cargada. Contraseña de los usuarios de prueba: ${PASSWORD}`);
 }

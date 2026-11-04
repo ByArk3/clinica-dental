@@ -41,7 +41,8 @@ export default function Panel() {
             )}
             <hr />
             <div className="small">Inasistencias este mes: <strong>{p.agenda.inasistenciasMes}</strong></div>
-            <div className="small">Pacientes con adelanto obligatorio: <strong>{p.agenda.pacientesRestringidos}</strong></div>
+            <div className="small">Pacientes con 3+ faltas (pagan adelanto): <strong>{p.agenda.pacientesRestringidos}</strong></div>
+            <div className="small">Pagos de adelanto por verificar en caja: <strong>{p.agenda.pagosPorVerificar}</strong></div>
           </div>
         </div>
         <div className="col-lg-4">

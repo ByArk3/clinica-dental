@@ -3,11 +3,12 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { ErrorNegocio } from '../lib/errores.js';
 import { dateAFecha, dateAHora } from '../lib/fechas.js';
-import { horasParaCita } from './cita.service.js';
+import { horasParaCita, resolverAdelantoAlCancelar } from './cita.service.js';
 
-type CitaToken = Prisma.CitaGetPayload<{
-  include: { paciente: { select: { nombres: true } }; odontologo: { include: { usuario: { select: { nombres: true } } } } };
-}>;
+type CitaToken = Omit<
+  Prisma.CitaGetPayload<{ include: { paciente: { select: { nombres: true } }; odontologo: { include: { usuario: { select: { nombres: true } } } } } }>,
+  'pagoCaptura'
+>;
 
 /** Qué puede hacer el paciente con el enlace según el estado y el plazo de 24 h (RN-04). */
 function evaluar(c: CitaToken): { puedeResponder: boolean; mensaje?: string; codigo?: string; status?: number } {
@@ -62,6 +63,11 @@ export async function responder(token: string, accion: 'confirmar' | 'cancelar')
     const cita = await tx.cita.findUniqueOrThrow({ where: { id: actual.id }, include: INCLUIR });
     const r = evaluar(cita);
     if (!r.puedeResponder) throw new ErrorNegocio(r.status!, r.codigo!, r.mensaje!);
+    if (accion === 'cancelar') {
+      // Si había pagado adelanto: cancela con ≥ 24 h (el enlace solo lo permite así) → saldo a favor
+      const c = await tx.cita.findUniqueOrThrow({ where: { id: cita.id }, include: { comprobantes: true, paciente: true } });
+      await resolverAdelantoAlCancelar(tx, c, c.paciente.usuarioId ?? c.creadoPorId, false);
+    }
     const actualizada = await tx.cita.update({
       where: { id: cita.id },
       data: { estado: accion === 'confirmar' ? 'confirmada' : 'cancelada' },

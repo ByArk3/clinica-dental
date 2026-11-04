@@ -117,11 +117,10 @@ describe('CU-07 Cancelar cita', () => {
   });
 });
 
-describe('Reservas de último momento (RN-04)', () => {
-  it('una cita registrada con menos de 24 h de anticipación queda «Confirmada»', async () => {
+describe('Reservas de último momento (< 24 h)', () => {
+  it('quedan «Pendiente de adelanto»: 50 % de la consulta y 1 hora para pagar', async () => {
     const recep = await sesion('recepcionista');
     const odontologoId = await idOdontologo();
-    // busca el primer horario libre dentro de las próximas 24 h
     const { ahoraLima, sumarDias } = await import('../src/lib/fechas.js');
     const hoy = ahoraLima().fecha;
     let elegido: { fecha: string; hora: string } | null = null;
@@ -134,8 +133,13 @@ describe('Reservas de último momento (RN-04)', () => {
       if (elegido) break;
     }
     if (!elegido) return; // (p. ej. sábado de noche: no hay atención en las próximas 24 h)
+    const antes = Date.now();
     const r = await recep.post('/api/citas').send({ ...elegido, odontologoId, pacienteId: await idPaciente('70112233'), motivo: 'Urgencia' });
     expect(r.status).toBe(201);
-    expect(r.body.cita.estado).toBe('confirmada');
+    expect(r.body.cita).toMatchObject({ estado: 'pendiente_adelanto', tratamientoPrevisto: 'Consulta', montoAdelanto: '20.00' });
+    const vence = new Date(r.body.cita.adelantoVenceEn).getTime();
+    expect(vence - antes).toBeGreaterThanOrEqual(59 * 60_000);
+    expect(vence - antes).toBeLessThanOrEqual(61 * 60_000);
+    expect(r.body.pago).toEqual({ numero: '987654321', titular: 'Clínica Dental (ficticio)' });
   });
 });

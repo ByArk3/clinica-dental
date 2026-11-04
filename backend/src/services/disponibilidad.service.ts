@@ -10,11 +10,17 @@ async function duracionBloque(db: Tx | typeof prisma) {
   return Number(c?.valor ?? 30); // P5: bloques de 30 min
 }
 
+/** Nombre del feriado de esa fecha, o null. En feriado no se atiende. */
+export async function feriadoEn(db: Tx | typeof prisma, fecha: string) {
+  return (await db.feriado.findUnique({ where: { fecha: fechaADate(fecha) } }))?.nombre ?? null;
+}
+
 /**
  * Bloques del horario de atención (RN-03) de un odontólogo en una fecha.
  * Usa el horario propio del odontólogo si lo tiene; si no, el horario general (odontologo_id NULL). P4/P5.
  */
 export async function bloquesDelHorario(db: Tx | typeof prisma, odontologoId: number, fecha: string) {
+  if (await feriadoEn(db, fecha)) return [];
   const dia = diaSemana(fecha);
   let tramos = await db.horarioAtencion.findMany({ where: { odontologoId, diaSemana: dia } });
   if (tramos.length === 0) {
@@ -64,11 +70,12 @@ export async function consultarDisponibilidad(odontologoId: number, fecha: strin
   }
   const { atiende, horarios } = await horariosLibres(odontologoId, fecha);
   if (horarios.length > 0) return { fecha, atiende, horarios };
+  const feriado = await feriadoEn(prisma, fecha);
   return {
     fecha,
     atiende,
     horarios,
-    mensaje: atiende ? MENSAJES.SIN_HORARIOS : MENSAJES.CLINICA_NO_ATIENDE,
+    mensaje: feriado ? `${MENSAJES.CLINICA_FERIADO}: ${feriado}` : atiende ? MENSAJES.SIN_HORARIOS : MENSAJES.CLINICA_NO_ATIENDE,
     siguienteFechaDisponible: await siguienteFecha(odontologoId, sumarDias(fecha, 1)),
   };
 }

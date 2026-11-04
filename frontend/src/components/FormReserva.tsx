@@ -4,8 +4,9 @@ import { citaSchema } from '@clinica/shared';
 import { citasApi, type Cita } from '../api/recursos';
 import { ApiError } from '../api/cliente';
 import { SelectorHorarios } from './SelectorHorarios';
-import { fechaPE, hoyLima } from '../formato';
+import { fechaPE, hoyLima, solesPE } from '../formato';
 import { ChipEstado } from './ChipEstado';
+import { PanelPagoAdelanto } from './PanelPagoAdelanto';
 
 interface Props {
   /** Presencial: paciente buscado por DNI. Web: undefined (el servidor usa el de la sesión). */
@@ -23,6 +24,8 @@ export function FormReserva({ pacienteId, onRegistrada }: Props) {
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [registrada, setRegistrada] = useState<{ cita: Cita; aviso?: string } | null>(null);
+  const [tratamientoId, setTratamientoId] = useState<number | ''>('');
+  const tarifario = useQuery({ queryKey: ['tarifario-publico'], queryFn: citasApi.tarifario, staleTime: 5 * 60_000 });
 
   const odontologos = useQuery({ queryKey: ['odontologos'], queryFn: citasApi.odontologos });
   const disponibilidad = useQuery({
@@ -60,7 +63,7 @@ export function FormReserva({ pacienteId, onRegistrada }: Props) {
   function enviar(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    const datos = { pacienteId, odontologoId: Number(odontologoId) || 0, fecha, hora: hora ?? '', motivo };
+    const datos = { pacienteId, odontologoId: Number(odontologoId) || 0, fecha, hora: hora ?? '', motivo, ...(tratamientoId ? { tratamientoPrevistoId: Number(tratamientoId) } : {}) };
     const v = citaSchema.safeParse(datos);
     if (!v.success) {
       const campos: Record<string, string> = {};
@@ -84,8 +87,13 @@ export function FormReserva({ pacienteId, onRegistrada }: Props) {
         <p>
           <ChipEstado estado={cita.estado} />
         </p>
-        {aviso ? (
-          <div className="alert alert-warning">{aviso}</div>
+        {cita.estado === 'pendiente_adelanto' || cita.estado === 'pago_en_verificacion' ? (
+          <>
+            {aviso && <div className="alert alert-warning">{aviso}</div>}
+            <div className="mb-3">
+              <PanelPagoAdelanto cita={cita} modo={pacienteId ? 'presencial' : 'web'} onReportado={(c) => setRegistrada({ cita: c })} />
+            </div>
+          </>
         ) : (
           <p className="text-muted small">48 horas antes recibirá un enlace para confirmarla. Si no la confirma 24 horas antes, el horario se libera.</p>
         )}
@@ -102,6 +110,17 @@ export function FormReserva({ pacienteId, onRegistrada }: Props) {
         <label htmlFor="motivo" className="form-label">Motivo</label>
         <input id="motivo" className={`form-control ${errores.motivo ? 'is-invalid' : ''}`} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej.: dolor de muela, limpieza" />
         <div className="invalid-feedback">{errores.motivo}</div>
+      </div>
+      <div className="mb-3">
+        <label htmlFor="tratamiento-previsto" className="form-label">Tratamiento previsto</label>
+        <select id="tratamiento-previsto" className={`form-select ${errores.tratamientoPrevistoId ? 'is-invalid' : ''}`} value={tratamientoId} onChange={(e) => setTratamientoId(e.target.value ? Number(e.target.value) : '')}>
+          <option value="">No sé / Consulta</option>
+          {tarifario.data?.filter((t) => t.nombre !== 'Consulta').map((t) => (
+            <option key={t.id} value={t.id}>{t.nombre} — {solesPE(t.precio)}</option>
+          ))}
+        </select>
+        <div className="invalid-feedback">{errores.tratamientoPrevistoId}</div>
+        <div className="form-text">Si la cita es en menos de 24 horas (o tiene 3 faltas), se pide un adelanto del 50 % de este tratamiento.</div>
       </div>
       <div className="row g-3 mb-3">
         <div className="col-sm-6">

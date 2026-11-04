@@ -13,6 +13,7 @@ export const ESTADOS_CITA = [
   'cancelada',
   'liberada',
   'inasistencia',
+  'pago_en_verificacion',
 ] as const;
 export type EstadoCita = (typeof ESTADOS_CITA)[number];
 
@@ -25,6 +26,7 @@ export const ETIQUETA_ESTADO_CITA: Record<EstadoCita, string> = {
   cancelada: 'Cancelada',
   liberada: 'Liberada',
   inasistencia: 'Inasistencia',
+  pago_en_verificacion: 'Pago en verificación',
 };
 
 export const CANALES = ['web', 'presencial'] as const;
@@ -44,7 +46,15 @@ export const MENSAJES = {
   SIN_PERMISO: 'No tiene permiso para realizar esta acción',
   NO_AUTENTICADO: 'Su sesión expiró; inicie sesión nuevamente',
   ADELANTO_OBLIGATORIO:
-    'El paciente tiene 3 o más inasistencias: la cita queda pendiente de adelanto hasta que se pague en caja',
+    'Esta cita requiere un adelanto del 50 % del tratamiento. Debe pagarse dentro de 1 hora; si no, el horario se libera',
+  CLINICA_FERIADO: 'La clínica no atiende ese día por feriado',
+  TRATAMIENTO_PREVISTO_REQUERIDO: 'Elija el tratamiento previsto',
+  ADELANTO_VENCIDO: 'El plazo de 1 hora para pagar el adelanto venció; el horario fue liberado',
+  PAGO_NO_REPORTABLE: 'Esta cita no tiene un adelanto pendiente de pago',
+  PAGO_EN_VERIFICACION: 'El pago del adelanto está en verificación; espere a que la clínica lo confirme',
+  PAGO_NO_VERIFICABLE: 'La cita no tiene un pago reportado para verificar',
+  HORARIO_INVALIDO: 'Horario inválido',
+  FERIADO_DUPLICADO: 'Ya existe un feriado en esa fecha',
   ENLACE_INVALIDO: 'El enlace de recuperación no es válido o ya venció',
   ODONTOLOGO_NO_DISPONIBLE: 'El odontólogo no está disponible',
   // CU-07
@@ -108,6 +118,11 @@ export const MENSAJES = {
 
 /** Estados en los que la cita todavía puede reprogramarse o cancelarse (CU-07). */
 export const ESTADOS_MODIFICABLES: EstadoCita[] = ['pendiente_confirmacion', 'pendiente_adelanto', 'confirmada'];
+/** Adelanto: 50 % del tratamiento previsto, a pagar dentro de 1 hora desde la reserva. */
+export const PORCENTAJE_ADELANTO = 50;
+export const MINUTOS_PAGO_ADELANTO = 60;
+/** Horario máximo de la clínica (lunes a sábado). Los horarios de los odontólogos deben estar dentro. */
+export const HORARIO_CLINICA = { dias: [1, 2, 3, 4, 5, 6], apertura: '08:00', cierre: '20:00' } as const;
 /** P8: el paciente puede reprogramar o cancelar por la web hasta 24 h antes. */
 export const HORAS_LIMITE_PACIENTE = 24;
 
@@ -166,8 +181,26 @@ export const citaSchema = z.object({
   fecha: fechaSchema,
   hora: horaSchema,
   motivo: z.string().trim().min(3, 'Indique el motivo de la cita').max(200),
+  // Sirve para calcular el adelanto (si corresponde) y para la agenda. Por defecto: Consulta.
+  tratamientoPrevistoId: z.coerce.number().int().positive().optional().nullable(),
 });
 export type CitaDTO = z.infer<typeof citaSchema>;
+
+/** El paciente reporta su pago de adelanto por Yape/Plin (opción 1: verificación manual en caja). */
+const MAX_CAPTURA_BYTES = 2 * 1024 * 1024;
+export const reportarPagoSchema = z.object({
+  metodo: z.enum(['yape', 'plin'], { errorMap: () => ({ message: 'Elija Yape o Plin' }) }),
+  numeroOperacion: z.string().trim().regex(/^[A-Za-z0-9-]{4,40}$/, 'Ingrese el número de operación que le dio la aplicación'),
+  // Imagen opcional como data URL (png/jpeg/webp), máx. 2 MB
+  captura: z
+    .string()
+    .regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/, 'La captura debe ser una imagen PNG, JPG o WEBP')
+    .refine((d) => Math.floor(((d.length - d.indexOf(',') - 1) * 3) / 4) <= MAX_CAPTURA_BYTES, 'La captura no debe pasar de 2 MB')
+    .optional(),
+});
+export type ReportarPagoDTO = z.infer<typeof reportarPagoSchema>;
+export const rechazarPagoSchema = z.object({ motivo: z.string().trim().min(5, 'Indique el motivo del rechazo').max(300) });
+export const cancelarCitaSchema = z.object({ porClinica: z.boolean().optional() });
 
 // ---------- CU-04 Actualizar datos de contacto ----------
 export const contactoSchema = z.object({
@@ -259,14 +292,15 @@ export const comprobanteSchema = z.object({
     .min(0, 'No puede ser negativo')
     .refine((n) => Math.abs(n * 100 - Math.round(n * 100)) < 1e-6, 'Máximo 2 decimales')
     .optional(),
-  descuentoId: z.coerce.number().int().positive().optional().nullable(),
 });
 export type ComprobanteDTO = z.infer<typeof comprobanteSchema>;
 
 export interface LineaImporte {
   tratamientoId: number | null;
   descripcion: string;
-  precio: string;
+  precio: string; // precio de lista
+  descuento: string; // descuento de campaña de la línea
+  campana: string | null;
 }
 export interface Importe {
   citaId: number;
@@ -274,10 +308,12 @@ export interface Importe {
   paciente: { id: number; dni: string; nombres: string; apellidos: string; email: string | null };
   lineas: LineaImporte[];
   subtotal: string;
-  descuento: string;
-  descuentoAplicado: { id: number; nombre: string; porcentaje: string } | null;
+  descuento: string; // suma de los descuentos de campaña
   adelantoAplicado: string;
+  saldoAplicado: string; // saldo a favor usado en este cobro
+  sobrante: string; // adelanto que no se usó → pasa a saldo a favor
   total: string;
+  pagoReportado?: { metodo: 'yape' | 'plin'; numeroOperacion: string; reportadoEn: string; tieneCaptura: boolean } | null;
 }
 
 // ---------- Proveedores (CU-26..29) ----------
@@ -340,12 +376,39 @@ export const usuarioModificarSchema = usuarioSchema.extend({ password: passwordS
 export type UsuarioNuevoDTO = z.infer<typeof usuarioNuevoSchema>;
 export type UsuarioModificarDTO = z.infer<typeof usuarioModificarSchema>;
 
-// ---------- Descuentos (P3) ----------
-export const descuentoSchema = z.object({
-  nombre: z.string().trim().min(3, 'Ingrese el nombre').max(80),
-  porcentaje: z.coerce.number({ invalid_type_error: 'Ingrese un porcentaje' }).gt(0, 'Debe ser mayor que 0').max(100, 'Máximo 100 %'),
-});
+// ---------- Campañas de descuento ----------
+export const descuentoSchema = z
+  .object({
+    nombre: z.string().trim().min(3, 'Ingrese el nombre').max(80),
+    tipo: z.enum(['porcentaje', 'tres_por_dos']).default('porcentaje'),
+    porcentaje: z.coerce.number({ invalid_type_error: 'Ingrese un porcentaje' }).gt(0, 'Debe ser mayor que 0').max(100, 'Máximo 100 %').optional().nullable(),
+    fechaInicio: fechaSchema,
+    fechaFin: fechaSchema,
+    edadMaxima: z.coerce.number().int().min(0).max(120).optional().nullable(),
+    tratamientos: z.array(z.coerce.number().int().positive()).min(1, 'Elija al menos un tratamiento'),
+  })
+  .refine((d) => d.fechaInicio <= d.fechaFin, { message: 'La fecha de inicio debe ser anterior al fin', path: ['fechaFin'] })
+  .refine((d) => d.tipo === 'tres_por_dos' || (d.porcentaje ?? 0) > 0, { message: 'Ingrese un porcentaje', path: ['porcentaje'] });
 export type DescuentoDTO = z.infer<typeof descuentoSchema>;
+
+// ---------- Feriados y horarios ----------
+export const feriadoSchema = z.object({ fecha: fechaSchema, nombre: z.string().trim().min(3, 'Ingrese el nombre').max(80) });
+export const horarioSchema = z.object({
+  tramos: z.array(
+    z.object({
+      diaSemana: z.coerce.number().int().min(1).max(7),
+      horaInicio: horaSchema,
+      horaFin: horaSchema,
+    }),
+  ),
+});
+export type HorarioDTO = z.infer<typeof horarioSchema>;
+
+/** Datos de Yape/Plin de la clínica que se muestran al paciente para pagar el adelanto. */
+export const configPagoSchema = z.object({
+  numero: z.string().regex(/^9\d{8}$/, 'Celular de 9 dígitos que empiece con 9'),
+  titular: z.string().trim().min(3, 'Ingrese el titular').max(80),
+});
 
 // ---------- Reportes ----------
 export const rangoFechasSchema = z

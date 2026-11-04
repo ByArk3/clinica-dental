@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pacientesApi } from '../api/recursos';
 import { FormContacto } from '../components/FormContacto';
+import { solesPE } from '../formato';
 
 /** CU-04 (paciente): actualizar sus datos de contacto. */
 export default function MiPerfil() {
@@ -12,6 +13,9 @@ export default function MiPerfil() {
       {data && (
         <div className="tarjeta">
           <p className="mb-3"><strong>{data.nombres} {data.apellidos}</strong> · DNI {data.dni}</p>
+          {Number(data.saldoFavor ?? 0) > 0 && (
+            <div className="alert alert-success py-2">Tiene un saldo a favor de <strong>{solesPE(data.saldoFavor!)}</strong>: se descontará en su próximo cobro.</div>
+          )}
           <FormContacto
             paciente={data}
             onGuardar={async (d) => qc.setQueryData(['mi-perfil'], await pacientesApi.actualizarMiContacto(d))}

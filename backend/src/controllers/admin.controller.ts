@@ -3,6 +3,9 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import {
   ajusteSchema,
+  configPagoSchema,
+  feriadoSchema,
+  horarioSchema,
   anularPedidoSchema,
   descuentoSchema,
   ESTADOS_PEDIDO,
@@ -22,6 +25,7 @@ import * as InsumoService from '../services/insumo.service.js';
 import * as UsuarioService from '../services/usuario.service.js';
 import * as DescuentoService from '../services/descuento.service.js';
 import * as ReporteService from '../services/reporte.service.js';
+import * as AgendaService from '../services/agenda.service.js';
 import { pdfPedido } from '../lib/pdf-pedido.js';
 import { enviarCorreo } from '../lib/correo.js';
 import { ErrorNegocio } from '../lib/errores.js';
@@ -102,17 +106,32 @@ export const modificarUsuario = async (req: Request, res: Response) =>
 export const desactivarUsuario = async (req: Request, res: Response) => res.json(await UsuarioService.cambiarEstado(idParam(req), false, usuarioActual(req)));
 export const activarUsuario = async (req: Request, res: Response) => res.json(await UsuarioService.cambiarEstado(idParam(req), true, usuarioActual(req)));
 
-// ---------- Descuentos (P3) y adelanto (P6) ----------
+// ---------- Campañas de descuento, feriados, horarios y datos de pago ----------
 export const listarDescuentos = async (_req: Request, res: Response) => res.json(await DescuentoService.listar());
 export const crearDescuento = async (req: Request, res: Response) => res.status(201).json(await DescuentoService.crear(descuentoSchema.parse(req.body)));
 export const modificarDescuento = async (req: Request, res: Response) => res.json(await DescuentoService.modificar(idParam(req), descuentoSchema.parse(req.body)));
 export const desactivarDescuento = async (req: Request, res: Response) => res.json(await DescuentoService.cambiarEstado(idParam(req), false));
 export const activarDescuento = async (req: Request, res: Response) => res.json(await DescuentoService.cambiarEstado(idParam(req), true));
-export const verAdelanto = async (_req: Request, res: Response) => res.json({ monto: await DescuentoService.montoAdelanto() });
-export async function cambiarAdelanto(req: Request, res: Response) {
-  const { monto } = z.object({ monto: z.coerce.number({ invalid_type_error: 'Ingrese un monto' }).positive('Debe ser mayor que 0').max(10_000) }).parse(req.body);
-  res.json({ monto: await DescuentoService.cambiarMontoAdelanto(monto) });
+export const verDatosPago = async (_req: Request, res: Response) => res.json(await DescuentoService.datosPago());
+export async function guardarDatosPago(req: Request, res: Response) {
+  const d = configPagoSchema.parse(req.body);
+  res.json(await DescuentoService.guardarDatosPago(d.numero, d.titular));
 }
+
+export async function listarFeriados(req: Request, res: Response) {
+  const anio = req.query.anio ? z.coerce.number().int().min(2000).max(2100).parse(req.query.anio) : undefined;
+  res.json(await AgendaService.listarFeriados(anio));
+}
+export async function crearFeriado(req: Request, res: Response) {
+  const d = feriadoSchema.parse(req.body);
+  res.status(201).json(await AgendaService.crearFeriado(d.fecha, d.nombre));
+}
+export async function eliminarFeriado(req: Request, res: Response) {
+  await AgendaService.eliminarFeriado(idParam(req));
+  res.status(204).end();
+}
+export const verHorario = async (req: Request, res: Response) => res.json(await AgendaService.verHorario(idParam(req)));
+export const guardarHorario = async (req: Request, res: Response) => res.json(await AgendaService.guardarHorario(idParam(req), horarioSchema.parse(req.body)));
 
 // ---------- CU-38..40 Panel y reportes ----------
 export const panel = async (_req: Request, res: Response) => res.json(await ReporteService.panel());

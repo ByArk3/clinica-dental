@@ -18,7 +18,9 @@ export function crearApp() {
 
   app.use(helmet()); // RNF06
   app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true })); // CORS solo al frontend
-  app.use(express.json({ limit: '100kb' }));
+  // JSON de hasta 100 KB; la ruta del pago del adelanto (con captura) tiene su propio límite de 3 MB
+  const json = express.json({ limit: '100kb' });
+  app.use((req, res, next) => (/^\/api\/citas\/\d+\/pago$/.test(req.path) ? next() : json(req, res, next)));
 
   const PgStore = connectPg(session);
   app.use(

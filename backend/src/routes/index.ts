@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import * as Auth from '../controllers/auth.controller.js';
 import * as Pacientes from '../controllers/paciente.controller.js';
 import * as Citas from '../controllers/cita.controller.js';
@@ -47,6 +47,10 @@ rutas.post('/citas/confirmar/:token', Citas.responderConfirmacion);
 // CU-07 Reprogramar / cancelar
 rutas.patch('/citas/:id/reprogramar', requireRol('paciente', 'recepcionista'), Citas.reprogramar);
 rutas.patch('/citas/:id/cancelar', requireRol('paciente', 'recepcionista'), Citas.cancelar);
+// Adelanto: el paciente reporta su pago por Yape/Plin (con captura opcional, hasta 2 MB)
+rutas.post('/citas/:id/pago', express.json({ limit: '3mb' }), requireRol('paciente'), Citas.reportarPago);
+rutas.get('/tarifario', requireRol('paciente', 'recepcionista'), Citas.tarifarioPublico);
+rutas.get('/datos-pago', requireRol('paciente', 'recepcionista'), Citas.datosPago);
 
 // CU-09 Citas del día e inasistencias
 rutas.get('/citas', requireRol('recepcionista'), Citas.delDia);
@@ -82,7 +86,10 @@ rutas.get('/caja/pendientes', recep, Caja.pendientes);
 rutas.get('/caja/citas/:id/importe', recep, Caja.importe);
 rutas.post('/caja/citas/:id/comprobante', recep, Caja.emitir);
 rutas.get('/tipos-pago', recep, Caja.tiposPago);
-rutas.get('/descuentos', recep, Caja.descuentos);
+rutas.get('/caja/campanas', recep, Caja.campanas);
+rutas.post('/caja/citas/:id/aprobar-pago', recep, Caja.aprobarPago);
+rutas.post('/caja/citas/:id/rechazar-pago', recep, Caja.rechazarPago);
+rutas.get('/caja/citas/:id/captura', recep, Caja.captura);
 rutas.get('/comprobantes/:id', requireRol('recepcionista', 'administrador'), Caja.ver);
 rutas.get('/comprobantes/:id/pdf', requireRol('recepcionista', 'administrador'), Caja.pdf);
 rutas.post('/comprobantes/:id/enviar', recep, Caja.enviar);
@@ -117,8 +124,14 @@ rutas.post('/admin/descuentos', admin, Admin.crearDescuento);
 rutas.patch('/admin/descuentos/:id', admin, Admin.modificarDescuento);
 rutas.patch('/admin/descuentos/:id/desactivar', admin, Admin.desactivarDescuento);
 rutas.patch('/admin/descuentos/:id/activar', admin, Admin.activarDescuento);
-rutas.get('/admin/adelanto', admin, Admin.verAdelanto);
-rutas.put('/admin/adelanto', admin, Admin.cambiarAdelanto);
+rutas.get('/admin/pago', admin, Admin.verDatosPago);
+rutas.put('/admin/pago', admin, Admin.guardarDatosPago);
+// Feriados y horario de cada odontólogo
+rutas.get('/admin/feriados', admin, Admin.listarFeriados);
+rutas.post('/admin/feriados', admin, Admin.crearFeriado);
+rutas.delete('/admin/feriados/:id', admin, Admin.eliminarFeriado);
+rutas.get('/admin/odontologos/:id/horario', admin, Admin.verHorario);
+rutas.put('/admin/odontologos/:id/horario', admin, Admin.guardarHorario);
 
 // CU-38..40 Panel y reportes
 rutas.get('/panel', admin, Admin.panel);

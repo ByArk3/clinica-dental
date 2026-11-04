@@ -36,7 +36,7 @@ export default function Reportes() {
           <>
             <div className="row g-3 mb-3">
               {[
-                ['Total cobrado', solesPE(r.resumen.total)],
+                ['Total neto', solesPE(r.resumen.total)],
                 ['Comprobantes', String(r.resumen.comprobantes)],
                 ['Ticket promedio', solesPE(r.resumen.ticketPromedio)],
                 ['Descuentos otorgados', solesPE(r.resumen.descuentos)],
@@ -52,7 +52,8 @@ export default function Reportes() {
                     {r.porTipoPago.map((t) => <tr key={t.tipo}><td>{t.tipo}</td><td className="text-end text-muted small">{t.cantidad}</td><td className="text-end">{solesPE(t.total)}</td></tr>)}
                     {r.porTipoPago.length === 0 && <tr><td className="text-muted">Sin cobros en el periodo.</td></tr>}
                   </tbody></table>
-                  {Number(r.resumen.adelantos) > 0 && <p className="small text-muted mt-2 mb-0">Incluye {solesPE(r.resumen.adelantos)} de adelantos (RN-12).</p>}
+                  {Number(r.resumen.adelantos) > 0 && <p className="small text-muted mt-2 mb-0">Incluye {solesPE(r.resumen.adelantos)} de adelantos.</p>}
+                  {Number(r.resumen.devoluciones) > 0 && <p className="small text-danger mt-1 mb-0">Devoluciones de adelantos: − {solesPE(r.resumen.devoluciones)} (cobrado: {solesPE(r.resumen.cobrado)}).</p>}
                 </div>
               </div>
               <div className="col-lg-7">

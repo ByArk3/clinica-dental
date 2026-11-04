@@ -43,13 +43,18 @@ export async function enviarRecordatorios(ahora = new Date()) {
   return { revisadas: ids.length, enviados };
 }
 
-/** RN-04 / CU-08 2.1: citas sin confirmar a menos de 24 h → «Liberada» (el horario queda libre). */
+/**
+ * Libera horarios (el horario queda libre):
+ *  · RN-04 / CU-08 2.1: citas sin confirmar a menos de 24 h.
+ *  · Adelanto no pagado ni reportado dentro de 1 hora (las «Pago en verificación» NO se liberan).
+ */
 export async function liberarCitas(ahora = new Date()) {
   const filas = await prisma.$queryRawUnsafe<{ id: number }[]>(
     `UPDATE citas c SET estado = 'liberada', updated_at = now()
-      WHERE c.estado = 'pendiente_confirmacion' AND ${INSTANTE} < $1::timestamptz + interval '24 hours'
+      WHERE (c.estado = 'pendiente_confirmacion' AND ${INSTANTE} < $1::timestamptz + interval '24 hours')
+         OR (c.estado = 'pendiente_adelanto' AND c.adelanto_vence_en < $1::timestamptz)
       RETURNING c.id`,
     ahora.toISOString(),
   );
-  return filas.map((f) => f.id);
+  return filas.map((f) => f.id).sort((a, b) => a - b);
 }

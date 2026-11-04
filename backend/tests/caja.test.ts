@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MENSAJES } from '@clinica/shared';
-import { crearCita, idOdontologo, prisma, proximo, reiniciarBD, sesion } from './helpers.js';
+import { crearCampana, crearCita, idOdontologo, idTratamiento, prisma, proximo, reiniciarBD, sesion } from './helpers.js';
+import { ahoraLima, sumarDias } from '../src/lib/fechas.js';
 
 beforeEach(reiniciarBD);
 
@@ -25,20 +26,17 @@ async function citaAtendida(tratamientos: string[], dni = '72458190') {
 }
 
 describe('CU-13 Caja: pendientes e importe', () => {
-  it('1: lista citas «Atendida» por cobrar y «Pendiente de adelanto» futuras', async () => {
+  it('1: lista citas «Atendida» por cobrar, adelantos pendientes y pagos por verificar; no los vencidos', async () => {
     const atendida = await citaAtendida(['Profilaxis']);
-    const adelanto = await crearCita({ horas: 72, estado: 'pendiente_adelanto', dni: '73445566', odontologoEmail: 'carmen.diaz@clinica.local' });
-    await crearCita({ horas: -5, estado: 'pendiente_adelanto', dni: '74556677', odontologoEmail: 'carmen.diaz@clinica.local' }); // ya pasó
+    const adelanto = await crearCita({ horas: 72, estado: 'pendiente_adelanto', dni: '73445566', odontologoEmail: 'carmen.diaz@clinica.local', montoAdelanto: 20, venceEnMin: 50 });
+    const reportado = await crearCita({ horas: 80, estado: 'pago_en_verificacion', dni: '71223344', odontologoEmail: 'carmen.diaz@clinica.local', montoAdelanto: 40 });
+    await crearCita({ horas: 90, estado: 'pendiente_adelanto', dni: '74556677', odontologoEmail: 'carmen.diaz@clinica.local', montoAdelanto: 20, venceEnMin: -5 }); // venció
     const recep = await sesion('recepcionista');
     const r = await recep.get('/api/caja/pendientes');
     expect(r.status).toBe(200);
-    expect(r.body).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ citaId: atendida, tipo: 'servicio', importe: '80.00' }),
-        expect.objectContaining({ citaId: adelanto.id, tipo: 'adelanto', importe: '30.00' }),
-      ]),
-    );
-    expect(r.body).toHaveLength(2);
+    expect(r.body.map((p: { citaId: number }) => p.citaId).sort()).toEqual([atendida, adelanto.id, reportado.id].sort());
+    expect(r.body.find((p: { citaId: number }) => p.citaId === adelanto.id)).toMatchObject({ tipo: 'adelanto', importe: '20.00', estado: 'pendiente_adelanto' });
+    expect(r.body.find((p: { citaId: number }) => p.citaId === atendida)).toMatchObject({ tipo: 'servicio', importe: '80.00' });
   });
 
   it('2 / RN-10: importe = Σ precios congelados en la atención (aunque luego cambie el tarifario)', async () => {
@@ -46,23 +44,11 @@ describe('CU-13 Caja: pendientes e importe', () => {
     await prisma.tratamiento.update({ where: { nombre: 'Profilaxis' }, data: { precio: 999 } });
     const recep = await sesion('recepcionista');
     const r = await recep.get(`/api/caja/citas/${id}/importe`);
-    expect(r.body).toMatchObject({ tipo: 'servicio', subtotal: '200.00', descuento: '0.00', adelantoAplicado: '0.00', total: '200.00' });
+    expect(r.body).toMatchObject({ tipo: 'servicio', subtotal: '200.00', descuento: '0.00', adelantoAplicado: '0.00', saldoAplicado: '0.00', total: '200.00' });
     expect(r.body.lineas.map((l: { descripcion: string; precio: string }) => [l.descripcion, l.precio])).toEqual([
       ['Curación con resina', '120.00'],
       ['Profilaxis', '80.00'],
     ]);
-  });
-
-  it('P3: un descuento activo se aplica sobre el subtotal (redondeo a 2 decimales); inactivo → 422', async () => {
-    const id = await citaAtendida(['Curación con resina', 'Profilaxis', 'Consulta']); // 240
-    const recep = await sesion('recepcionista');
-    const d = await prisma.descuento.findUniqueOrThrow({ where: { nombre: 'Paciente frecuente' } }); // 10 %
-    const r = await recep.get(`/api/caja/citas/${id}/importe?descuentoId=${d.id}`);
-    expect(r.body).toMatchObject({ subtotal: '240.00', descuento: '24.00', total: '216.00', descuentoAplicado: { nombre: 'Paciente frecuente' } });
-    await prisma.descuento.update({ where: { id: d.id }, data: { activo: false } });
-    const mal = await recep.get(`/api/caja/citas/${id}/importe?descuentoId=${d.id}`);
-    expect(mal.status).toBe(422);
-    expect(mal.body.mensaje).toBe(MENSAJES.DESCUENTO_NO_VALIDO);
   });
 
   it('4.1: tratamiento sin precio → detiene el cobro', async () => {
@@ -100,12 +86,10 @@ describe('CU-13 Emitir comprobante', () => {
       vuelto: '30.00',
       emitidoPor: 'Ana Ríos',
       paciente: { nombres: 'María', tieneCorreo: true },
-      lineas: [{ descripcion: 'Curación con resina', precio: '120.00' }],
+      lineas: [{ descripcion: 'Curación con resina', precio: '120.00', descuento: '0.00', campana: null }],
     });
-    // RN-11: vinculado a la cita, con fecha, paciente, importe y tipo de pago
     const c = await prisma.comprobante.findUniqueOrThrow({ where: { id: r.body.id } });
-    expect(c.citaId).toBe(id);
-    // y desaparece de pendientes
+    expect(c.citaId).toBe(id); // RN-11
     expect((await recep.get('/api/caja/pendientes')).body).toEqual([]);
   });
 
@@ -128,12 +112,17 @@ describe('CU-13 Emitir comprobante', () => {
     expect((await prisma.cita.findUniqueOrThrow({ where: { id } })).estado).toBe('atendida');
   });
 
-  it('con descuento: el comprobante guarda el descuento aplicado', async () => {
-    const id = await citaAtendida(['Curación con resina']);
+  it('con campaña vigente el día de la cita: el comprobante guarda el descuento por línea', async () => {
+    const id = await citaAtendida(['Curación con resina', 'Profilaxis']);
+    const hoy = ahoraLima().fecha;
+    await crearCampana({ nombre: 'Limpieza 20 %', tratamientos: ['Profilaxis'], desde: sumarDias(hoy, -3), hasta: sumarDias(hoy, 3), porcentaje: 20 });
     const recep = await sesion('recepcionista');
-    const d = await prisma.descuento.findFirstOrThrow();
-    const r = await recep.post(`/api/caja/citas/${id}/comprobante`).send({ tipoPagoId: await tipoPago('Tarjeta'), descuentoId: d.id });
-    expect(r.body).toMatchObject({ subtotal: '120.00', total: '108.00', descuento: { nombre: 'Paciente frecuente', monto: '12.00' } });
+    const r = await recep.post(`/api/caja/citas/${id}/comprobante`).send({ tipoPagoId: await tipoPago('Tarjeta') });
+    expect(r.body).toMatchObject({ subtotal: '200.00', descuento: '16.00', total: '184.00' });
+    expect(r.body.lineas).toEqual([
+      { descripcion: 'Curación con resina', precio: '120.00', descuento: '0.00', campana: null },
+      { descripcion: 'Profilaxis', precio: '80.00', descuento: '16.00', campana: 'Limpieza 20 %' },
+    ]);
   });
 
   it('no se cobra dos veces la misma cita; el correlativo no tiene huecos', async () => {
@@ -180,58 +169,66 @@ describe('CU-13 Emitir comprobante', () => {
   });
 });
 
-describe('CU-13 3.1 / RN-12 Adelanto', () => {
-  it('cobra el adelanto (S/ 30), la cita vuelve a «Pendiente de confirmación» y se descuenta en el cobro final', async () => {
+describe('CU-13 3.1 Adelanto en caja (50 % del tratamiento previsto)', () => {
+  it('cobra el adelanto en la clínica → la cita queda «Confirmada» y se descuenta en el cobro final', async () => {
     await prisma.paciente.update({ where: { dni: '73445566' }, data: { inasistencias: 3, restringido: true } });
     const recep = await sesion('recepcionista');
     const pedro = (await prisma.paciente.findUniqueOrThrow({ where: { dni: '73445566' } })).id;
     const reserva = await recep.post('/api/citas').send({ pacienteId: pedro, odontologoId: await idOdontologo(), fecha: proximo(1), hora: '10:00', motivo: 'Control' });
-    expect(reserva.body.cita.estado).toBe('pendiente_adelanto');
+    expect(reserva.body.cita).toMatchObject({ estado: 'pendiente_adelanto', tratamientoPrevisto: 'Consulta', montoAdelanto: '20.00' });
     const citaId = reserva.body.cita.id;
 
     const imp = await recep.get(`/api/caja/citas/${citaId}/importe`);
-    expect(imp.body).toMatchObject({ tipo: 'adelanto', total: '30.00', descuentoAplicado: null });
-    const adel = await recep.post(`/api/caja/citas/${citaId}/comprobante`).send({ tipoPagoId: await tipoPago('Efectivo'), montoRecibido: 50, descuentoId: (await prisma.descuento.findFirstOrThrow()).id });
+    expect(imp.body).toMatchObject({ tipo: 'adelanto', total: '20.00' });
+    const adel = await recep.post(`/api/caja/citas/${citaId}/comprobante`).send({ tipoPagoId: await tipoPago('Efectivo'), montoRecibido: 50 });
     expect(adel.status).toBe(201);
-    expect(adel.body).toMatchObject({ tipo: 'adelanto', total: '30.00', vuelto: '20.00', descuento: null, estadoCita: 'pendiente_confirmacion' });
+    expect(adel.body).toMatchObject({ tipo: 'adelanto', total: '20.00', vuelto: '30.00', estadoCita: 'confirmada' });
+    expect((await prisma.cita.findUniqueOrThrow({ where: { id: citaId } })).adelantoVenceEn).toBeNull();
 
-    // simular que llegó el día: confirmada, pasó la hora, se atiende
-    await prisma.cita.update({ where: { id: citaId }, data: { estado: 'confirmada', fecha: new Date(Date.now() - 86_400_000) } });
+    // llegó el día: se atiende con una extracción simple (S/ 80) → paga los S/ 60 restantes
+    await prisma.cita.update({ where: { id: citaId }, data: { fecha: new Date(Date.now() - 86_400_000) } });
     const od = await sesion('odontologo');
-    await od.post(`/api/citas/${citaId}/atencion`).send({ diagnostico: 'Control', tratamientos: [{ tratamientoId: await idTrat('Profilaxis') }] });
-
+    await od.post(`/api/citas/${citaId}/atencion`).send({ diagnostico: 'Resto radicular', tratamientos: [{ tratamientoId: await idTratamiento('Extracción simple') }] });
     const final = await recep.get(`/api/caja/citas/${citaId}/importe`);
-    expect(final.body).toMatchObject({ tipo: 'servicio', subtotal: '80.00', adelantoAplicado: '30.00', total: '50.00' });
+    expect(final.body).toMatchObject({ tipo: 'servicio', subtotal: '80.00', adelantoAplicado: '20.00', sobrante: '0.00', total: '60.00' });
     const pago = await recep.post(`/api/caja/citas/${citaId}/comprobante`).send({ tipoPagoId: await tipoPago('Tarjeta') });
-    expect(pago.body).toMatchObject({ numero: 'C-000002', total: '50.00', adelantoAplicado: '30.00', estadoCita: 'pagada' });
+    expect(pago.body).toMatchObject({ numero: 'C-000002', total: '60.00', adelantoAplicado: '20.00', estadoCita: 'pagada' });
   });
 
-  it('el adelanto nunca deja el total final en negativo', async () => {
-    await prisma.configuracion.update({ where: { clave: 'monto_adelanto' }, data: { valor: '60.00' } });
-    const c = await crearCita({ horas: 72, estado: 'pendiente_adelanto' });
+  it('el adelanto supera el cobro final: total S/ 0 y lo que sobra queda como saldo a favor', async () => {
+    const c = await crearCita({ horas: 72, estado: 'pendiente_adelanto', montoAdelanto: 125, venceEnMin: 30 });
     const recep = await sesion('recepcionista');
     await recep.post(`/api/caja/citas/${c.id}/comprobante`).send({ tipoPagoId: await tipoPago('Tarjeta') });
-    await prisma.cita.update({ where: { id: c.id }, data: { estado: 'confirmada', fecha: new Date(Date.now() - 86_400_000) } });
+    await prisma.cita.update({ where: { id: c.id }, data: { fecha: new Date(Date.now() - 86_400_000) } });
     const od = await sesion('odontologo');
-    await od.post(`/api/citas/${c.id}/atencion`).send({ diagnostico: 'Control', tratamientos: [{ tratamientoId: await idTrat('Consulta') }] }); // S/ 40
+    await od.post(`/api/citas/${c.id}/atencion`).send({ diagnostico: 'Control', tratamientos: [{ tratamientoId: await idTratamiento('Consulta') }] }); // S/ 40
     const r = await recep.get(`/api/caja/citas/${c.id}/importe`);
-    expect(r.body).toMatchObject({ subtotal: '40.00', adelantoAplicado: '40.00', total: '0.00' });
+    expect(r.body).toMatchObject({ subtotal: '40.00', adelantoAplicado: '40.00', sobrante: '85.00', total: '0.00' });
     const pago = await recep.post(`/api/caja/citas/${c.id}/comprobante`).send({ tipoPagoId: await tipoPago('Efectivo'), montoRecibido: 0 });
     expect(pago.status).toBe(201);
-    // TODO(decisión P6): ¿qué pasa con los S/ 20 restantes del adelanto? Hoy no se devuelven ni se acumulan.
+    expect(pago.body).toMatchObject({ saldoGenerado: '85.00', paciente: { saldoFavor: '85.00' } });
   });
 
-  it('adelanto pagado con menos de 24 h para la cita → queda «Confirmada» (RN-04)', async () => {
-    const c = await crearCita({ horas: 10, estado: 'pendiente_adelanto' });
+  it('el saldo a favor se usa solo en el siguiente cobro', async () => {
+    await prisma.paciente.update({ where: { dni: '72458190' }, data: { saldoFavor: 50 } });
+    const id = await citaAtendida(['Profilaxis']); // S/ 80
     const recep = await sesion('recepcionista');
-    const r = await recep.post(`/api/caja/citas/${c.id}/comprobante`).send({ tipoPagoId: await tipoPago('Tarjeta') });
-    expect(r.body.estadoCita).toBe('confirmada');
+    const r = await recep.get(`/api/caja/citas/${id}/importe`);
+    expect(r.body).toMatchObject({ subtotal: '80.00', saldoAplicado: '50.00', total: '30.00' });
+    const pago = await recep.post(`/api/caja/citas/${id}/comprobante`).send({ tipoPagoId: await tipoPago('Tarjeta') });
+    expect(pago.body).toMatchObject({ total: '30.00', saldoAplicado: '50.00', paciente: { saldoFavor: '0.00' } });
+    const mov = await prisma.saldoMovimiento.findMany({ where: { paciente: { dni: '72458190' } } });
+    expect(mov.map((m) => [m.tipo, m.monto.toFixed(2), m.saldo.toFixed(2)])).toEqual([['uso_en_cobro', '-50.00', '0.00']]);
   });
 
-  it('no se cobra adelanto de una cita que ya pasó', async () => {
-    const c = await crearCita({ horas: -2, estado: 'pendiente_adelanto' });
+  it('no se cobra el adelanto vencido ni el de una cita que ya pasó', async () => {
     const recep = await sesion('recepcionista');
-    expect((await recep.get(`/api/caja/citas/${c.id}/importe`)).status).toBe(409);
+    const vencido = await crearCita({ horas: 72, estado: 'pendiente_adelanto', montoAdelanto: 20, venceEnMin: -1 });
+    const r = await recep.get(`/api/caja/citas/${vencido.id}/importe`);
+    expect(r.status).toBe(409);
+    expect(r.body.mensaje).toBe(MENSAJES.ADELANTO_VENCIDO);
+    const pasada = await crearCita({ horas: -2, estado: 'pendiente_adelanto', montoAdelanto: 20, venceEnMin: 30, odontologoEmail: 'carmen.diaz@clinica.local' });
+    expect((await recep.get(`/api/caja/citas/${pasada.id}/importe`)).status).toBe(409);
   });
 });
 
