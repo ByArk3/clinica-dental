@@ -168,3 +168,34 @@ body { background: var(--fondo); }
 [data-bs-theme='dark'] .chip-pago_en_verificacion { background: #3b2766; color: #ddd0fb; }
 /* Tablas dentro de tarjetas: mismo fondo que la tarjeta (claro y oscuro) */
 .tarjeta .table { --bs-table-bg: transparent; }
+
+/* Tramos de horario que se cruzan: solo el borde en rojo (sin ícono, para que se lea la hora) */
+.form-select.tramo-cruce { border-color: var(--bs-danger); box-shadow: 0 0 0 0.15rem rgba(220, 53, 69, 0.2); }
+
+/* «Quitar todos»: pastilla roja suave que se rellena al pasar el mouse */
+.btn-quitar-todos { display: inline-flex; align-items: center; gap: 0.4rem; border: 1px solid var(--bs-danger-border-subtle); color: var(--bs-danger-text-emphasis); background: var(--bs-danger-bg-subtle); border-radius: 999px; padding: 0.25rem 0.75rem; font-size: 0.85rem; font-weight: 500; transition: background-color var(--t), color var(--t), border-color var(--t), box-shadow var(--t), transform var(--t); }
+.btn-quitar-todos:hover, .btn-quitar-todos:focus-visible { background: var(--bs-danger); border-color: var(--bs-danger); color: #fff; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(220, 53, 69, 0.25); }
+
+/* Aviso flotante abajo al centro, con barra de tiempo */
+.aviso-flotante { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 1080; width: max-content; min-width: min(360px, calc(100vw - 32px)); max-width: calc(100vw - 32px); background: #1f2a30; color: #fff; border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); overflow: hidden; }
+.aviso-flotante .cuerpo { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; }
+.aviso-flotante .ico { width: 32px; height: 32px; flex-shrink: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.12); display: flex; align-items: center; justify-content: center; }
+.aviso-flotante .accion { margin-left: auto; background: none; border: 0; color: #5fd3dc; font-weight: 600; padding: 0.25rem 0.5rem; border-radius: 6px; white-space: nowrap; }
+.aviso-flotante .accion:hover { background: rgba(95, 211, 220, 0.14); }
+.aviso-flotante .cerrar { background: none; border: 0; color: rgba(255, 255, 255, 0.6); font-size: 1.2rem; line-height: 1; }
+.aviso-flotante .barra { height: 3px; background: #5fd3dc; transform-origin: left; animation: tiempo linear forwards; }
+@keyframes tiempo { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: no-preference) { .aviso-flotante { animation: subir 250ms ease; } }
+@keyframes subir { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* Botón día/noche: fijo en la esquina superior derecha de todas las pantallas */
+.boton-tema { position: fixed; top: 14px; right: 16px; z-index: 1040; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--bs-border-color); background: var(--superficie); box-shadow: 0 2px 8px var(--sombra); font-size: 1.25rem; display: flex; align-items: center; justify-content: center; transition: transform var(--t), box-shadow var(--t); }
+.boton-tema:hover { transform: translateY(-1px) rotate(-12deg); box-shadow: 0 6px 16px var(--sombra); }
+/* Con pantallas medianas, dejar libre la esquina para que no tape los botones de la cabecera */
+@media (min-width: 768px) and (max-width: 1279.98px) { .contenido { padding-right: 4.5rem; } }
+/* Celular: en la barra superior, al lado del menú ☰ */
+@media (max-width: 767.98px) { body:has(.layout) .boton-tema { top: 9px; right: 74px; width: 40px; height: 40px; font-size: 1.1rem; } }
+/* Cambio de tema suave */
+@media (prefers-reduced-motion: no-preference) {
+  .cambiando-tema, .cambiando-tema * { transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease !important; }
+}

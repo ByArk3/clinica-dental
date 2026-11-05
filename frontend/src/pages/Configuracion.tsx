@@ -245,6 +245,30 @@ function Feriados() {
 // ---------------------------------------------------------------- Horarios
 const DIAS = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 interface Tramo { diaSemana: number; horaInicio: string; horaFin: string }
+const aMin = (h: string) => Number(h.slice(0, 2)) * 60 + Number(h.slice(3, 5));
+const aHora = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+const ALMUERZO_MIN = 60;
+
+/** Tramo que propone «+ Tramo»: 1 h después del último del día (almuerzo) hasta el cierre; null si ya no hay espacio. */
+export function siguienteTramo(delDia: Tramo[], dia: number): Tramo | null {
+  if (delDia.length === 0) return { diaSemana: dia, horaInicio: HORARIO_CLINICA.apertura, horaFin: '14:00' };
+  const inicio = Math.max(...delDia.map((t) => aMin(t.horaFin))) + ALMUERZO_MIN;
+  if (inicio + 30 > aMin(HORARIO_CLINICA.cierre)) return null;
+  return { diaSemana: dia, horaInicio: aHora(inicio), horaFin: HORARIO_CLINICA.cierre };
+}
+
+/** Pares de tramos del mismo día que se pisan → por índice, el texto «se cruza con …». */
+export function cruces(tramos: Tramo[]) {
+  const r = new Map<number, string>();
+  tramos.forEach((a, i) =>
+    tramos.forEach((b, j) => {
+      if (i !== j && a.diaSemana === b.diaSemana && aMin(a.horaInicio) < aMin(b.horaFin) && aMin(b.horaInicio) < aMin(a.horaFin)) {
+        r.set(i, `${a.horaInicio}–${a.horaFin} se cruza con ${b.horaInicio}–${b.horaFin}`);
+      }
+    }),
+  );
+  return r;
+}
 
 function Horarios() {
   const qc = useQueryClient();
@@ -255,6 +279,7 @@ function Horarios() {
   const [tramos, setTramos] = useState<Tramo[]>([]);
   const [ok, setOk] = useState(false);
   useEffect(() => { if (horario.data) setTramos(horario.data.tramos); setOk(false); }, [horario.data]);
+  const choques = cruces(tramos);
   const guardar = useMutation({
     mutationFn: () => configApi.guardarHorario(actual!, { tramos }),
     onSuccess: (h) => { qc.setQueryData(['horario', actual], h); setOk(true); },
@@ -276,30 +301,54 @@ function Horarios() {
       {DIAS.slice(1).map((nombre, idx) => {
         const dia = idx + 1;
         const del = tramos.map((t, i) => ({ t, i })).filter((x) => x.t.diaSemana === dia);
+        const propuesto = siguienteTramo(del.map((x) => x.t), dia);
+        const errorDia = del.map((x) => choques.get(x.i)).find(Boolean);
         return (
           <div key={dia} className="d-flex flex-wrap align-items-center gap-2 py-2 border-bottom">
             <strong style={{ width: 90 }}>{nombre}</strong>
             {del.length === 0 && <span className="small text-muted">No atiende</span>}
             {del.map(({ t, i }) => (
               <span key={i} className="d-inline-flex align-items-center gap-1">
-                <select aria-label={`${nombre} desde`} className="form-select form-select-sm" style={{ width: 92 }} value={t.horaInicio} onChange={(e) => cambiar(i, { horaInicio: e.target.value })}>
+                <select aria-label={`${nombre} desde`} className={`form-select form-select-sm ${choques.has(i) ? 'tramo-cruce' : ''}`} style={{ width: 92 }} value={t.horaInicio} onChange={(e) => cambiar(i, { horaInicio: e.target.value })}>
                   {horas.slice(0, -1).map((h) => <option key={h}>{h}</option>)}
                 </select>
                 –
-                <select aria-label={`${nombre} hasta`} className="form-select form-select-sm" style={{ width: 92 }} value={t.horaFin} onChange={(e) => cambiar(i, { horaFin: e.target.value })}>
+                <select aria-label={`${nombre} hasta`} className={`form-select form-select-sm ${choques.has(i) ? 'tramo-cruce' : ''}`} style={{ width: 92 }} value={t.horaFin} onChange={(e) => cambiar(i, { horaFin: e.target.value })}>
                   {horas.slice(1).map((h) => <option key={h}>{h}</option>)}
                 </select>
                 <button type="button" className="btn btn-sm btn-link text-danger px-1" aria-label={`Quitar tramo del ${nombre}`} onClick={() => { setOk(false); setTramos(tramos.filter((_, k) => k !== i)); }}>✕</button>
               </span>
             ))}
-            <button type="button" className="btn btn-sm btn-outline-secondary ms-auto" onClick={() => { setOk(false); setTramos([...tramos, { diaSemana: dia, horaInicio: '08:00', horaFin: '14:00' }]); }}>+ Tramo</button>
+            {del.length > 1 && !errorDia && (() => {
+              // hueco entre tramos (p. ej. el almuerzo)
+              const orden = [...del].sort((a, b) => aMin(a.t.horaInicio) - aMin(b.t.horaInicio));
+              const pausa = orden.slice(1).map((x, k) => [orden[k].t.horaFin, x.t.horaInicio]).find(([a, b]) => aMin(b) > aMin(a));
+              return pausa ? <span className="small text-success">🍽 Pausa {pausa[0]}–{pausa[1]}</span> : null;
+            })()}
+            <span className="ms-auto" title={propuesto ? undefined : `No queda horario antes del cierre (${HORARIO_CLINICA.cierre})`}>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-secondary"
+                disabled={!propuesto}
+                onClick={() => {
+                  if (!propuesto) return;
+                  setOk(false);
+                  setTramos([...tramos, propuesto]);
+                }}
+              >
+                + Tramo
+              </button>
+            </span>
+            {errorDia && <div className="w-100 small text-danger" style={{ paddingLeft: 98 }} role="alert">⚠ {errorDia}. Corríjalo antes de guardar.</div>}
           </div>
         );
       })}
       <p className="small text-muted mt-2">Domingo no se atiende. Dentro de {HORARIO_CLINICA.apertura}–{HORARIO_CLINICA.cierre}, en bloques de 30 minutos. Las citas ya registradas no cambian.</p>
       {guardar.isError && <div className="alert alert-danger" role="alert">{mensajeError(guardar.error)}</div>}
       {ok && <div className="alert alert-success py-2">Horario guardado.</div>}
-      <button className="btn btn-acento" disabled={guardar.isPending || !actual} onClick={() => guardar.mutate()}>Guardar horario</button>
+      <BotonAccion mutacion={guardar} disabled={!actual || choques.size > 0} title={choques.size ? 'Hay tramos que se cruzan' : undefined} onClick={() => guardar.mutate()}>
+        Guardar horario
+      </BotonAccion>
     </div>
   );
 }

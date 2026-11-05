@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { pedidoSchema } from '@clinica/shared';
 import { insumosApi, pedidosApi, proveedoresApi, type Insumo, type Pedido } from '../api/recursos';
 import { FormProveedor } from './Proveedores';
-import { BotonAccion } from '../components/Interaccion';
+import { AvisoFlotante, BotonAccion, IconoPapelera } from '../components/Interaccion';
 import { erroresZod, mensajeError, numPE } from '../formato';
 import { buscar } from '../buscar';
 
@@ -18,6 +18,9 @@ export default function NuevoPedido() {
   const [lineas, setLineas] = useState<Linea[]>([]);
   const [busqueda, setBusqueda] = useState('');
   const [abierto, setAbierto] = useState(false);
+  // «Quitar todos» con deshacer: se guardan las líneas quitadas mientras se muestra el aviso
+  const [quitadas, setQuitadas] = useState<Linea[] | null>(null);
+  const cerrarAviso = useCallback(() => setQuitadas(null), []);
   const [proveedorSugerido, setProveedorSugerido] = useState<string | null>(null);
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [nuevoProveedor, setNuevoProveedor] = useState(false);
@@ -126,8 +129,13 @@ export default function NuevoPedido() {
         {proveedorSugerido && <div className="form-text mb-2">💡 Sugerido: el último proveedor al que se le pidió <strong>{proveedorSugerido}</strong>. Puede cambiarlo.</div>}
         {errores.proveedorId && <div className="text-danger small mb-2">{errores.proveedorId}</div>}
 
-        <h2 className="h6 mt-3">
+        <h2 className="h6 mt-3 d-flex align-items-center gap-1">
           Insumos del pedido {lineas.length > 0 && <span className="badge text-bg-primary ms-1">{lineas.length}</span>}
+          {lineas.length >= 2 && (
+            <button type="button" className="btn-quitar-todos ms-auto" onClick={() => { setQuitadas(lineas); setLineas([]); }}>
+              <IconoPapelera /> Quitar todos
+            </button>
+          )}
         </h2>
         {errores.insumos && <div className="text-danger small mb-2">{errores.insumos}</div>}
         {lineas.length === 0 && <p className="small text-muted">Aún no agregó insumos.</p>}
@@ -178,6 +186,15 @@ export default function NuevoPedido() {
         {guardar.isError && <div className="alert alert-danger mt-3" role="alert">{mensajeError(guardar.error)}</div>}
         <BotonAccion className="btn btn-acento w-100 mt-3" mutacion={guardar} textoPendiente="Registrando…">Registrar pedido</BotonAccion>
       </form>
+      {quitadas && (
+        <AvisoFlotante
+          icono={<IconoPapelera tam={16} />}
+          onCerrar={cerrarAviso}
+          accion={{ texto: '↶ Deshacer', onClick: () => { setLineas([...quitadas, ...lineas.filter((l) => !quitadas.some((q) => q.insumo.id === l.insumo.id))]); setQuitadas(null); } }}
+        >
+          Se quitaron <strong>{quitadas.length} insumos</strong> del pedido
+        </AvisoFlotante>
+      )}
       {nuevoProveedor && <FormProveedor proveedor={null} onCerrar={() => setNuevoProveedor(false)} onGuardado={(p) => setProveedorId(p.id)} />}
     </>
   );

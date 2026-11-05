@@ -1,5 +1,6 @@
 // Piezas de interacción reutilizables: botón que trabaja, copiar con un toque y campo de solo dígitos con ✓/✗.
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { soloDigitos } from '@clinica/shared';
 
 interface MutacionMinima {
@@ -110,3 +111,51 @@ export function CampoDigitos({
     </>
   );
 }
+
+/**
+ * Aviso flotante abajo al centro (p. ej. «Se quitaron 4 insumos · Deshacer»). Se cierra solo a los
+ * `duracion` ms; la línea inferior muestra el tiempo que queda.
+ */
+export function AvisoFlotante({
+  children,
+  accion,
+  onCerrar,
+  duracion = 8000,
+  icono,
+}: {
+  children: ReactNode;
+  accion?: { texto: string; onClick: () => void };
+  onCerrar: () => void;
+  duracion?: number;
+  icono?: ReactNode;
+}) {
+  useEffect(() => {
+    const t = setTimeout(onCerrar, duracion);
+    return () => clearTimeout(t);
+  }, [onCerrar, duracion]);
+  // Portal al <body>: la animación de entrada de cada pantalla crea su propio contexto y «fixed» quedaría dentro de ella
+  return createPortal(
+    <div className="aviso-flotante" role="status">
+      <div className="cuerpo">
+        {icono && <span className="ico" aria-hidden="true">{icono}</span>}
+        <span>{children}</span>
+        {accion && (
+          <button type="button" className="accion" onClick={accion.onClick}>
+            {accion.texto}
+          </button>
+        )}
+        <button type="button" className="cerrar" aria-label="Cerrar aviso" onClick={onCerrar}>
+          ×
+        </button>
+      </div>
+      <div className="barra" style={{ animationDuration: `${duracion}ms` }} />
+    </div>,
+    document.body,
+  );
+}
+
+export const IconoPapelera = ({ tam = 15 }: { tam?: number }) => (
+  <svg width={tam} height={tam} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
+  </svg>
+);

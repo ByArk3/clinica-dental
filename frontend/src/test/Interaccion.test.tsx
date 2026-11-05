@@ -6,8 +6,7 @@ import { Route, Routes } from 'react-router-dom';
 import { useState } from 'react';
 import { buscar, puntaje } from '../buscar';
 import NuevoPedido from '../pages/NuevoPedido';
-import { MenuPorRol } from '../components/MenuPorRol';
-import { AuthProvider } from '../auth';
+import { BotonTema } from '../components/BotonTema';
 import { BotonAccion, BotonCopiar, CampoDigitos } from '../components/Interaccion';
 import { renderizar, simularApi } from './utils';
 
@@ -59,10 +58,10 @@ describe('Nuevo pedido', () => {
 
 describe('Modo oscuro', () => {
   it('el botón 🌙 cambia el tema y lo recuerda', async () => {
-    simularApi({ 'GET /auth/yo': { body: { id: 1, nombres: 'Carlos Vega', email: 'carlos.vega@clinica.local', rol: 'administrador', pacienteId: null, odontologoId: null } } });
-    renderizar(<AuthProvider><MenuPorRol /></AuthProvider>);
-    const u = userEvent.setup();
+    try { localStorage.setItem('clinica-tema', 'claro'); } catch { /* */ }
     document.documentElement.setAttribute('data-bs-theme', 'light');
+    renderizar(<BotonTema />);
+    const u = userEvent.setup();
     await u.click(await screen.findByRole('button', { name: 'Cambiar a modo oscuro' }));
     expect(document.documentElement.getAttribute('data-bs-theme')).toBe('dark');
     expect(localStorage.getItem('clinica-tema')).toBe('oscuro');
@@ -104,5 +103,59 @@ describe('Piezas de interacción', () => {
     expect(screen.getByRole('button')).toBeDisabled();
     rerender(<BotonAccion mutacion={{ isPending: false, isSuccess: true, submittedAt: 1 }}>Guardar</BotonAccion>);
     expect(screen.getByRole('button')).toHaveTextContent('✓ Listo');
+  });
+});
+
+describe('Quitar todos (Nuevo pedido)', () => {
+  it('quita todos de golpe y «Deshacer» los devuelve con sus cantidades', async () => {
+    const proveedores = [{ id: 1, ruc: '20601234567', razonSocial: 'Distribuidora Odontomed S.A.C.', contacto: null, telefono: null, email: null, activo: true }];
+    simularApi({ 'GET /proveedores': { body: proveedores }, 'GET /insumos': { body: insumos }, 'GET /pedidos': { body: { pedidos: [] } } });
+    renderizar(<Routes><Route path="/pedidos/nuevo" element={<NuevoPedido />} /></Routes>, '/pedidos/nuevo?insumos=3,4');
+    const u = userEvent.setup();
+    await screen.findByLabelText('Cantidad de Copa de goma');
+    await u.clear(screen.getByLabelText('Cantidad de Copa de goma'));
+    await u.type(screen.getByLabelText('Cantidad de Copa de goma'), '7');
+    await u.click(screen.getByRole('button', { name: /Quitar todos/ }));
+    expect(screen.queryByLabelText('Cantidad de Copa de goma')).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent('Se quitaron 2 insumos del pedido');
+    await u.click(screen.getByRole('button', { name: '↶ Deshacer' }));
+    expect(screen.getByLabelText('Cantidad de Copa de goma')).toHaveValue('7');
+    expect(screen.getByLabelText('Cantidad de Guantes de nitrilo M')).toBeInTheDocument();
+  });
+});
+
+describe('Horarios: + Tramo con almuerzo y cruces', () => {
+  it('propone 1 h después del último hasta el cierre; null si no hay espacio; detecta cruces', async () => {
+    const { siguienteTramo, cruces } = await import('../pages/Configuracion');
+    expect(siguienteTramo([{ diaSemana: 1, horaInicio: '08:00', horaFin: '14:00' }], 1)).toEqual({ diaSemana: 1, horaInicio: '15:00', horaFin: '20:00' });
+    expect(siguienteTramo([{ diaSemana: 1, horaInicio: '08:00', horaFin: '19:00' }], 1)).toBeNull();
+    expect(siguienteTramo([], 6)).toEqual({ diaSemana: 6, horaInicio: '08:00', horaFin: '14:00' });
+    const c = cruces([{ diaSemana: 2, horaInicio: '08:00', horaFin: '14:00' }, { diaSemana: 2, horaInicio: '13:00', horaFin: '17:00' }, { diaSemana: 3, horaInicio: '13:00', horaFin: '17:00' }]);
+    expect([...c.keys()].sort()).toEqual([0, 1]);
+    expect(c.get(1)).toBe('13:00–17:00 se cruza con 08:00–14:00');
+  });
+});
+
+describe('Horarios en pantalla', () => {
+  it('«+ Tramo» agrega 15:00–20:00 tras 08:00–14:00; un cruce se avisa y no deja guardar', async () => {
+    const { default: Configuracion } = await import('../pages/Configuracion');
+    simularApi({
+      'GET /admin/descuentos': { body: [] },
+      'GET /odontologos': { body: [{ id: 1, nombres: 'Dr. Luis Paredes', especialidad: null }] },
+      'GET /admin/odontologos/1/horario': { body: { odontologoId: 1, usaHorarioGeneral: false, tramos: [{ diaSemana: 1, horaInicio: '08:00', horaFin: '14:00' }] } },
+    });
+    renderizar(<Configuracion />);
+    const u = userEvent.setup();
+    await u.click(await screen.findByRole('button', { name: 'Horarios de odontólogos' }));
+    await screen.findByLabelText('Lunes desde');
+    const filaLunes = screen.getByLabelText('Lunes desde').closest('.border-bottom') as HTMLElement;
+    await u.click(within(filaLunes).getByRole('button', { name: '+ Tramo' }));
+    expect(screen.getAllByLabelText('Lunes desde')[1]).toHaveValue('15:00');
+    expect(screen.getAllByLabelText('Lunes hasta')[1]).toHaveValue('20:00');
+    expect(within(filaLunes).getByText('🍽 Pausa 14:00–15:00')).toBeInTheDocument();
+    expect(within(filaLunes).getByRole('button', { name: '+ Tramo' })).toBeDisabled(); // ya llega al cierre
+    await u.selectOptions(screen.getAllByLabelText('Lunes desde')[1], '13:00');
+    expect(within(filaLunes).getByRole('alert')).toHaveTextContent('se cruza con');
+    expect(screen.getByRole('button', { name: 'Guardar horario' })).toBeDisabled();
   });
 });
