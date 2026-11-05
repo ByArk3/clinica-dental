@@ -1,14 +1,42 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ETIQUETA_ESTADO_CITA, type EstadoCita } from '@clinica/shared';
 import { reportesApi } from '../api/recursos';
 import { diaSemanaPE, fechaPE, numPE, solesPE } from '../formato';
 
+/** Número que sube desde 0 al entrar (0,6 s). Sin animación si el sistema pide reducir movimiento o en pruebas. */
+function useContador(final: number) {
+  const sinAnimar = import.meta.env.MODE === 'test' || typeof requestAnimationFrame !== 'function' || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const [n, setN] = useState(sinAnimar ? final : 0);
+  useEffect(() => {
+    if (sinAnimar) return setN(final);
+    let id = 0;
+    const inicio = performance.now();
+    const paso = (t: number) => {
+      const avance = Math.min(1, (t - inicio) / 600);
+      setN(final * (1 - Math.pow(1 - avance, 3)));
+      if (avance < 1) id = requestAnimationFrame(paso);
+    };
+    id = requestAnimationFrame(paso);
+    return () => cancelAnimationFrame(id);
+  }, [final, sinAnimar]);
+  return n;
+}
+
+function Valor({ valor }: { valor: string | number }) {
+  const esSoles = typeof valor === 'string' && valor.startsWith('S/');
+  const final = typeof valor === 'number' ? valor : esSoles ? Number(valor.replace(/[^\d.]/g, '')) : NaN;
+  const n = useContador(Number.isFinite(final) ? final : 0);
+  if (!Number.isFinite(final)) return <>{valor}</>;
+  return <>{esSoles ? solesPE(n) : Math.round(n)}</>;
+}
+
 function Indicador({ titulo, valor, detalle, a }: { titulo: string; valor: string | number; detalle?: string; a?: string }) {
   const cuerpo = (
     <div className="tarjeta h-100 indicador">
       <div className="small text-muted">{titulo}</div>
-      <div className="fs-3 fw-semibold">{valor}</div>
+      <div className="fs-3 fw-semibold"><Valor valor={valor} /></div>
       {detalle && <div className="small text-muted">{detalle}</div>}
     </div>
   );

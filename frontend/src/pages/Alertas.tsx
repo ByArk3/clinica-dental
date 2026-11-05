@@ -10,8 +10,15 @@ export default function Alertas() {
   const [todas, setTodas] = useState(false);
   const [elegidas, setElegidas] = useState<number[]>([]);
   const alertas = useQuery({ queryKey: ['alertas', todas], queryFn: () => insumosApi.alertas(todas ? { todas: '1' } : {}) });
+  const [saliendo, setSaliendo] = useState<number | null>(null);
   const revisar = useMutation({
-    mutationFn: (id: number) => insumosApi.revisarAlerta(id),
+    // la tarjeta se desvanece y luego se marca (la lista se acomoda sola)
+    mutationFn: async (id: number) => {
+      setSaliendo(id);
+      await new Promise((r) => setTimeout(r, todas ? 0 : 250));
+      return insumosApi.revisarAlerta(id);
+    },
+    onSettled: () => setSaliendo(null),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['alertas'] }),
   });
   // Revisada por error: vuelve a pendiente (solo si el insumo sigue en el mínimo o por debajo)
@@ -39,7 +46,7 @@ export default function Alertas() {
       {alertas.data?.length === 0 && <div className="tarjeta text-muted">No hay alertas pendientes. 👍</div>}
       <div className="d-grid gap-2">
         {alertas.data?.map((a) => (
-          <div className={`tarjeta py-3 ${a.revisada ? 'opacity-75' : ''}`} key={a.id}>
+          <div className={`tarjeta tarjeta-alerta py-3 aparece ${a.revisada ? 'opacity-75' : ''} ${elegidas.includes(a.id) ? 'seleccionada' : ''} ${saliendo === a.id ? 'saliendo' : ''}`} key={a.id}>
             <div className="d-flex flex-wrap gap-3 align-items-start">
               {!a.revisada && (
                 <input type="checkbox" className="form-check-input mt-1" aria-label={`Seleccionar ${a.insumo.nombre}`} checked={elegidas.includes(a.id)} onChange={(e) => setElegidas(e.target.checked ? [...elegidas, a.id] : elegidas.filter((x) => x !== a.id))} />

@@ -6,6 +6,7 @@ import { usuariosApi, type Usuario } from '../api/recursos';
 import { ModalConfirmar } from '../components/ModalConfirmar';
 import { CampoPassword } from '../components/CampoPassword';
 import { useAuth } from '../auth';
+import { BotonAccion } from '../components/Interaccion';
 import { camposApi, erroresZod, mensajeError } from '../formato';
 
 const horaPE = (iso: string) => new Intl.DateTimeFormat('es-PE', { timeZone: 'America/Lima', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso));
@@ -169,7 +170,7 @@ function FormUsuario({ usuario, esYo, onCerrar }: { usuario: Usuario | null; esY
         </Modal.Body>
         <Modal.Footer>
           <button type="button" className="btn btn-outline-secondary" onClick={onCerrar}>Cancelar</button>
-          <button className="btn btn-acento" disabled={guardar.isPending}>Guardar</button>
+          <BotonAccion mutacion={guardar}>Guardar</BotonAccion>
         </Modal.Footer>
       </form>
     </Modal>

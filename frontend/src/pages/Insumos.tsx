@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom';
 import { insumosApi, type Insumo, type MovimientoKardex } from '../api/recursos';
 import { FiltroLista } from '../components/FiltroLista';
 import { ModalConfirmar } from '../components/ModalConfirmar';
+import { BotonAccion } from '../components/Interaccion';
 import { camposApi, erroresZod, fechaHoraPE, mensajeError } from '../formato';
 
 const num = (s: string) => Number(s).toLocaleString('es-PE', { maximumFractionDigits: 2 });
@@ -168,7 +169,7 @@ function FormInsumo({ insumo, onCerrar }: { insumo: Insumo | null; onCerrar: () 
         </Modal.Body>
         <Modal.Footer>
           <button type="button" className="btn btn-outline-secondary" onClick={onCerrar}>Cancelar</button>
-          <button className="btn btn-acento" disabled={guardar.isPending}>Guardar</button>
+          <BotonAccion mutacion={guardar}>Guardar</BotonAccion>
         </Modal.Footer>
       </form>
     </Modal>
@@ -288,7 +289,7 @@ function ModalAjuste({ insumo, onCerrar }: { insumo: Insumo; onCerrar: () => voi
         </Modal.Body>
         <Modal.Footer>
           <button type="button" className="btn btn-outline-secondary" onClick={onCerrar}>Cancelar</button>
-          <button className="btn btn-acento" disabled={guardar.isPending}>Registrar</button>
+          <BotonAccion mutacion={guardar}>Registrar</BotonAccion>
         </Modal.Footer>
       </form>
     </Modal>

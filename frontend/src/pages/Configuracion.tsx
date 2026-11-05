@@ -3,6 +3,7 @@ import { Modal } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BILLETERAS, configPagoSchema, LARGO_NUMERICO, soloDigitos, descuentoSchema, ETIQUETA_BILLETERA, feriadoSchema, HORARIO_CLINICA, nombreBilleteras, type Billetera, type DescuentoDTO } from '@clinica/shared';
 import { citasApi, configApi, tarifarioApi, type DatosPago, type Descuento } from '../api/recursos';
+import { BotonAccion, CampoDigitos } from '../components/Interaccion';
 import { camposApi, erroresZod, fechaPE, hoyLima, mensajeError } from '../formato';
 
 type Pestana = 'campanas' | 'feriados' | 'horarios' | 'pagos';
@@ -19,7 +20,7 @@ export default function Configuracion() {
   return (
     <>
       <h1 className="h4 mb-3">Configuración</h1>
-      <ul className="nav nav-tabs mb-3 flex-nowrap overflow-auto">
+      <ul className="nav nav-tabs mb-3 flex-nowrap desplazable">
         {PESTANAS.map(([k, t]) => (
           <li className="nav-item" key={k}>
             <button className={`nav-link text-nowrap ${pestana === k ? 'active' : ''}`} onClick={() => setPestana(k)}>{t}</button>
@@ -158,7 +159,7 @@ function FormCampana({ campana, onCerrar }: { campana: Descuento | null; onCerra
         </Modal.Body>
         <Modal.Footer>
           <button type="button" className="btn btn-outline-secondary" onClick={onCerrar}>Cancelar</button>
-          <button className="btn btn-acento" disabled={guardar.isPending}>Guardar</button>
+          <BotonAccion mutacion={guardar}>Guardar</BotonAccion>
         </Modal.Footer>
       </form>
     </Modal>
@@ -223,7 +224,7 @@ function Feriados() {
             <input id="f-nombre" className={`form-control ${errores.nombre ? 'is-invalid' : ''}`} value={v.nombre} onChange={(e) => setV({ ...v, nombre: e.target.value })} placeholder="Ej.: Aniversario de la clínica" />
             <div className="invalid-feedback">{errores.nombre}</div>
           </div>
-          <button className="btn btn-acento w-100" disabled={crear.isPending}>Agregar</button>
+          <BotonAccion className="btn btn-acento w-100" mutacion={crear}>Agregar</BotonAccion>
           {afectadas && (
             <div className={`alert mt-3 mb-0 small ${afectadas.citasAfectadas.length ? 'alert-warning' : 'alert-success'}`}>
               Feriado del {fechaPE(afectadas.feriado.fecha)} agregado.
@@ -363,8 +364,7 @@ function Pagos() {
           </div>
           <div className="mb-2">
             <label htmlFor="p-numero" className="form-label">Celular</label>
-            <input id="p-numero" inputMode="numeric" maxLength={LARGO_NUMERICO.celular} className={`form-control ${errores.numero ? 'is-invalid' : ''}`} value={v.numero} onChange={(e) => setV({ ...v, numero: soloDigitos(e.target.value, LARGO_NUMERICO.celular) })} />
-            <div className="invalid-feedback">{errores.numero}</div>
+            <CampoDigitos id="p-numero" value={v.numero} onChange={(x) => setV({ ...v, numero: x })} largo={LARGO_NUMERICO.celular} error={errores.numero} />
           </div>
           <div className="mb-3">
             <label htmlFor="p-titular" className="form-label">Titular</label>
@@ -377,7 +377,7 @@ function Pagos() {
             <div className="invalid-feedback">{errores.saldoVigenciaMeses}</div>
             <div className="form-text">0 = no vence. Se avisa al paciente por correo 30 y 7 días antes de que venza.</div>
           </div>
-          <button className="btn btn-acento" disabled={guardar.isPending}>Guardar</button>
+          <BotonAccion mutacion={guardar}>Guardar</BotonAccion>
         </form>
       </div>
       <div className="col-lg-6">

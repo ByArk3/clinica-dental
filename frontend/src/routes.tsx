@@ -1,4 +1,4 @@
-import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import type { Rol } from '@clinica/shared';
 import { useAuth } from './auth';
 import { MenuPorRol } from './components/MenuPorRol';
@@ -35,6 +35,7 @@ export const rutaInicio = (rol: Rol) =>
 /** Rutas protegidas por rol (RNF07). La API vuelve a validar el rol: esto es solo navegación. */
 function Protegida({ roles }: { roles?: Rol[] }) {
   const { usuario, cargando } = useAuth();
+  const { pathname } = useLocation();
   if (cargando) return <p className="p-4 text-muted">Cargando…</p>;
   if (!usuario) return <Navigate to="/login" replace />;
   if (roles && !roles.includes(usuario.rol)) return <Navigate to={rutaInicio(usuario.rol)} replace />;
@@ -42,7 +43,10 @@ function Protegida({ roles }: { roles?: Rol[] }) {
     <div className="layout">
       <MenuPorRol />
       <main className="contenido">
-        <Outlet />
+        {/* key: cada pantalla entra con un fundido corto */}
+        <div className="pantalla" key={pathname}>
+          <Outlet />
+        </div>
       </main>
     </div>
   );

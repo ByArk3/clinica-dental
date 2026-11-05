@@ -7,6 +7,9 @@ import './estilos.css';
 import { AuthProvider } from './auth';
 import { Rutas } from './routes';
 import { ApiError } from './api/cliente';
+import { aplicarTema, temaGuardado } from './tema';
+
+aplicarTema(temaGuardado());
 
 const qc = new QueryClient({
   defaultOptions: {

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
-import { contactoSchema, type ContactoDTO, LARGO_NUMERICO, soloDigitos } from '@clinica/shared';
+import { contactoSchema, type ContactoDTO, LARGO_NUMERICO } from '@clinica/shared';
 import type { Paciente } from '../api/recursos';
+import { CampoDigitos } from './Interaccion';
 import { mensajeError } from '../formato';
 
 /** CU-04 Actualizar datos de contacto del paciente. */
@@ -35,16 +36,14 @@ export function FormContacto({ paciente, onGuardar, onCancelar }: { paciente: Pa
   const campo = (nombre: string, etiqueta: string, tipo = 'text') => (
     <div className="col-sm-6">
       <label htmlFor={`c-${nombre}`} className="form-label">{etiqueta}</label>
-      <input
-        id={`c-${nombre}`}
-        type={tipo}
-        inputMode={nombre === 'telefono' ? 'numeric' : undefined}
-        maxLength={nombre === 'telefono' ? LARGO_NUMERICO.celular : undefined}
-        className={`form-control ${errores[nombre] ? 'is-invalid' : ''}`}
-        value={v[nombre]}
-        onChange={(e) => setV({ ...v, [nombre]: nombre === 'telefono' ? soloDigitos(e.target.value, LARGO_NUMERICO.celular) : e.target.value })}
-      />
-      <div className="invalid-feedback">{errores[nombre]}</div>
+      {nombre === 'telefono' ? (
+        <CampoDigitos id={`c-${nombre}`} value={v[nombre]} onChange={(x) => setV({ ...v, [nombre]: x })} largo={LARGO_NUMERICO.celular} error={errores[nombre]} />
+      ) : (
+        <>
+          <input id={`c-${nombre}`} type={tipo} className={`form-control ${errores[nombre] ? 'is-invalid' : ''}`} value={v[nombre]} onChange={(e) => setV({ ...v, [nombre]: e.target.value })} />
+          <div className="invalid-feedback">{errores[nombre]}</div>
+        </>
+      )}
     </div>
   );
 

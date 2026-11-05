@@ -202,6 +202,13 @@ en la API; aviso de Insumos con todos los insumos en el mínimo y leyenda del co
 «Volver a pendiente» (auditoría); al subir el mínimo de un insumo por encima de su stock se crea la alerta; razón social con el
 RUC (SUNAT, mismo token que RENIEC).
 
+**Interfaz (v3)**: modo oscuro (🌙 en el menú; se recuerda), efectos al pasar el mouse (filas, botones, menú, pestañas,
+tarjetas), entrada suave de cada pantalla, botones que muestran «Guardando…» y ✓ al terminar, campos de dígitos con ✓/✗,
+copiar el número de Yape y el N.° de operación con un toque, globos de ayuda en los estados de la cita, vista previa en Caja,
+contadores animados en el Panel, «Pago en verificación» con un punto que late, QR ampliable, confirmación antes de registrar
+un pago, pedido desde alertas resaltado (con proveedor sugerido) y buscador de insumos sin tildes y tolerante a errores.
+Respeta «reducir movimiento» del sistema operativo.
+
 > Para el informe (v2): cambian **RN-12** (100 % con 3+ inasistencias), **P6** (adelanto en toda reserva), **CU-06**, **CU-07**,
 > **CU-08** (de «Confirmar cita» a «Recordar cita», `<<extend>>` hacia CU-07) y **CU-13**, y el diagrama de estados de la cita
 > («Pendiente de confirmación» queda solo para citas anteriores al cambio).

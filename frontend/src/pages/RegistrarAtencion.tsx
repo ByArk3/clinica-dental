@@ -6,6 +6,7 @@ import { atencionApi, historialApi, tarifarioApi, type ResultadoAtencion } from 
 import { PiezaDental } from '../components/PiezaDental';
 import { TablaInsumos, calcularConsumo } from '../components/TablaInsumos';
 import { VistaHistorial } from '../components/VistaHistorial';
+import { BotonAccion } from '../components/Interaccion';
 import { hoyLima, mensajeError, solesPE } from '../formato';
 
 interface Linea {
@@ -160,9 +161,7 @@ export default function RegistrarAtencion() {
               <span>Total del tarifario: <strong>{solesPE(total)}</strong></span>
             </div>
             {guardar.isError && <div className="alert alert-danger mt-3" role="alert">{mensajeError(guardar.error)}</div>}
-            <button type="submit" className="btn btn-acento w-100 mt-3" disabled={guardar.isPending}>
-              {guardar.isPending ? 'Guardando…' : 'Guardar atención'}
-            </button>
+            <BotonAccion type="submit" className="btn btn-acento w-100 mt-3" mutacion={guardar}>Guardar atención</BotonAccion>
           </form>
         </div>
         <div className="col-lg-5">

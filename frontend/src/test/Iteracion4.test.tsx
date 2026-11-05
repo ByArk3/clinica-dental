@@ -34,7 +34,7 @@ describe('CU-30 NuevoPedido', () => {
   it('flujo básico: busca insumo (CU-22), agrega, elige proveedor y registra', async () => {
     const llamadas = simularApi({
       'GET /proveedores': { body: proveedores },
-      'GET /insumos/buscar': { body: [copa] },
+      'GET /insumos': { body: [resina, copa] },
       'POST /pedidos': { status: 201, body: { ...pedido, codigo: 'PED-0004', detalles: [pedido.detalles[0]] } },
     });
     renderizar(<NuevoPedido />);
@@ -42,7 +42,7 @@ describe('CU-30 NuevoPedido', () => {
     await screen.findByRole('option', { name: /Odontomed/ });
     await u.selectOptions(screen.getByLabelText('Proveedor'), '1');
     await u.type(screen.getByLabelText('Agregar insumo'), 'copa');
-    await u.click(await screen.findByRole('button', { name: /Copa de goma/ }));
+    await u.click(await screen.findByRole('option', { name: /Copa de goma/ }));
     const cant = screen.getByLabelText('Cantidad de Copa de goma');
     await u.clear(cant);
     await u.type(cant, '20');

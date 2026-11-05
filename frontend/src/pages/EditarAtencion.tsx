@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { editarAtencionSchema, MENSAJES } from '@clinica/shared';
 import { atencionApi, tarifarioApi, type ResultadoEdicion } from '../api/recursos';
 import { PiezaDental } from '../components/PiezaDental';
+import { BotonAccion } from '../components/Interaccion';
 import { fechaPE, mensajeError, solesPE } from '../formato';
 
 interface Linea {
@@ -158,7 +159,7 @@ export default function EditarAtencion() {
           <div className="invalid-feedback">{errores.motivo}</div>
         </div>
         {guardar.isError && <div className="alert alert-danger" role="alert">{mensajeError(guardar.error)}</div>}
-        <button type="submit" className="btn btn-acento w-100" disabled={guardar.isPending}>{guardar.isPending ? 'Guardando…' : 'Guardar corrección'}</button>
+        <BotonAccion type="submit" className="btn btn-acento w-100" mutacion={guardar}>Guardar corrección</BotonAccion>
       </form>
     </>
   );

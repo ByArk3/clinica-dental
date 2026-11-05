@@ -6,6 +6,7 @@ import { ApiError } from '../api/cliente';
 import { SelectorHorarios } from './SelectorHorarios';
 import { fechaPE, hoyLima, solesPE } from '../formato';
 import { ChipEstado } from './ChipEstado';
+import { BotonAccion } from './Interaccion';
 import { PanelPagoAdelanto } from './PanelPagoAdelanto';
 
 interface Props {
@@ -160,9 +161,11 @@ export function FormReserva({ pacienteId, onRegistrada }: Props) {
         {errores.hora && <div className="text-danger small mt-1">{errores.hora}</div>}
       </div>
       {error && <div className="alert alert-danger" role="alert">{error}</div>}
-      <button type="submit" className="btn btn-acento w-100" disabled={grabar.isPending}>
-        {grabar.isPending ? 'Registrando…' : hora ? `Reservar a las ${hora}` : 'Reservar cita'}
-      </button>
+      <div className="accion-fija">
+        <BotonAccion type="submit" className="btn btn-acento w-100" mutacion={grabar} textoPendiente="Registrando…">
+          {hora ? `Reservar a las ${hora}` : 'Reservar cita'}
+        </BotonAccion>
+      </div>
     </form>
   );
 }

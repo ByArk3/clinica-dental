@@ -4,6 +4,22 @@
   --acento: #0e7c86;
   --acento-hover: #0b666e;
   --fondo: #f3f6f7;
+  --superficie: #fff;
+  --resalte: #e8f4f5; /* fila o tarjeta bajo el mouse */
+  --sombra: rgba(11, 60, 73, 0.1);
+  --t: 160ms ease;
+}
+/* Modo oscuro (Bootstrap 5.3: data-bs-theme="dark" en <html>) */
+[data-bs-theme='dark'] {
+  --oscuro: #071f26;
+  --acento: #15a3ae;
+  --acento-hover: #12909a;
+  --fondo: #0d171b;
+  --superficie: #15242a;
+  --resalte: #1c3239;
+  --sombra: rgba(0, 0, 0, 0.45);
+  --bs-body-bg: #0d171b;
+  --bs-tertiary-bg: #1a2b31;
 }
 body { background: var(--fondo); }
 
@@ -21,7 +37,7 @@ body { background: var(--fondo); }
   .contenido { padding: 1rem; }
 }
 
-.tarjeta { background: #fff; border-radius: 10px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(11, 60, 73, 0.1); }
+.tarjeta { background: var(--superficie); border-radius: 10px; padding: 1.25rem; box-shadow: 0 1px 3px var(--sombra); }
 
 .btn-acento {
   --bs-btn-color: #fff; --bs-btn-bg: var(--acento); --bs-btn-border-color: var(--acento);
@@ -52,7 +68,7 @@ body { background: var(--fondo); }
 .cuadrante:nth-child(odd) { border-right: 2px solid #ced4da; padding-right: 0.5rem; }
 .odontograma > .cuadrante:nth-child(-n + 2) { border-bottom: 2px solid #ced4da; padding-bottom: 0.35rem; }
 .odontograma > .small { grid-column: 1 / -1; }
-.pieza { border: 1px solid #ced4da; background: #fff; border-radius: 4px; font-size: 0.75rem; padding: 0.3rem 0; min-height: 32px; }
+.pieza { border: 1px solid var(--bs-border-color); background: var(--superficie); color: inherit; border-radius: 4px; font-size: 0.75rem; padding: 0.3rem 0; min-height: 32px; }
 .pieza:hover { border-color: var(--acento); }
 .pieza.activa { background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 600; }
 @media (max-width: 575.98px) {
@@ -75,3 +91,80 @@ body { background: var(--fondo); }
   background: var(--bs-warning-bg-subtle, #fff3cd);
   border: 1px solid var(--bs-warning-border-subtle, #ffe69c);
 }
+
+/* ===================== Interacción (v3) ===================== */
+@media (prefers-reduced-motion: no-preference) {
+  .btn, .nav-link, .list-group-item, .tarjeta, tbody tr > *, .form-control, .form-select, .chip, .pieza, .tarjeta-alerta {
+    transition: background-color var(--t), color var(--t), border-color var(--t), box-shadow var(--t), transform var(--t), opacity 250ms ease;
+  }
+  /* Entrada suave de cada pantalla */
+  .pantalla { animation: entrar 220ms ease both; }
+  /* Las ventanas crecen desde el centro */
+  .modal.fade .modal-dialog { transform: scale(0.94); transition: transform 180ms ease; }
+  .modal.show .modal-dialog { transform: none; }
+  /* Elementos de lista que aparecen */
+  .aparece { animation: entrar 220ms ease both; }
+  /* Horario elegido: pequeño salto */
+  .horario-elegido { animation: salto 260ms ease; }
+}
+@keyframes entrar { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes salto { 0% { transform: scale(1); } 40% { transform: scale(1.12); } 100% { transform: scale(1); } }
+@keyframes latido { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.75); } }
+
+/* Botones: se elevan y toman color al pasar el mouse */
+@media (hover: hover) {
+  .btn:not(:disabled):not(.btn-link):hover { transform: translateY(-1px); box-shadow: 0 4px 10px var(--sombra); }
+  .btn-outline-secondary:not(:disabled):hover { background: var(--acento); border-color: var(--acento); color: #fff; }
+  .btn-outline-danger:not(:disabled):hover { background: var(--bs-danger); color: #fff; }
+  /* Filas de tabla: se iluminan y marcan el borde izquierdo */
+  .table tbody tr:hover > * { background-color: var(--resalte) !important; }
+  /* la barra va como fondo: Bootstrap usa box-shadow para pintar las celdas */
+  .table tbody tr:hover > *:first-child { background-image: linear-gradient(to right, var(--acento) 4px, transparent 4px); }
+  /* Menú lateral: se ilumina y se desliza */
+  .barra-lateral .nav-link:not(.active):not(.disabled):hover { background: rgba(255, 255, 255, 0.1); color: #fff; transform: translateX(4px); }
+  /* Pestañas: subrayado de color */
+  .nav-tabs .nav-link:not(.active):hover { border-color: transparent; box-shadow: inset 0 -3px 0 var(--acento); color: var(--acento); }
+  /* Listas y tarjetas que se pueden tocar: se elevan */
+  .list-group-item-action:hover { background: var(--resalte); box-shadow: 0 6px 18px var(--sombra); transform: translateY(-2px); z-index: 2; }
+  .form-control:hover:not(:focus):not(:disabled), .form-select:hover:not(:focus):not(:disabled) { border-color: var(--acento); }
+}
+.btn:not(:disabled):active { transform: translateY(0); box-shadow: none; }
+/* Celular: botones más cómodos y respuesta al tocar */
+@media (pointer: coarse) {
+  .btn-sm { padding: 0.4rem 0.75rem; font-size: 0.9rem; }
+  .btn:active, .list-group-item-action:active { filter: brightness(0.92); }
+}
+/* Botón principal fijo al pie en el celular (reserva y pago) */
+@media (max-width: 575.98px) {
+  .accion-fija { position: sticky; bottom: 0; z-index: 5; padding: 0.6rem 0; background: linear-gradient(to top, var(--superficie) 70%, transparent); }
+}
+/* Botón que trabaja: ✓ verde al terminar */
+.btn.listo { background: var(--bs-success) !important; border-color: var(--bs-success) !important; color: #fff !important; }
+/* Estado «Pago en verificación»: punto que late */
+.chip-pago_en_verificacion::before { content: ''; display: inline-block; width: 0.5em; height: 0.5em; margin-right: 0.35em; border-radius: 50%; background: currentColor; vertical-align: 0.1em; }
+@media (prefers-reduced-motion: no-preference) { .chip-pago_en_verificacion::before { animation: latido 1.4s ease-in-out infinite; } }
+/* Tarjeta seleccionada (Alertas) y que se va */
+.tarjeta-alerta.seleccionada { background: var(--resalte); box-shadow: inset 4px 0 0 var(--acento), 0 1px 3px var(--sombra); }
+.saliendo { opacity: 0 !important; transform: translateX(16px) !important; }
+/* Pestañas sin barra vertical que sobra */
+.nav-tabs.desplazable { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+/* QR ampliable */
+.qr-miniatura { cursor: zoom-in; }
+@media (max-width: 575.98px) { .qr-miniatura { width: 220px !important; height: 220px !important; } }
+.qr-ampliado .modal-content { background: transparent; border: 0; box-shadow: none; }
+.modal-backdrop.qr-fondo.show { opacity: 0.85; }
+.qr-ampliado .cerrar-qr { position: absolute; top: -0.25rem; right: -0.25rem; width: 2.25rem; height: 2.25rem; border-radius: 50%; border: 0; background: rgba(0, 0, 0, 0.75); color: #fff; font-size: 1.25rem; line-height: 1; z-index: 2; }
+/* Insumo que viene de una alerta (Nuevo pedido) */
+.linea-pedido { border: 1px solid var(--bs-border-color); border-radius: 8px; padding: 0.5rem; }
+.linea-pedido.desde-alerta { border: 2px solid var(--bs-primary); background: var(--bs-primary-bg-subtle); }
+/* Modo oscuro: chips legibles */
+[data-bs-theme='dark'] .chip-pendiente_confirmacion { background: #4d3d00; color: #ffe08a; }
+[data-bs-theme='dark'] .chip-pendiente_adelanto { background: #5a2a08; color: #ffc9a3; }
+[data-bs-theme='dark'] .chip-confirmada { background: #0b4a50; color: #b8f0f4; }
+[data-bs-theme='dark'] .chip-atendida { background: #1d3366; color: #c5d6ff; }
+[data-bs-theme='dark'] .chip-pagada { background: #1b4a27; color: #c3ecce; }
+[data-bs-theme='dark'] .chip-cancelada, [data-bs-theme='dark'] .chip-liberada { background: #343a40; color: #ced4da; }
+[data-bs-theme='dark'] .chip-inasistencia { background: #5c1a21; color: #f5c2c7; }
+[data-bs-theme='dark'] .chip-pago_en_verificacion { background: #3b2766; color: #ddd0fb; }
+/* Tablas dentro de tarjetas: mismo fondo que la tarjeta (claro y oscuro) */
+.tarjeta .table { --bs-table-bg: transparent; }

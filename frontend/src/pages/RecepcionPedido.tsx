@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MENSAJES } from '@clinica/shared';
 import { pedidosApi, type Pedido } from '../api/recursos';
 import { ChipPedido } from '../components/ChipPedido';
+import { BotonAccion } from '../components/Interaccion';
 import { camposApi, fechaHoraPE, mensajeError, numPE } from '../formato';
 
 /** CU-33 (i_recepcion): ingresar lo recibido, verificar contra el pedido (RN-15) y sumar al stock. */
@@ -107,7 +108,7 @@ export default function RecepcionPedido() {
             <div className="invalid-feedback">{errores.verificado}</div>
           </div>
           {guardar.isError && <div className="alert alert-danger" role="alert">{mensajeError(guardar.error)}</div>}
-          <button className="btn btn-acento w-100" disabled={guardar.isPending}>{guardar.isPending ? 'Registrando…' : 'Registrar recepción'}</button>
+          <BotonAccion className="btn btn-acento w-100" mutacion={guardar} textoPendiente="Registrando…">Registrar recepción</BotonAccion>
         </form>
       )}
     </>

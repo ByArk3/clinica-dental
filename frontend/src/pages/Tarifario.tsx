@@ -5,6 +5,7 @@ import { tratamientoSchema } from '@clinica/shared';
 import { insumosApi, tarifarioApi, type Tratamiento } from '../api/recursos';
 import { FiltroLista } from '../components/FiltroLista';
 import { ModalConfirmar } from '../components/ModalConfirmar';
+import { BotonAccion } from '../components/Interaccion';
 import { mensajeError, solesPE } from '../formato';
 
 interface LineaInsumo { insumoId: number | ''; cantidad: string }
@@ -136,7 +137,7 @@ function FormTratamiento({ tratamiento, onCerrar }: { tratamiento: Tratamiento |
         </Modal.Body>
         <Modal.Footer>
           <button type="button" className="btn btn-outline-secondary" onClick={onCerrar}>Cancelar</button>
-          <button className="btn btn-acento" disabled={guardar.isPending}>Guardar</button>
+          <BotonAccion mutacion={guardar}>Guardar</BotonAccion>
         </Modal.Footer>
       </form>
     </Modal>

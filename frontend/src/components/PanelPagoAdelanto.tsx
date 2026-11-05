@@ -1,7 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { ETIQUETA_BILLETERA, LARGO_NUMERICO, reportarPagoSchema, soloDigitos, type Billetera } from '@clinica/shared';
+import { ETIQUETA_BILLETERA, LARGO_NUMERICO, reportarPagoSchema, soloDigitos, type Billetera, type ReportarPagoDTO } from '@clinica/shared';
+import { Modal } from 'react-bootstrap';
+import { BotonAccion, BotonCopiar } from './Interaccion';
 import { citasApi, type Cita } from '../api/recursos';
 import { erroresZod, mensajeError, solesPE } from '../formato';
 
@@ -36,10 +38,13 @@ export function PanelPagoAdelanto({ cita, modo, onReportado }: { cita: Cita; mod
   const [numero, setNumero] = useState('');
   const [captura, setCaptura] = useState<string | undefined>();
   const [errores, setErrores] = useState<Record<string, string>>({});
+  const [confirmar, setConfirmar] = useState<ReportarPagoDTO | null>(null);
+  const [qrGrande, setQrGrande] = useState(false);
   const reportar = useMutation({
     mutationFn: (d: Parameters<typeof citasApi.reportarPago>[1]) => citasApi.reportarPago(cita.id, d),
     onSuccess: (c) => {
       qc.invalidateQueries({ queryKey: ['mis-citas'] });
+      setConfirmar(null);
       onReportado?.(c);
     },
   });
@@ -59,7 +64,7 @@ export function PanelPagoAdelanto({ cita, modo, onReportado }: { cita: Cita; mod
     const r = reportarPagoSchema.safeParse({ metodo, numeroOperacion: numero, captura });
     if (!r.success) return setErrores(erroresZod(r.error.issues));
     setErrores({});
-    reportar.mutate(r.data);
+    setConfirmar(r.data); // antes de enviar, el paciente revisa el resumen
   }
 
   if (cita.estado === 'pago_en_verificacion') {
@@ -95,10 +100,16 @@ export function PanelPagoAdelanto({ cita, modo, onReportado }: { cita: Cita; mod
         <form onSubmit={enviar} noValidate>
           <div className="d-flex flex-wrap gap-3 align-items-start mb-2">
             {datos.data?.tieneQr && (
-              <img src={citasApi.qrUrl()} alt={`QR de ${nombres} de la clínica`} className="border rounded bg-white p-1" style={{ width: 160, height: 160, objectFit: 'contain' }} />
+              <div className="text-center">
+                <button type="button" className="btn p-0 border-0 bg-transparent" onClick={() => setQrGrande(true)} aria-label="Ampliar el QR">
+                  <img src={citasApi.qrUrl()} alt={`QR de ${nombres} de la clínica`} className="qr-miniatura border rounded bg-white p-1" style={{ width: 160, height: 160, objectFit: 'contain' }} />
+                </button>
+                <div className="small text-muted">🔍 Toca el QR para ampliarlo</div>
+              </div>
             )}
             <p className="mb-0" style={{ flex: '1 1 200px' }}>
-              {datos.data?.tieneQr ? `Escanee el QR con ${nombres} o pague` : `Pague por ${nombres}`} al <strong>{datos.data?.numero ?? '…'}</strong> a nombre de{' '}
+              {datos.data?.tieneQr ? `Escanee el QR con ${nombres} o pague` : `Pague por ${nombres}`} al <strong>{datos.data?.numero ?? '…'}</strong>
+              {datos.data?.numero && <BotonCopiar texto={datos.data.numero} etiqueta="el número" />} a nombre de{' '}
               <strong>{datos.data?.titular ?? '…'}</strong> el monto de <strong>{solesPE(aPagar)}</strong>. Luego registre aquí su pago:
             </p>
           </div>
@@ -121,10 +132,47 @@ export function PanelPagoAdelanto({ cita, modo, onReportado }: { cita: Cita; mod
             <input id={`cap-${cita.id}`} type="file" accept="image/png,image/jpeg,image/webp" className={`form-control form-control-sm ${errores.captura ? 'is-invalid' : ''}`} onChange={(e) => elegirArchivo(e.target.files?.[0])} />
             <div className="invalid-feedback">{errores.captura}</div>
           </div>
-          {reportar.isError && <div className="alert alert-danger py-2" role="alert">{mensajeError(reportar.error)}</div>}
-          <button className="btn btn-acento btn-sm" disabled={reportar.isPending}>{reportar.isPending ? 'Enviando…' : 'Ya pagué: registrar mi pago'}</button>
+          <div className="accion-fija">
+            <button className="btn btn-acento btn-sm">Ya pagué: registrar mi pago</button>
+          </div>
         </form>
       )}
+
+      {/* QR ampliado */}
+      <Modal show={qrGrande} onHide={() => setQrGrande(false)} centered className="qr-ampliado" backdropClassName="qr-fondo">
+        <Modal.Body className="text-center p-2">
+          <button type="button" className="cerrar-qr" aria-label="Cerrar" onClick={() => setQrGrande(false)}>✕</button>
+          <img src={citasApi.qrUrl()} alt={`QR de ${nombres} de la clínica (ampliado)`} className="bg-white rounded p-2 w-100" style={{ maxHeight: '75vh', objectFit: 'contain' }} />
+          <div className="text-white mt-2 d-inline-block rounded px-3 py-1" style={{ background: 'rgba(0, 0, 0, 0.6)' }}>
+            {nombres} al <strong>{datos.data?.numero}</strong> · <strong>{solesPE(aPagar)}</strong>
+            <div className="small opacity-75">Toque fuera de la imagen o la ✕ para cerrar</div>
+          </div>
+        </Modal.Body>
+      </Modal>
+
+      {/* Confirmar antes de registrar el pago */}
+      <Modal show={!!confirmar} onHide={() => !reportar.isPending && setConfirmar(null)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title className="h5">¿Ya realizó el pago?</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="mb-2">Revise que estos datos coincidan con lo que le muestra {ETIQUETA_BILLETERA[metodo]}:</p>
+          <table className="table table-sm mb-3">
+            <tbody>
+              <tr><th className="fw-normal text-muted w-50">Monto</th><td className="fw-semibold">{solesPE(aPagar)}</td></tr>
+              <tr><th className="fw-normal text-muted">{ETIQUETA_BILLETERA[metodo]} al</th><td>{datos.data?.numero} · {datos.data?.titular}</td></tr>
+              <tr><th className="fw-normal text-muted">N.° de operación</th><td className="fw-semibold">{confirmar?.numeroOperacion}</td></tr>
+              <tr><th className="fw-normal text-muted">Captura</th><td>{confirmar?.captura ? 'Adjunta ✓' : <span className="text-muted">Sin captura</span>}</td></tr>
+            </tbody>
+          </table>
+          <div className="alert alert-warning py-2 mb-0 small">⚠ La clínica verificará que el pago haya llegado. Si no llega, la cita se cancela y el horario se libera.</div>
+          {reportar.isError && <div className="alert alert-danger py-2 mt-2 mb-0" role="alert">{mensajeError(reportar.error)}</div>}
+        </Modal.Body>
+        <Modal.Footer>
+          <button type="button" className="btn btn-outline-secondary" disabled={reportar.isPending} onClick={() => setConfirmar(null)}>Volver y revisar</button>
+          <BotonAccion type="button" mutacion={reportar} textoPendiente="Enviando…" onClick={() => confirmar && reportar.mutate(confirmar)}>Sí, ya pagué</BotonAccion>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }

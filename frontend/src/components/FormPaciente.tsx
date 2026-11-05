@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { LARGO_NUMERICO, pacienteSchema, registroPacienteSchema, soloDigitos } from '@clinica/shared';
+import { LARGO_NUMERICO, pacienteSchema, registroPacienteSchema } from '@clinica/shared';
 import { ApiError } from '../api/cliente';
+import { CampoDigitos } from './Interaccion';
 import { CampoPassword } from './CampoPassword';
 
 type Valores = Record<string, string>;
@@ -90,19 +91,18 @@ export function FormPaciente({ conCuenta, dniInicial = '', inicial, textoBoton, 
                 autoComplete="new-password"
                 error={errores.password}
               />
+            ) : NUMERICOS[c.nombre] ? (
+              <CampoDigitos id={`p-${c.nombre}`} value={v[c.nombre] ?? ''} onChange={(x) => setV({ ...v, [c.nombre]: x })} largo={NUMERICOS[c.nombre]} error={errores[c.nombre]} />
             ) : (
               <input
                 id={`p-${c.nombre}`}
                 type={c.tipo ?? 'text'}
                 className={`form-control ${errores[c.nombre] ? 'is-invalid' : ''}`}
                 value={v[c.nombre] ?? ''}
-                onChange={(e) => setV({ ...v, [c.nombre]: NUMERICOS[c.nombre] ? soloDigitos(e.target.value, NUMERICOS[c.nombre]) : e.target.value })}
-              maxLength={NUMERICOS[c.nombre]}
-                autoComplete={c.nombre === 'password' ? 'new-password' : undefined}
-                inputMode={c.nombre === 'dni' || c.nombre === 'telefono' ? 'numeric' : undefined}
+                onChange={(e) => setV({ ...v, [c.nombre]: e.target.value })}
               />
             )}
-            {c.nombre !== 'password' && <div className="invalid-feedback">{errores[c.nombre]}</div>}
+            {c.nombre !== 'password' && !NUMERICOS[c.nombre] && <div className="invalid-feedback">{errores[c.nombre]}</div>}
           </div>
         ))}
       </div>

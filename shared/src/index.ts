@@ -239,7 +239,13 @@ function imagenDataUrl(formato: string, tamano: string) {
 const MAX_CAPTURA_BYTES = 2 * 1024 * 1024;
 export const reportarPagoSchema = z.object({
   metodo: z.enum(['yape', 'plin'], { errorMap: () => ({ message: 'Elija Yape o Plin' }) }),
-  numeroOperacion: z.string().trim().regex(/^\d{4,20}$/, 'Ingrese el número de operación que le dio la aplicación (solo números)'),
+  numeroOperacion: z
+    .string()
+    .trim()
+    .min(1, 'Ingrese el número de operación que le dio la aplicación')
+    .regex(/^\d+$/, 'El número de operación tiene solo números')
+    .min(4, 'El número de operación debe tener al menos 4 dígitos')
+    .max(20, 'El número de operación tiene como máximo 20 dígitos'),
   // Imagen opcional como data URL (png/jpeg/webp), máx. 2 MB
   captura: imagenDataUrl('La captura debe ser una imagen PNG, JPG o WEBP', 'La captura no debe pasar de 2 MB').optional(),
 });

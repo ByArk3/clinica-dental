@@ -26,7 +26,14 @@ export function ModalConfirmar({ abierto, titulo, children, textoConfirmar, peli
       <Modal.Footer>
         <button className="btn btn-outline-secondary" onClick={onCerrar}>Volver</button>
         <button className={`btn ${peligro ? 'btn-danger' : 'btn-acento'}`} disabled={procesando} onClick={onConfirmar}>
-          {procesando ? 'Procesando…' : textoConfirmar}
+          {procesando ? (
+            <>
+              <span className="spinner-border spinner-border-sm me-2" aria-hidden="true" />
+              Procesando…
+            </>
+          ) : (
+            textoConfirmar
+          )}
         </button>
       </Modal.Footer>
     </Modal>

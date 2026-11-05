@@ -34,10 +34,11 @@ export function SelectorHorarios({ disponibilidad, cargando, seleccionado, onSel
         <button
           key={h}
           type="button"
-          className={`btn btn-sm ${seleccionado === h ? 'btn-acento' : 'btn-outline-secondary'}`}
+          className={`btn btn-sm ${seleccionado === h ? 'btn-acento horario-elegido' : 'btn-outline-secondary'}`}
           aria-pressed={seleccionado === h}
           onClick={() => onSeleccionar(h)}
         >
+          {seleccionado === h && <span aria-hidden="true">✓ </span>}
           {h}
         </button>
       ))}

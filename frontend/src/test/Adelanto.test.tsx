@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MENSAJES } from '@clinica/shared';
 import { PanelPagoAdelanto } from '../components/PanelPagoAdelanto';
@@ -24,10 +24,25 @@ describe('Adelanto: panel de pago', () => {
     expect(screen.getByText(/quedan (49|50) min/)).toBeInTheDocument();
     expect(await screen.findByText('987654321')).toBeInTheDocument();
     await u.click(screen.getByRole('button', { name: 'Ya pagué: registrar mi pago' }));
-    expect(screen.getByText('Ingrese el número de operación que le dio la aplicación (solo números)')).toBeInTheDocument();
+    expect(screen.getByText('Ingrese el número de operación que le dio la aplicación')).toBeInTheDocument();
     await u.click(screen.getByRole('radio', { name: 'Plin' }));
+    await u.type(screen.getByLabelText('Número de operación'), '1');
+    await u.click(screen.getByRole('button', { name: 'Ya pagué: registrar mi pago' }));
+    expect(screen.getByText('El número de operación debe tener al menos 4 dígitos')).toBeInTheDocument();
+    await u.type(screen.getByLabelText('Número de operación'), '45566');
+    await u.click(screen.getByRole('button', { name: 'Ya pagué: registrar mi pago' }));
+    // confirmación con resumen antes de enviar
+    const modal = await screen.findByRole('dialog');
+    expect(within(modal).getByText('¿Ya realizó el pago?')).toBeInTheDocument();
+    expect(within(modal).getByText('145566')).toBeInTheDocument();
+    expect(within(modal).getByText('Sin captura')).toBeInTheDocument();
+    expect(llamadas.some((l) => l.metodo === 'POST')).toBe(false);
+    await u.click(within(modal).getByRole('button', { name: 'Volver y revisar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await u.clear(screen.getByLabelText('Número de operación'));
     await u.type(screen.getByLabelText('Número de operación'), '445566');
     await u.click(screen.getByRole('button', { name: 'Ya pagué: registrar mi pago' }));
+    await u.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Sí, ya pagué' }));
     await waitFor(() => expect(llamadas.find((l) => l.metodo === 'POST')?.body).toEqual({ metodo: 'plin', numeroOperacion: '445566' }));
   });
 
@@ -36,10 +51,17 @@ describe('Adelanto: panel de pago', () => {
     renderizar(<PanelPagoAdelanto cita={cita} modo="web" />);
     const u = userEvent.setup();
     expect(await screen.findByRole('img', { name: 'QR de Yape de la clínica' })).toHaveAttribute('src', '/api/datos-pago/qr');
+    // tocar el QR lo amplía
+    expect(screen.getByText('🔍 Toca el QR para ampliarlo')).toBeInTheDocument();
+    await u.click(screen.getByRole('button', { name: 'Ampliar el QR' }));
+    expect(await screen.findByRole('img', { name: 'QR de Yape de la clínica (ampliado)' })).toBeInTheDocument();
+    await u.click(screen.getByRole('button', { name: 'Cerrar' }));
+    await waitFor(() => expect(screen.queryByRole('img', { name: /ampliado/ })).toBeNull());
     expect(screen.getByText(/Escanee el QR con Yape o pague al/)).toBeInTheDocument();
     expect(screen.queryByRole('radio')).toBeNull();
     await u.type(screen.getByLabelText('Número de operación'), '778899');
     await u.click(screen.getByRole('button', { name: 'Ya pagué: registrar mi pago' }));
+    await u.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Sí, ya pagué' }));
     await waitFor(() => expect(llamadas.find((l) => l.metodo === 'POST')?.body).toEqual({ metodo: 'yape', numeroOperacion: '778899' }));
   });
 

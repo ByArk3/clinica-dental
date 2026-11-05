@@ -1,9 +1,10 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import { dniSchema } from '@clinica/shared';
+import { dniSchema, LARGO_NUMERICO } from '@clinica/shared';
 import { pacientesApi, type Paciente } from '../api/recursos';
 import { ApiError } from '../api/cliente';
 import { FormReserva } from '../components/FormReserva';
 import { FormPaciente } from '../components/FormPaciente';
+import { CampoDigitos } from '../components/Interaccion';
 import { FormContacto } from '../components/FormContacto';
 
 /** CU-06 canal presencial (i_cita): la recepcionista busca por DNI y registra la cita. */
@@ -58,8 +59,10 @@ export default function NuevaCita() {
       <h1 className="h4 mb-3">Nueva cita presencial</h1>
       <form className="tarjeta mb-3" onSubmit={buscar}>
         <label htmlFor="dni" className="form-label">DNI del paciente</label>
-        <div className="d-flex gap-2">
-          <input id="dni" className="form-control" style={{ maxWidth: 220 }} inputMode="numeric" maxLength={8} value={dni} onChange={(e) => setDni(e.target.value.replace(/\D/g, ''))} />
+        <div className="d-flex gap-2 align-items-start">
+          <div style={{ maxWidth: 220 }} className="flex-grow-1">
+            <CampoDigitos id="dni" value={dni} onChange={setDni} largo={LARGO_NUMERICO.dni} />
+          </div>
           <button className="btn btn-acento">Buscar</button>
         </div>
         {error && <div className="text-danger small mt-2">{error}</div>}
