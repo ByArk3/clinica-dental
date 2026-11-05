@@ -1,0 +1,35 @@
+@startuml despliegue
+' 4.2 Diagrama de despliegue — según docker-compose.yml, backend/Dockerfile, frontend/Dockerfile y frontend/nginx.conf
+
+node "Dispositivo del usuario\n(PC de recepción / consultorio,\ncelular del paciente)" as Cliente {
+  artifact "Navegador web" as Nav
+}
+
+node "Servidor de la clínica (Docker Engine)" as Host {
+  node "Contenedor web\n«nginx:1.27-alpine»" as Web {
+    artifact "frontend/dist\n(React compilado)" as Dist
+    component "Proxy /api/ → api:3000" as Proxy
+  }
+  node "Contenedor api\n«node:22-bookworm»" as Api {
+    artifact "backend (Express + Prisma)\npuerto 3000" as Back
+    artifact "docker-entrypoint.sh\n(prisma migrate deploy,\nseed si SEED=true,\nSESSION_SECRET)" as Entry
+    component "Tareas programadas\n(node-cron)" as Cron
+  }
+  node "Contenedor db\n«postgres:16-alpine»" as Db {
+    database "clinica_dental" as BD
+  }
+  storage "Volumen datos-db" as Vol
+}
+
+cloud "Internet" {
+  node "Servidor SMTP\n(p. ej. Gmail)" as SMTP
+  node "API Decolecta\n(RENIEC / SUNAT)" as Dec
+}
+
+Nav --> Proxy : HTTP :8080 (WEB_PORT → 80)
+Proxy --> Back : HTTP :3000 (red interna de Docker)
+Back --> BD : TCP :5432 (DATABASE_URL)
+BD --> Vol
+Back --> SMTP : SMTP :587 (STARTTLS)
+Back --> Dec : HTTPS :443
+@enduml

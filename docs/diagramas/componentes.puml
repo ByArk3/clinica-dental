@@ -1,0 +1,77 @@
+@startuml componentes
+' 4.1 Diagrama de componentes — Sistema de gestión de la clínica dental
+' Hecho a partir del código del repositorio (frontend/src, shared/src, backend/src)
+skinparam componentStyle uml2
+left to right direction
+
+package "Navegador (frontend · React + Vite + Bootstrap)" {
+  [Páginas por rol\n(Paciente, Recepcionista,\nOdontólogo, Administrador)] as Paginas
+  [Rutas y menú por rol\n(routes.tsx, MenuPorRol)] as Rutas
+  [Sesión (auth.tsx)] as Sesion
+  [Cliente HTTP (api/cliente.ts)] as Cliente
+  [Componentes comunes\n(Interaccion, ModalAnular,\nPanelPagoAdelanto, BotonTema)] as Comunes
+}
+
+package "Compartido (@clinica/shared)" {
+  [Esquemas Zod y MENSAJES] as Shared
+}
+
+package "Servidor (backend · Node + Express + Prisma)" {
+  [Rutas /api\n(routes/index.ts)] as RutasApi
+  [Middlewares\n(requireAuth, requireRol)] as Mw
+  [Controladores\nauth · paciente · cita · atencion\ncaja · inventario · admin] as Ctrl
+  package "Servicios (reglas de negocio)" {
+    [Citas y agenda\n(cita, disponibilidad, agenda,\nconfirmacion, odontologo)] as SCitas
+    [Atención e historial\n(atencion, historial)] as SAten
+    [Caja y pagos\n(caja, pago, saldo, precio, descuento)] as SCaja
+    [Inventario y compras\n(insumo, stock, pedido,\nproveedor, tratamiento)] as SInv
+    [Usuarios y seguridad\n(auth, usuario, auditoria)] as SSeg
+    [Reportes] as SRep
+    [Consulta RENIEC / SUNAT] as SReniec
+  }
+  [Tareas programadas\n(node-cron: cada 5 min y diaria)] as Jobs
+  [Correo (lib/correo.ts)] as Correo
+  [Prisma Client] as Prisma
+}
+
+database "PostgreSQL 16" as BD
+cloud "Servidor SMTP" as SMTP
+cloud "API Decolecta\n(RENIEC / SUNAT)" as Decolecta
+cloud "WhatsApp (wa.me)" as WA
+
+Paginas --> Rutas
+Paginas --> Comunes
+Paginas --> Sesion
+Paginas --> Cliente
+Paginas ..> Shared : valida formularios
+Cliente --> RutasApi : HTTP /api (JSON + cookie de sesión)
+RutasApi --> Mw
+Mw --> Ctrl
+Ctrl ..> Shared : valida DTO
+Ctrl --> SCitas
+Ctrl --> SAten
+Ctrl --> SCaja
+Ctrl --> SInv
+Ctrl --> SSeg
+Ctrl --> SRep
+Ctrl --> SReniec
+SCitas --> SCaja : adelanto y saldo (RN-12, RN-17)
+SAten --> SInv : descuenta insumos
+SAten --> SSeg : auditoría (RN-22)
+SCaja --> SSeg : auditoría de anulaciones (RN-19)
+Jobs --> SCitas : vence adelantos, recordatorio 48 h (CU-08)
+Jobs --> SCaja : vence saldos a favor
+SCitas --> Correo
+SCaja --> Correo
+SSeg --> Correo
+SCitas --> Prisma
+SAten --> Prisma
+SCaja --> Prisma
+SInv --> Prisma
+SSeg --> Prisma
+SRep --> Prisma
+Prisma --> BD : SQL
+Correo --> SMTP
+SReniec --> Decolecta : HTTPS (token)
+Paginas ..> WA : enlace de recordatorio
+@enduml
