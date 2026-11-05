@@ -77,7 +77,7 @@ describe('Autocompletar con RENIEC (Nueva cita)', () => {
 });
 
 describe('Configuración → Pagos', () => {
-  const datos = { numero: '987799567', titular: 'Clínica Dental', billeteras: ['yape'], tieneQr: false };
+  const datos = { numero: '987799567', titular: 'Clínica Dental', billeteras: ['yape'], tieneQr: false, saldoVigenciaMeses: 12 };
   const abrir = async () => {
     renderizar(<Configuracion />);
     const u = userEvent.setup();
@@ -100,7 +100,7 @@ describe('Configuración → Pagos', () => {
     await u.click(yape);
     expect(screen.getByText('En Caja, el tipo de pago se llamará «Yape/Plin».')).toBeInTheDocument();
     await u.click(screen.getByRole('button', { name: 'Guardar' }));
-    await waitFor(() => expect(llamadas.find((l) => l.metodo === 'PUT')?.body).toEqual({ numero: '987799567', titular: 'Clínica Dental', billeteras: ['plin', 'yape'] }));
+    await waitFor(() => expect(llamadas.find((l) => l.metodo === 'PUT')?.body).toEqual({ numero: '987799567', titular: 'Clínica Dental', billeteras: ['plin', 'yape'], saldoVigenciaMeses: 12 }));
   });
 
   it('sube el QR y lo muestra; rechaza un archivo que no es imagen', async () => {

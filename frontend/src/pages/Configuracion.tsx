@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BILLETERAS, configPagoSchema, descuentoSchema, ETIQUETA_BILLETERA, feriadoSchema, HORARIO_CLINICA, nombreBilleteras, type Billetera, type DescuentoDTO } from '@clinica/shared';
+import { BILLETERAS, configPagoSchema, LARGO_NUMERICO, soloDigitos, descuentoSchema, ETIQUETA_BILLETERA, feriadoSchema, HORARIO_CLINICA, nombreBilleteras, type Billetera, type DescuentoDTO } from '@clinica/shared';
 import { citasApi, configApi, tarifarioApi, type DatosPago, type Descuento } from '../api/recursos';
 import { camposApi, erroresZod, fechaPE, hoyLima, mensajeError } from '../formato';
 
@@ -106,11 +106,20 @@ function FormCampana({ campana, onCerrar }: { campana: Descuento | null; onCerra
     setErrores({});
     guardar.mutate(r.data);
   }
+  const NUM: Partial<Record<string, number>> = { porcentaje: LARGO_NUMERICO.porcentaje, edadMaxima: LARGO_NUMERICO.edad };
   const alternar = (id: number) => setV({ ...v, tratamientos: v.tratamientos.includes(id) ? v.tratamientos.filter((x) => x !== id) : [...v.tratamientos, id] });
   const campo = (k: 'nombre' | 'porcentaje' | 'fechaInicio' | 'fechaFin' | 'edadMaxima', etiqueta: string, col: string, tipo = 'text') => (
     <div className={col}>
       <label htmlFor={`c-${k}`} className="form-label">{etiqueta}</label>
-      <input id={`c-${k}`} type={tipo} inputMode={k === 'porcentaje' || k === 'edadMaxima' ? 'numeric' : undefined} className={`form-control ${errores[k] ? 'is-invalid' : ''}`} value={v[k]} onChange={(e) => setV({ ...v, [k]: e.target.value })} />
+      <input
+        id={`c-${k}`}
+        type={tipo}
+        inputMode={NUM[k] ? 'numeric' : undefined}
+        maxLength={NUM[k]}
+        className={`form-control ${errores[k] ? 'is-invalid' : ''}`}
+        value={v[k]}
+        onChange={(e) => setV({ ...v, [k]: NUM[k] ? soloDigitos(e.target.value, NUM[k]!) : e.target.value })}
+      />
       <div className="invalid-feedback">{errores[k]}</div>
     </div>
   );
@@ -298,12 +307,12 @@ function Horarios() {
 function Pagos() {
   const qc = useQueryClient();
   const datos = useQuery({ queryKey: ['admin-pago'], queryFn: configApi.datosPago });
-  const [v, setV] = useState<{ numero: string; titular: string; billeteras: Billetera[] }>({ numero: '', titular: '', billeteras: ['yape'] });
+  const [v, setV] = useState<{ numero: string; titular: string; billeteras: Billetera[]; saldoVigenciaMeses: string }>({ numero: '', titular: '', billeteras: ['yape'], saldoVigenciaMeses: '12' });
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [ok, setOk] = useState<string | null>(null);
   const [version, setVersion] = useState(() => String(Date.now()));
   useEffect(() => {
-    if (datos.data) setV({ numero: datos.data.numero ?? '', titular: datos.data.titular ?? '', billeteras: datos.data.billeteras });
+    if (datos.data) setV({ numero: datos.data.numero ?? '', titular: datos.data.titular ?? '', billeteras: datos.data.billeteras, saldoVigenciaMeses: String(datos.data.saldoVigenciaMeses) });
   }, [datos.data]);
   const alGuardar = (texto: string) => (d: DatosPago) => {
     qc.setQueryData(['admin-pago'], d);
@@ -340,7 +349,7 @@ function Pagos() {
       <div className="col-lg-6">
         <form className="tarjeta h-100" onSubmit={enviar} noValidate>
           <h2 className="h6">Billetera digital de la clínica</h2>
-          <p className="small text-muted">Se muestra al paciente para pagar el adelanto (50 % del tratamiento, plazo de 1 hora). La recepcionista verifica cada pago en Caja.</p>
+          <p className="small text-muted">Se muestra al paciente para pagar el adelanto de toda reserva (50 % del tratamiento; 100 % con 3 o más inasistencias; plazo de 1 hora). La recepcionista verifica cada pago en Caja.</p>
           <span className="form-label d-block">Billeteras que acepta la clínica</span>
           <div className="mb-2">
             {BILLETERAS.map((b) => (
@@ -354,13 +363,19 @@ function Pagos() {
           </div>
           <div className="mb-2">
             <label htmlFor="p-numero" className="form-label">Celular</label>
-            <input id="p-numero" inputMode="numeric" className={`form-control ${errores.numero ? 'is-invalid' : ''}`} value={v.numero} onChange={(e) => setV({ ...v, numero: e.target.value })} />
+            <input id="p-numero" inputMode="numeric" maxLength={LARGO_NUMERICO.celular} className={`form-control ${errores.numero ? 'is-invalid' : ''}`} value={v.numero} onChange={(e) => setV({ ...v, numero: soloDigitos(e.target.value, LARGO_NUMERICO.celular) })} />
             <div className="invalid-feedback">{errores.numero}</div>
           </div>
           <div className="mb-3">
             <label htmlFor="p-titular" className="form-label">Titular</label>
             <input id="p-titular" className={`form-control ${errores.titular ? 'is-invalid' : ''}`} value={v.titular} onChange={(e) => setV({ ...v, titular: e.target.value })} />
             <div className="invalid-feedback">{errores.titular}</div>
+          </div>
+          <div className="mb-3">
+            <label htmlFor="p-vigencia" className="form-label">Vigencia del saldo a favor (meses)</label>
+            <input id="p-vigencia" inputMode="numeric" maxLength={2} style={{ maxWidth: 120 }} className={`form-control ${errores.saldoVigenciaMeses ? 'is-invalid' : ''}`} value={v.saldoVigenciaMeses} onChange={(e) => setV({ ...v, saldoVigenciaMeses: soloDigitos(e.target.value, 2) })} />
+            <div className="invalid-feedback">{errores.saldoVigenciaMeses}</div>
+            <div className="form-text">0 = no vence. Se avisa al paciente por correo 30 y 7 días antes de que venza.</div>
           </div>
           <button className="btn btn-acento" disabled={guardar.isPending}>Guardar</button>
         </form>

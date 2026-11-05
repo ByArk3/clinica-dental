@@ -1,9 +1,9 @@
 // Datos de pago del adelanto: número y titular de Yape/Plin, billeteras aceptadas y QR. Los configura el Administrador.
-import { BILLETERAS, MENSAJES, nombreBilleteras, type Billetera, type ConfigPagoDTO } from '@clinica/shared';
+import { BILLETERAS, MENSAJES, MESES_VIGENCIA_SALDO, nombreBilleteras, type Billetera, type ConfigPagoDTO } from '@clinica/shared';
 import { prisma, type Tx } from '../lib/prisma.js';
 import { ErrorNegocio } from '../lib/errores.js';
 
-const CLAVES = ['pago_numero', 'pago_titular', 'pago_billeteras'] as const;
+const CLAVES = ['pago_numero', 'pago_titular', 'pago_billeteras', 'saldo_vigencia_meses'] as const;
 /** Nombres posibles del tipo de pago de billetera digital en caja (se renombra según las billeteras aceptadas). */
 const NOMBRES_BILLETERA = ['Yape', 'Plin', 'Yape/Plin'];
 
@@ -21,6 +21,7 @@ export async function datosPago(db: Tx | typeof prisma = prisma) {
     titular: v.pago_titular ?? null,
     billeteras: leerBilleteras(v.pago_billeteras),
     tieneQr: !!v.pago_qr,
+    saldoVigenciaMeses: v.saldo_vigencia_meses !== undefined ? Number(v.saldo_vigencia_meses) : MESES_VIGENCIA_SALDO,
   };
 }
 
@@ -36,6 +37,7 @@ export async function guardarDatosPago(d: ConfigPagoDTO) {
       ['pago_numero', d.numero],
       ['pago_titular', d.titular],
       ['pago_billeteras', BILLETERAS.filter((b) => d.billeteras.includes(b)).join(',')],
+      ['saldo_vigencia_meses', String(d.saldoVigenciaMeses)],
     ];
     for (const [clave, valor] of valores) await tx.configuracion.upsert({ where: { clave }, update: { valor }, create: { clave, valor } });
     const tipo = await tipoPagoBilletera(tx);

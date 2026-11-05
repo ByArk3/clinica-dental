@@ -19,7 +19,7 @@ describe('CU-07 Reprogramar cita', () => {
     const tokenAntes = (await prisma.cita.findUniqueOrThrow({ where: { id: cita.id } })).tokenConfirmacion;
     const r = await pac.patch(`/api/citas/${cita.id}/reprogramar`).send({ odontologoId: cita.odontologoId, fecha: MARTES(), hora: '11:30' });
     expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({ id: cita.id, fecha: MARTES(), hora: '11:30', estado: 'pendiente_confirmacion' });
+    expect(r.body).toMatchObject({ id: cita.id, fecha: MARTES(), hora: '11:30', estado: 'pendiente_adelanto' });
     const enBD = await prisma.cita.findUniqueOrThrow({ where: { id: cita.id } });
     expect(enBD.tokenConfirmacion).not.toBe(tokenAntes);
     expect(enBD.recordatorioEnviadoEn).toBeNull();
@@ -27,11 +27,11 @@ describe('CU-07 Reprogramar cita', () => {
     expect(disp.body.horarios).toContain('10:00');
   });
 
-  it('una cita confirmada que se reprograma vuelve a «Pendiente de confirmación»', async () => {
+  it('una cita confirmada sin adelanto pagado (de antes del cambio) que se reprograma pasa a «Pendiente de adelanto»', async () => {
     const { pac, cita } = await citaWeb();
     await prisma.cita.update({ where: { id: cita.id }, data: { estado: 'confirmada' } });
     const r = await pac.patch(`/api/citas/${cita.id}/reprogramar`).send({ odontologoId: cita.odontologoId, fecha: LUNES(), hora: '15:00' });
-    expect(r.body.estado).toBe('pendiente_confirmacion');
+    expect(r.body.estado).toBe('pendiente_adelanto');
   });
 
   it('se puede reprogramar a otra hora del mismo día con el mismo odontólogo', async () => {
@@ -140,6 +140,6 @@ describe('Reservas de último momento (< 24 h)', () => {
     const vence = new Date(r.body.cita.adelantoVenceEn).getTime();
     expect(vence - antes).toBeGreaterThanOrEqual(59 * 60_000);
     expect(vence - antes).toBeLessThanOrEqual(61 * 60_000);
-    expect(r.body.pago).toEqual({ numero: '987654321', titular: 'Clínica Dental (ficticio)', billeteras: ['yape'], tieneQr: false });
+    expect(r.body.pago).toMatchObject({ numero: '987654321', titular: 'Clínica Dental (ficticio)', billeteras: ['yape'], tieneQr: false });
   });
 });

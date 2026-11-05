@@ -46,7 +46,9 @@ export const MENSAJES = {
   SIN_PERMISO: 'No tiene permiso para realizar esta acción',
   NO_AUTENTICADO: 'Su sesión expiró; inicie sesión nuevamente',
   ADELANTO_OBLIGATORIO:
-    'Esta cita requiere un adelanto del 50 % del tratamiento. Debe pagarse dentro de 1 hora; si no, el horario se libera',
+    'Para reservar se paga un adelanto del 50 % del tratamiento (100 % con 3 o más inasistencias). Debe pagarse dentro de 1 hora; si no, el horario se libera',
+  ADELANTO_CUBIERTO_SALDO: 'El adelanto se pagó con su saldo a favor: su cita quedó confirmada',
+  ALERTA_NO_REABRIBLE: 'El insumo ya está sobre el stock mínimo o tiene otra alerta pendiente',
   CLINICA_FERIADO: 'La clínica no atiende ese día por feriado',
   TRATAMIENTO_PREVISTO_REQUERIDO: 'Elija el tratamiento previsto',
   ADELANTO_VENCIDO: 'El plazo de 1 hora para pagar el adelanto venció; el horario fue liberado',
@@ -132,8 +134,11 @@ export const MENSAJES = {
 
 /** Estados en los que la cita todavía puede reprogramarse o cancelarse (CU-07). */
 export const ESTADOS_MODIFICABLES: EstadoCita[] = ['pendiente_confirmacion', 'pendiente_adelanto', 'confirmada'];
-/** Adelanto: 50 % del tratamiento previsto, a pagar dentro de 1 hora desde la reserva. */
+/** Adelanto (toda reserva): 50 % del tratamiento previsto; 100 % con 3 o más inasistencias (RN-12). Plazo: 1 hora. */
 export const PORCENTAJE_ADELANTO = 50;
+export const PORCENTAJE_ADELANTO_RESTRINGIDO = 100;
+/** Vigencia por defecto del saldo a favor (meses; 0 = no vence). Configurable en Configuración → Pagos. */
+export const MESES_VIGENCIA_SALDO = 12;
 export const MINUTOS_PAGO_ADELANTO = 60;
 /** Horario máximo de la clínica (lunes a sábado). Los horarios de los odontólogos deben estar dentro. */
 export const HORARIO_CLINICA = { dias: [1, 2, 3, 4, 5, 6], apertura: '08:00', cierre: '20:00' } as const;
@@ -161,7 +166,7 @@ export const loginSchema = z.object({
 export const MAX_INTENTOS_LOGIN = 3;
 export const MINUTOS_BLOQUEO_LOGIN = 15;
 
-export const ACCIONES_AUDITORIA = ['ver_historial', 'editar_atencion', 'anular_comprobante', 'bloqueo_login', 'desbloqueo_login'] as const;
+export const ACCIONES_AUDITORIA = ['ver_historial', 'editar_atencion', 'anular_comprobante', 'bloqueo_login', 'desbloqueo_login', 'reabrir_alerta'] as const;
 export type AccionAuditoria = (typeof ACCIONES_AUDITORIA)[number];
 export const ETIQUETA_AUDITORIA: Record<AccionAuditoria, string> = {
   ver_historial: 'Vio el historial clínico',
@@ -169,7 +174,13 @@ export const ETIQUETA_AUDITORIA: Record<AccionAuditoria, string> = {
   anular_comprobante: 'Anuló un comprobante',
   bloqueo_login: 'Cuenta bloqueada por intentos fallidos',
   desbloqueo_login: 'Desbloqueó una cuenta',
+  reabrir_alerta: 'Reabrió una alerta de stock',
 };
+
+/** Campos numéricos: solo dígitos y largo máximo (la interfaz no deja escribir otra cosa; la API también lo valida). */
+export const LARGO_NUMERICO = { dni: 8, ruc: 11, celular: 9, operacion: 20, cmp: 6, porcentaje: 3, edad: 2 } as const;
+/** Deja solo dígitos y recorta al largo máximo (para pegar «20-4876 5432-1» → «2048765432»). */
+export const soloDigitos = (texto: string, max: number) => texto.replace(/\D/g, '').slice(0, max);
 
 export const motivoSchema = z.object({ motivo: z.string().trim().min(5, 'Indique el motivo (mínimo 5 caracteres)').max(300) });
 
@@ -228,7 +239,7 @@ function imagenDataUrl(formato: string, tamano: string) {
 const MAX_CAPTURA_BYTES = 2 * 1024 * 1024;
 export const reportarPagoSchema = z.object({
   metodo: z.enum(['yape', 'plin'], { errorMap: () => ({ message: 'Elija Yape o Plin' }) }),
-  numeroOperacion: z.string().trim().regex(/^[A-Za-z0-9-]{4,40}$/, 'Ingrese el número de operación que le dio la aplicación'),
+  numeroOperacion: z.string().trim().regex(/^\d{4,20}$/, 'Ingrese el número de operación que le dio la aplicación (solo números)'),
   // Imagen opcional como data URL (png/jpeg/webp), máx. 2 MB
   captura: imagenDataUrl('La captura debe ser una imagen PNG, JPG o WEBP', 'La captura no debe pasar de 2 MB').optional(),
 });
@@ -404,7 +415,7 @@ export const usuarioSchema = z.object({
   nombres: z.string().trim().min(3, 'Ingrese los nombres').max(120),
   email: z.string().email('Correo inválido'),
   rol: z.enum(ROLES_PERSONAL, { errorMap: () => ({ message: 'Elija un rol' }) }),
-  cmp: z.string().trim().max(20).optional().or(vacioAUndef),
+  cmp: z.string().trim().regex(/^\d{1,6}$/, 'El CMP tiene hasta 6 dígitos').optional().or(vacioAUndef),
   especialidad: z.string().trim().max(80).optional().or(vacioAUndef),
 });
 export const usuarioNuevoSchema = usuarioSchema.extend({ password: passwordSchema });
@@ -418,10 +429,10 @@ export const descuentoSchema = z
   .object({
     nombre: z.string().trim().min(3, 'Ingrese el nombre').max(80),
     tipo: z.enum(['porcentaje', 'tres_por_dos']).default('porcentaje'),
-    porcentaje: z.coerce.number({ invalid_type_error: 'Ingrese un porcentaje' }).gt(0, 'Debe ser mayor que 0').max(100, 'Máximo 100 %').optional().nullable(),
+    porcentaje: z.coerce.number({ invalid_type_error: 'Ingrese un porcentaje' }).int('Solo números enteros').gt(0, 'Debe ser mayor que 0').max(100, 'Máximo 100 %').optional().nullable(),
     fechaInicio: fechaSchema,
     fechaFin: fechaSchema,
-    edadMaxima: z.coerce.number().int().min(0).max(120).optional().nullable(),
+    edadMaxima: z.coerce.number().int('Solo números enteros').min(0).max(99, 'Máximo 99 años').optional().nullable(),
     tratamientos: z.array(z.coerce.number().int().positive()).min(1, 'Elija al menos un tratamiento'),
   })
   .refine((d) => d.fechaInicio <= d.fechaFin, { message: 'La fecha de inicio debe ser anterior al fin', path: ['fechaFin'] })
@@ -451,6 +462,12 @@ export const configPagoSchema = z.object({
   numero: z.string().regex(/^9\d{8}$/, 'Celular de 9 dígitos que empiece con 9'),
   titular: z.string().trim().min(3, 'Ingrese el titular').max(80),
   billeteras: z.array(z.enum(BILLETERAS)).min(1, 'Marque al menos una billetera').default(['yape']),
+  saldoVigenciaMeses: z.coerce
+    .number({ invalid_type_error: 'Ingrese los meses' })
+    .int('Solo meses enteros')
+    .min(0, '0 = no vence')
+    .max(60, 'Máximo 60 meses')
+    .default(MESES_VIGENCIA_SALDO),
 });
 export type ConfigPagoDTO = z.infer<typeof configPagoSchema>;
 /** QR de Yape/Plin de la clínica: imagen PNG, JPG o WEBP de hasta 2 MB (data URL). */

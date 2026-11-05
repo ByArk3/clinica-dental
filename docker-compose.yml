@@ -48,6 +48,7 @@ services:
       # Autocompletar nombres con el DNI (opcional): token del proveedor de consultas RENIEC
       RENIEC_TOKEN: ${RENIEC_TOKEN:-}
       RENIEC_URL: ${RENIEC_URL:-}
+      SUNAT_URL: ${SUNAT_URL:-}
 
   web:
     build:

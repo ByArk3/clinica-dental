@@ -16,13 +16,18 @@ describe('CU-09 Citas del día', () => {
     expect(JSON.stringify(r.body)).not.toContain('Penicilina');
   });
 
-  it('incluye el enlace de WhatsApp para recordar las citas pendientes de confirmación (P7)', async () => {
+  it('incluye el enlace de WhatsApp para recordar las citas confirmadas (P7); no a las que aún no pagan el adelanto', async () => {
     const recep = await sesion('recepcionista');
     const r1 = await recep.post('/api/citas').send({ pacienteId: (await prisma.paciente.findUniqueOrThrow({ where: { dni: '70112233' } })).id, odontologoId: await idOdontologo(), fecha: proximo(1), hora: '09:00', motivo: 'Control' });
+    const antes = (await recep.get(`/api/citas?fecha=${proximo(1)}`)).body.find((x: { id: number }) => x.id === r1.body.cita.id);
+    expect(antes.whatsapp).toBeUndefined();
+    await recep.post(`/api/caja/citas/${r1.body.cita.id}/comprobante`).send({ tipoPagoId: (await prisma.tipoPago.findUniqueOrThrow({ where: { nombre: 'Efectivo' } })).id, montoRecibido: 20 });
     const r = await recep.get(`/api/citas?fecha=${proximo(1)}`);
     const fila = r.body.find((x: { id: number }) => x.id === r1.body.cita.id);
     expect(fila.whatsapp).toMatch(/^https:\/\/wa\.me\/51948222333\?text=/);
-    expect(decodeURIComponent(fila.whatsapp)).toContain('/citas/confirmar/');
+    const texto = decodeURIComponent(fila.whatsapp);
+    expect(texto).toContain('/citas/confirmar/');
+    expect(texto).toContain('cancelar o reprogramar');
   });
 
   it('RNF07: solo la recepcionista ve la agenda del día', async () => {

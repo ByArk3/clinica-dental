@@ -27,7 +27,7 @@ export default function Panel() {
       <div className="row g-3 mb-3">
         <Indicador titulo="Ingresos de hoy" valor={solesPE(p.ingresos.hoy)} detalle={`${p.ingresos.comprobantesHoy} comprobante(s)`} a="/reportes" />
         <Indicador titulo="Ingresos del mes" valor={solesPE(p.ingresos.mes)} detalle={`${p.ingresos.comprobantesMes} comprobante(s)`} a="/reportes" />
-        <Indicador titulo="Citas de hoy" valor={p.citasHoy.total} detalle={`${p.agenda.porConfirmar48h} por confirmar en 48 h`} />
+        <Indicador titulo="Citas de hoy" valor={p.citasHoy.total} detalle={`${p.agenda.adelantosPorPagar} adelanto(s) por pagar`} />
         <Indicador titulo="Alertas de stock" valor={p.inventario.alertasPendientes} detalle={`${p.inventario.pedidosPendientes} pedido(s) pendiente(s)`} a="/alertas" />
       </div>
       <div className="row g-3">

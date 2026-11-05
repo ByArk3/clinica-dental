@@ -43,7 +43,9 @@ describe('CU-11 Registrar tratamiento', () => {
     const kardex = await prisma.movimientoKardex.findMany({ where: { referenciaTipo: 'atencion', referenciaId: at.id } });
     expect(kardex).toHaveLength(3);
     // RN-14: resina (4 ≤ 5) y guantes (6 ≤ 10) quedan en alerta
-    expect(r.body.alertas.sort()).toEqual(['Guantes de nitrilo M', 'Resina compuesta A2']);
+    // ya tenían su alerta abierta desde la semilla: no se duplica (RN-14)
+    expect(r.body.alertas).toEqual([]);
+    expect(await prisma.alertaStock.count({ where: { revisada: false, insumo: { nombre: { in: ['Guantes de nitrilo M', 'Resina compuesta A2'] } } } })).toBe(2);
   });
 
   it('5.1: varios tratamientos → descuenta los insumos de cada uno (sumados)', async () => {

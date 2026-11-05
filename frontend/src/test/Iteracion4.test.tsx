@@ -147,13 +147,13 @@ describe('CU-38 Panel y CU-39 Reportes', () => {
           citasHoy: { total: 3, porEstado: { confirmada: 2, atendida: 1 } },
           ingresos: { hoy: '200.00', comprobantesHoy: 2, mes: '1500.00', comprobantesMes: 12, ultimos7Dias: [{ fecha: '2026-11-03', total: '200.00' }] },
           inventario: { alertasPendientes: 1, alertas: [{ id: 1, insumo: 'Resina compuesta A2', unidad: 'jeringa', stockActual: '4.00', stockMinimo: '5.00' }], pedidosPendientes: 0 },
-          agenda: { porConfirmar48h: 4, inasistenciasMes: 1, pacientesRestringidos: 0 },
+          agenda: { adelantosPorPagar: 4, inasistenciasMes: 1, pacientesRestringidos: 0 },
         },
       },
     });
     renderizar(<Panel />);
     expect(await screen.findByText('S/ 1,500.00')).toBeInTheDocument();
-    expect(screen.getByText('4 por confirmar en 48 h')).toBeInTheDocument();
+    expect(screen.getByText('4 adelanto(s) por pagar')).toBeInTheDocument();
     expect(screen.getByText('Resina compuesta A2')).toBeInTheDocument();
   });
 

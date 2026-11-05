@@ -171,7 +171,6 @@ describe('CU-13 Emitir comprobante', () => {
 
 describe('CU-13 3.1 Adelanto en caja (50 % del tratamiento previsto)', () => {
   it('cobra el adelanto en la clínica → la cita queda «Confirmada» y se descuenta en el cobro final', async () => {
-    await prisma.paciente.update({ where: { dni: '73445566' }, data: { inasistencias: 3, restringido: true } });
     const recep = await sesion('recepcionista');
     const pedro = (await prisma.paciente.findUniqueOrThrow({ where: { dni: '73445566' } })).id;
     const reserva = await recep.post('/api/citas').send({ pacienteId: pedro, odontologoId: await idOdontologo(), fecha: proximo(1), hora: '10:00', motivo: 'Control' });

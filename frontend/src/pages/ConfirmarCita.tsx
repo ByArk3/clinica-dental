@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { citasApi } from '../api/recursos';
 import { ChipEstado } from '../components/ChipEstado';
@@ -17,7 +17,7 @@ export default function ConfirmarCita() {
   return (
     <div className="pantalla-acceso">
       <div className="tarjeta acceso">
-        <h1 className="h5 mb-3">🦷 Confirmar cita</h1>
+        <h1 className="h5 mb-3">🦷 {cita.data?.estado === 'pendiente_confirmacion' ? 'Confirmar cita' : 'Su cita'}</h1>
         {cita.isLoading && <p className="text-muted">Cargando…</p>}
         {cita.isError && <div className="alert alert-danger mb-0">{mensajeError(cita.error)}</div>}
         {cita.data && (
@@ -37,9 +37,13 @@ export default function ConfirmarCita() {
                     Confirmar asistencia
                   </button>
                 )}
+                <Link to="/mis-citas" className="btn btn-outline-secondary">Reprogramar (iniciar sesión)</Link>
                 <button className="btn btn-outline-danger" disabled={responder.isPending} onClick={() => responder.mutate('cancelar')}>
                   Cancelar cita
                 </button>
+                {cita.data.estado === 'confirmada' && (
+                  <p className="small text-muted mb-0">Si cancela con 24 horas o más de anticipación, su adelanto queda como saldo a favor para su próxima cita.</p>
+                )}
               </div>
             )}
             {cita.data.estado === 'confirmada' && <p className="text-success small mt-3 mb-0">¡Gracias! Lo esperamos.</p>}

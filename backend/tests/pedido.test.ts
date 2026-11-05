@@ -148,7 +148,8 @@ describe('CU-33 Registrar recepción', () => {
     const admin = await sesion('administrador');
     const resina = await idInsumo('Resina compuesta A2'); // 5, mín 5
     const guantes = await idInsumo('Guantes de nitrilo M'); // 7, mín 10
-    await prisma.alertaStock.createMany({ data: [{ insumoId: resina, stockAlGenerar: 5 }, { insumoId: guantes, stockAlGenerar: 7 }] });
+    // la semilla ya los deja con su alerta abierta (empiezan en el mínimo o por debajo)
+    expect(await prisma.alertaStock.count({ where: { insumoId: { in: [resina, guantes] }, revisada: false } })).toBe(2);
     const p = await admin.post('/api/pedidos').send({ proveedorId: await idProv(), insumos: [{ insumoId: resina, cantidad: 10 }, { insumoId: guantes, cantidad: 2 }] });
     await admin.post(`/api/pedidos/${p.body.id}/recepcion`).send({ verificado: true, items: p.body.detalles.map((d: { id: number; cantidadPedida: string }) => ({ detalleId: d.id, cantidadRecibida: d.cantidadPedida })) });
     const pendientes = (await admin.get('/api/alertas')).body.map((a: { insumo: { nombre: string } }) => a.insumo.nombre);

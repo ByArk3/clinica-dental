@@ -26,13 +26,13 @@ describe('Billeteras aceptadas', () => {
     const r = await admin.put('/api/admin/pago').send({ numero: '987654321', titular: 'Clínica Dental', billeteras: ['plin', 'yape'] });
     expect(r.body.billeteras).toEqual(['yape', 'plin']);
     expect((await prisma.tipoPago.findUniqueOrThrow({ where: { id: antes.id } })).nombre).toBe('Yape/Plin');
-    expect(await prisma.tipoPago.count()).toBe(3);
+    expect(await prisma.tipoPago.count()).toBe(4); // + «Saldo a favor»
     const cita = await crearCita({ horas: 72, estado: 'pendiente_adelanto', montoAdelanto: 20, venceEnMin: 50 });
     expect((await (await sesion('paciente')).post(`/api/citas/${cita.id}/pago`).send({ metodo: 'plin', numeroOperacion: '654321' })).status).toBe(200);
     // la semilla no lo duplica al volver a correr
     const { sembrar } = await import('../prisma/seed.js');
     await sembrar(prisma, { silencioso: true, horariosEjemplo: false, campanas: false, feriados: false });
-    expect(await prisma.tipoPago.count()).toBe(3);
+    expect(await prisma.tipoPago.count()).toBe(4);
   });
 
   it('debe quedar al menos una billetera', async () => {

@@ -64,3 +64,14 @@ body { background: var(--fondo); }
 
 .list-group-item.active { background: var(--acento); border-color: var(--acento); }
 .chip-pago_en_verificacion { background: #e2d9f3; color: #4a2a86; }
+
+/* Leyenda del color de fila «stock en el mínimo» (Insumos) */
+.leyenda-bajo-minimo {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  vertical-align: -0.1em;
+  border-radius: 2px;
+  background: var(--bs-warning-bg-subtle, #fff3cd);
+  border: 1px solid var(--bs-warning-border-subtle, #ffe69c);
+}

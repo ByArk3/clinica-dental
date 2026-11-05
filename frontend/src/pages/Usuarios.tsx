@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { usuarioModificarSchema, usuarioNuevoSchema, type Rol, type UsuarioModificarDTO, type UsuarioNuevoDTO } from '@clinica/shared';
+import { usuarioModificarSchema, usuarioNuevoSchema, type Rol, type UsuarioModificarDTO, type UsuarioNuevoDTO, LARGO_NUMERICO, soloDigitos } from '@clinica/shared';
 import { usuariosApi, type Usuario } from '../api/recursos';
 import { ModalConfirmar } from '../components/ModalConfirmar';
 import { CampoPassword } from '../components/CampoPassword';
@@ -123,7 +123,15 @@ function FormUsuario({ usuario, esYo, onCerrar }: { usuario: Usuario | null; esY
         <CampoPassword id={`u-${k}`} value={v[k]} onChange={(x) => setV({ ...v, [k]: x })} autoComplete="new-password" error={errores[k]} />
       ) : (
         <>
-          <input id={`u-${k}`} type={tipo} className={`form-control ${errores[k] ? 'is-invalid' : ''}`} value={v[k]} onChange={(e) => setV({ ...v, [k]: e.target.value })} />
+          <input
+            id={`u-${k}`}
+            type={tipo}
+            inputMode={k === 'cmp' ? 'numeric' : undefined}
+            maxLength={k === 'cmp' ? LARGO_NUMERICO.cmp : undefined}
+            className={`form-control ${errores[k] ? 'is-invalid' : ''}`}
+            value={v[k]}
+            onChange={(e) => setV({ ...v, [k]: k === 'cmp' ? soloDigitos(e.target.value, LARGO_NUMERICO.cmp) : e.target.value })}
+          />
           <div className="invalid-feedback">{errores[k]}</div>
         </>
       )}

@@ -4,6 +4,7 @@ import { MENSAJES, type AjusteDTO, type InsumoDTO, type InsumoNuevoDTO } from '@
 import type { TipoMovimiento } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { ErrorNegocio } from '../lib/errores.js';
+import { registrar as registrarAuditoria } from './auditoria.service.js';
 import { registrarMovimiento } from './stock.service.js';
 
 type Insumo = Prisma.InsumoGetPayload<object>;
@@ -58,7 +59,15 @@ export async function modificar(id: number, dto: InsumoDTO) {
   if (!(await prisma.insumo.findUnique({ where: { id } }))) throw noEncontrado();
   try {
     return formatear(
-      await prisma.insumo.update({ where: { id }, data: { nombre: dto.nombre, unidad: dto.unidad, stockMinimo: dto.stockMinimo } }),
+      await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM insumos WHERE id = ${id} FOR UPDATE`;
+        const i = await tx.insumo.update({ where: { id }, data: { nombre: dto.nombre, unidad: dto.unidad, stockMinimo: dto.stockMinimo } });
+        // RN-14: si al subir el mínimo el stock queda igual o por debajo, se genera la alerta (sin duplicar una pendiente)
+        if (i.activo && i.stockActual.lessThanOrEqualTo(i.stockMinimo) && !(await tx.alertaStock.findFirst({ where: { insumoId: id, revisada: false } }))) {
+          await tx.alertaStock.create({ data: { insumoId: id, stockAlGenerar: i.stockActual } });
+        }
+        return i;
+      }),
     );
   } catch (e) {
     throw duplicado(e);
@@ -146,6 +155,23 @@ export async function revisarAlerta(id: number, usuarioId: number) {
   if (!a.revisada) {
     await prisma.alertaStock.update({ where: { id }, data: { revisada: true, revisadaPorId: usuarioId, revisadaEn: new Date() } });
   }
+  return (await alertas({})).find((x) => x.id === id)!;
+}
+
+/**
+ * Volver a pendiente una alerta revisada por error. Solo si el insumo sigue en stock mínimo o por debajo
+ * y no tiene otra alerta pendiente. Queda en la auditoría.
+ */
+export async function reabrirAlerta(id: number, usuarioId: number, ip?: string) {
+  await prisma.$transaction(async (tx) => {
+    const a = await tx.alertaStock.findUnique({ where: { id }, include: { insumo: true } });
+    if (!a) throw new ErrorNegocio(404, 'ALERTA_NO_ENCONTRADA', MENSAJES.ALERTA_NO_ENCONTRADA);
+    if (!a.revisada) return;
+    const otra = await tx.alertaStock.findFirst({ where: { insumoId: a.insumoId, revisada: false } });
+    if (otra || a.insumo.stockActual.greaterThan(a.insumo.stockMinimo)) throw new ErrorNegocio(409, 'ALERTA_NO_REABRIBLE', MENSAJES.ALERTA_NO_REABRIBLE);
+    await tx.alertaStock.update({ where: { id }, data: { revisada: false, revisadaPorId: null, revisadaEn: null } });
+    await registrarAuditoria(tx, { usuarioId, accion: 'reabrir_alerta', detalle: `Alerta de ${a.insumo.nombre} (stock ${a.insumo.stockActual.toFixed(2)} / mínimo ${a.insumo.stockMinimo.toFixed(2)})`, ip });
+  });
   return (await alertas({})).find((x) => x.id === id)!;
 }
 

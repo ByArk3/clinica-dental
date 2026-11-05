@@ -83,6 +83,7 @@ rutas.get('/insumos/:id/kardex', admin, Admin.kardex); // CU-23
 rutas.post('/insumos/:id/ajuste', admin, Admin.ajuste); // CU-25 (RN-13)
 rutas.get('/alertas', admin, Admin.alertas); // CU-24
 rutas.patch('/alertas/:id/revisar', admin, Admin.revisarAlerta);
+rutas.patch('/alertas/:id/reabrir', admin, Admin.reabrirAlerta);
 
 // CU-13 Caja — Recepcionista
 const recep = requireRol('recepcionista');
@@ -103,6 +104,7 @@ rutas.patch('/comprobantes/:id/anular', requireRol('recepcionista', 'administrad
 // ===== Iteración 4 (Administrador) =====
 // Proveedores CU-26..29
 rutas.get('/proveedores', admin, Admin.listarProveedores);
+rutas.get('/sunat/:ruc', admin, Admin.sunat); // autocompletar razón social (opcional)
 rutas.post('/proveedores', admin, Admin.crearProveedor);
 rutas.patch('/proveedores/:id', admin, Admin.modificarProveedor);
 rutas.patch('/proveedores/:id/desactivar', admin, Admin.desactivarProveedor);

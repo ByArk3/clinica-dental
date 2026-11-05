@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { contactoSchema, dniSchema, pacienteSchema } from '@clinica/shared';
 import { usuarioActual } from '../middlewares/auth.js';
 import * as ReniecService from '../services/reniec.service.js';
+import { vencimientos } from '../services/saldo.service.js';
+import { prisma } from '../lib/prisma.js';
 import * as PacienteService from '../services/paciente.service.js';
 
 /** CU-03 Registrar paciente (recepcionista) — flujo alterno 4.1 de CU-06 */
@@ -26,7 +28,9 @@ export async function actualizarContacto(req: Request, res: Response) {
 
 /** CU-04 (paciente): GET/PATCH /pacientes/me */
 export async function miPerfil(req: Request, res: Response) {
-  res.json(await PacienteService.obtenerContacto(usuarioActual(req).pacienteId!));
+  const id = usuarioActual(req).pacienteId!;
+  // con los próximos vencimientos del saldo a favor
+  res.json({ ...(await PacienteService.obtenerContacto(id)), saldoVencimientos: await vencimientos(prisma, id) });
 }
 export async function actualizarMiContacto(req: Request, res: Response) {
   res.json(await PacienteService.actualizarContacto(usuarioActual(req).pacienteId!, contactoSchema.parse(req.body)));

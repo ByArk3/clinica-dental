@@ -29,6 +29,7 @@ export function FormReserva({ pacienteId, onRegistrada }: Props) {
   const consulta = tarifario.data?.find((t) => t.nombre === 'Consulta');
 
   const odontologos = useQuery({ queryKey: ['odontologos'], queryFn: citasApi.odontologos });
+  const elegido = odontologos.data?.find((o) => o.id === odontologoId);
   const disponibilidad = useQuery({
     queryKey: ['disponibilidad', odontologoId, fecha],
     queryFn: () => citasApi.disponibilidad(Number(odontologoId), fecha),
@@ -96,7 +97,10 @@ export function FormReserva({ pacienteId, onRegistrada }: Props) {
             </div>
           </>
         ) : (
-          <p className="text-muted small">48 horas antes recibirá un enlace para confirmarla. Si no la confirma 24 horas antes, el horario se libera.</p>
+          <>
+            {aviso && <div className="alert alert-success">{aviso}</div>}
+            <p className="text-muted small">48 horas antes le recordaremos su cita. Si no puede asistir, cancélela o reprográmela hasta 24 horas antes.</p>
+          </>
         )}
         <button className="btn btn-acento" onClick={() => { setRegistrada(null); setHora(null); setMotivo(''); }}>
           Registrar otra cita
@@ -122,22 +126,31 @@ export function FormReserva({ pacienteId, onRegistrada }: Props) {
         </select>
         <div className="invalid-feedback">{errores.tratamientoPrevistoId}</div>
         <div className="form-text">¿No sabe qué necesita? Elija la consulta: el odontólogo lo evaluará y le indicará el tratamiento.</div>
-        <div className="form-text">Si la cita es en menos de 24 horas (o tiene 3 faltas), se pide un adelanto del 50 % de este tratamiento.</div>
+        <div className="form-text">Para reservar se paga un adelanto del 50 % de este tratamiento (100 % con 3 o más inasistencias). Se descuenta del cobro final.</div>
       </div>
       <div className="row g-3 mb-3">
-        <div className="col-sm-6">
+        <div className="col-sm">
           <label htmlFor="odontologo" className="form-label">Odontólogo</label>
           <select id="odontologo" className={`form-select ${errores.odontologoId ? 'is-invalid' : ''}`} value={odontologoId} onChange={(e) => { setOdontologoId(e.target.value ? Number(e.target.value) : ''); setHora(null); }}>
             <option value="">Seleccione…</option>
             {odontologos.data?.map((o) => (
-              <option key={o.id} value={o.id}>{o.nombres}{o.especialidad ? ` — ${o.especialidad}` : ''}</option>
+              <option key={o.id} value={o.id}>
+                {o.nombres}
+                {o.especialidad ? ` — ${o.especialidad}` : ''}
+                {o.horario ? ` · ${o.horario.corto}` : ''}
+              </option>
             ))}
           </select>
           <div className="invalid-feedback">{errores.odontologoId}</div>
+          {elegido?.horario && (
+            <div className="form-text" data-testid="horario-odontologo">
+              🕘 Atiende de <strong>{elegido.horario.largo}</strong>
+            </div>
+          )}
         </div>
-        <div className="col-sm-6">
+        <div className="col-sm-auto">
           <label htmlFor="fecha" className="form-label">Fecha</label>
-          <input id="fecha" type="date" min={hoyLima()} className={`form-control ${errores.fecha ? 'is-invalid' : ''}`} value={fecha} onChange={(e) => cambiarFecha(e.target.value)} />
+          <input id="fecha" type="date" min={hoyLima()} style={{ width: 180, maxWidth: '100%' }} className={`form-control ${errores.fecha ? 'is-invalid' : ''}`} value={fecha} onChange={(e) => cambiarFecha(e.target.value)} />
           <div className="invalid-feedback">{errores.fecha && 'Elija una fecha'}</div>
         </div>
       </div>

@@ -10,6 +10,7 @@ export interface Paciente {
   telefono: string;
   email: string | null;
   saldoFavor?: string;
+  saldoVencimientos?: { monto: string; venceEn: string }[];
   direccion?: string | null;
   apoderado?: string | null;
   inasistencias: number;
@@ -19,6 +20,8 @@ export interface Odontologo {
   id: number;
   nombres: string;
   especialidad: string | null;
+  /** Horario de atención: corto para la lista («Lunes–Viernes 08:00–14:00») y largo para la ayuda */
+  horario?: { corto: string; largo: string } | null;
 }
 export interface Cita {
   id: number;
@@ -36,8 +39,11 @@ export interface Cita {
   adelantoPagado: string | null;
   pagoReportado: { metodo: 'yape' | 'plin'; numeroOperacion: string; reportadoEn: string } | null;
   pagoRechazoMotivo: string | null;
+  /** Adelanto pendiente: parte que cubre el saldo a favor y lo que falta pagar */
+  saldoAplicable?: string | null;
+  aPagar?: string | null;
 }
-export interface DatosPago { numero: string | null; titular: string | null; billeteras: Billetera[]; tieneQr: boolean }
+export interface DatosPago { numero: string | null; titular: string | null; billeteras: Billetera[]; tieneQr: boolean; saldoVigenciaMeses: number }
 export interface ResultadoCancelacion extends Cita {
   adelanto: { monto: string; resultado: 'saldo_a_favor' | 'devuelto' | 'perdido' } | null;
 }
@@ -61,6 +67,11 @@ export const authApi = {
 
 export const pacientesApi = {
   porDni: (dni: string) => api<Paciente>(`/pacientes?dni=${encodeURIComponent(dni)}`),
+  sunat: (ruc: string) =>
+    api<
+      | { encontrado: true; razonSocial: string; direccion: string | null; estado: string | null; condicion: string | null; aviso: string | null }
+      | { encontrado: false; motivo: 'no_configurado' | 'no_encontrado' | 'no_disponible' }
+    >(`/sunat/${ruc}`),
   reniec: (dni: string) =>
     api<{ encontrado: true; nombres: string; apellidos: string } | { encontrado: false; motivo: 'no_configurado' | 'no_encontrado' | 'no_disponible' }>(`/reniec/${dni}`),
   registrar: (datos: PacienteDTO) => api<Paciente>('/pacientes', { method: 'POST', body: datos }),
@@ -202,6 +213,7 @@ export const insumosApi = {
     api<{ insumo: Insumo; movimientos: MovimientoKardex[] }>(`/insumos/${id}/kardex${qs(f)}`),
   alertas: (f: { todas?: string } = {}) => api<Alerta[]>(`/alertas${qs(f)}`),
   revisarAlerta: (id: number) => api<Alerta>(`/alertas/${id}/revisar`, { method: 'PATCH' }),
+  reabrirAlerta: (id: number) => api<Alerta>(`/alertas/${id}/reabrir`, { method: 'PATCH' }),
   ajuste: (id: number, d: AjusteDTO) =>
     api<{ saldo: string; alertaGenerada: boolean; insumo: Insumo }>(`/insumos/${id}/ajuste`, { method: 'POST', body: d }),
 };
@@ -367,7 +379,7 @@ export interface Panel {
   citasHoy: { total: number; porEstado: Partial<Record<EstadoCita, number>> };
   ingresos: { hoy: string; comprobantesHoy: number; mes: string; comprobantesMes: number; ultimos7Dias: { fecha: string; total: string }[] };
   inventario: { alertasPendientes: number; alertas: { id: number; insumo: string; unidad: string; stockActual: string; stockMinimo: string }[]; pedidosPendientes: number };
-  agenda: { porConfirmar48h: number; inasistenciasMes: number; pacientesRestringidos: number; pagosPorVerificar: number };
+  agenda: { adelantosPorPagar: number; inasistenciasMes: number; pacientesRestringidos: number; pagosPorVerificar: number };
 }
 export interface ReporteIngresos {
   desde: string;
@@ -386,6 +398,8 @@ export interface ReporteInventario {
 }
 
 export const proveedoresApi = {
+  /** Razón social con el RUC (SUNAT, si la clínica configuró el proveedor de consultas) */
+  sunat: (ruc: string) => pacientesApi.sunat(ruc),
   listar: (f: { q?: string; activo?: string } = {}) => api<Proveedor[]>(`/proveedores${qs(f)}`),
   crear: (d: ProveedorDTO) => api<Proveedor>('/proveedores', { method: 'POST', body: d }),
   modificar: (id: number, d: ProveedorDTO) => api<Proveedor>(`/proveedores/${id}`, { method: 'PATCH', body: d }),

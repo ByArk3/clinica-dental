@@ -89,7 +89,7 @@ describe('CU-06 Registrar cita — web (paciente)', () => {
     // aunque envíe otro pacienteId, se usa el de la sesión
     const r = await pac.post('/api/citas').send({ odontologoId, fecha: LUNES(), hora: '10:30', motivo: 'Dolor de muela', pacienteId: 9999 });
     expect(r.status).toBe(201);
-    expect(r.body.cita).toMatchObject({ estado: 'pendiente_confirmacion', canal: 'web', hora: '10:30', odontologo: 'Dr. Luis Paredes' });
+    expect(r.body.cita).toMatchObject({ estado: 'pendiente_adelanto', montoAdelanto: '20.00', canal: 'web', hora: '10:30', odontologo: 'Dr. Luis Paredes' });
     expect(r.body.cita.pacienteId).toBe(await idPaciente('72458190'));
     expect(r.body.cita.tokenConfirmacion).toBeUndefined(); // el token no se expone (RNF08)
     const enBD = await prisma.cita.findUniqueOrThrow({ where: { id: r.body.cita.id } });
@@ -106,7 +106,7 @@ describe('CU-06 Registrar cita — presencial (recepcionista)', () => {
     const paciente = (await recep.get('/api/pacientes?dni=72458190')).body;
     const r = await recep.post('/api/citas').send({ pacienteId: paciente.id, odontologoId: await idOdontologo(), fecha: LUNES(), hora: '08:00', motivo: 'Limpieza' });
     expect(r.status).toBe(201);
-    expect(r.body.cita).toMatchObject({ canal: 'presencial', estado: 'pendiente_confirmacion', pacienteId: paciente.id });
+    expect(r.body.cita).toMatchObject({ canal: 'presencial', estado: 'pendiente_adelanto', pacienteId: paciente.id });
     const usuario = await prisma.usuario.findUniqueOrThrow({ where: { email: 'ana.rios@clinica.local' } });
     expect((await prisma.cita.findUniqueOrThrow({ where: { id: r.body.cita.id } })).creadoPorId).toBe(usuario.id);
   });
@@ -181,15 +181,14 @@ describe('CU-06 Reglas de negocio y flujos alternos', () => {
     const recep = await sesion('recepcionista');
     const r = await recep.post('/api/citas').send({ pacienteId: await idPaciente('73445566'), odontologoId: await idOdontologo(), fecha: LUNES(), hora: '12:00', motivo: 'Control' });
     expect(r.status).toBe(201);
-    expect(r.body.cita.estado).toBe('pendiente_adelanto');
+    expect(r.body.cita).toMatchObject({ estado: 'pendiente_adelanto', montoAdelanto: '40.00' }); // 100 % de la consulta
     expect(r.body.aviso).toBe(MENSAJES.ADELANTO_OBLIGATORIO);
   });
 
-  it('RN-12: con 2 inasistencias (sin restricción) la cita es normal', async () => {
+  it('RN-12: con 2 inasistencias (sin restricción) paga el 50 % como todos', async () => {
     const recep = await sesion('recepcionista');
     const r = await recep.post('/api/citas').send({ pacienteId: await idPaciente('73445566'), odontologoId: await idOdontologo(), fecha: LUNES(), hora: '12:30', motivo: 'Control' });
-    expect(r.body.cita.estado).toBe('pendiente_confirmacion');
-    expect(r.body.aviso).toBeUndefined();
+    expect(r.body.cita).toMatchObject({ estado: 'pendiente_adelanto', montoAdelanto: '20.00' });
   });
 
   it('RN-03: día sin atención → 422 «La clínica no atiende ese día»', async () => {

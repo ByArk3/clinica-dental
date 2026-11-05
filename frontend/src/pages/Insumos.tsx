@@ -30,6 +30,8 @@ export default function Insumos() {
 
   const lista = useQuery({ queryKey: ['insumos', q, estado, soloBajos], queryFn: () => insumosApi.listar({ q, activo: estado, bajoMinimo: soloBajos ? '1' : undefined }) });
   const alertas = useQuery({ queryKey: ['alertas'], queryFn: () => insumosApi.alertas() });
+  // El aviso cuenta lo mismo que la tabla: todos los insumos activos en el mínimo o por debajo
+  const bajos = useQuery({ queryKey: ['insumos', 'bajos'], queryFn: () => insumosApi.listar({ activo: '1', bajoMinimo: '1' }) });
   const estadoMut = useMutation({
     mutationFn: (i: Insumo) => insumosApi.cambiarEstado(i.id, !i.activo),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['insumos'] }); setCambiarEstado(null); },
@@ -41,9 +43,10 @@ export default function Insumos() {
         <h1 className="h4 mb-0">Insumos</h1>
         <button className="btn btn-acento" onClick={() => setEditando('nuevo')}>+ Registrar insumo</button>
       </div>
-      {!!alertas.data?.length && (
+      {!!bajos.data?.length && (
         <div className="alert alert-warning">
-          <strong>{alertas.data.length} insumo(s) en stock mínimo:</strong> {alertas.data.map((a) => a.insumo.nombre).join(', ')}. Deben pedirse (RN-14).{' '}
+          <strong>{bajos.data.length} insumo(s) en stock mínimo:</strong> {bajos.data.map((i) => i.nombre).join(', ')}. Deben pedirse (RN-14).
+          {' '}<strong>{alertas.data?.length ?? 0} alerta(s) sin revisar.</strong>{' '}
           <Link to="/alertas">Revisar alertas</Link>
         </div>
       )}
@@ -87,6 +90,7 @@ export default function Insumos() {
           </table>
         </div>
       </div>
+      <p className="small text-muted mt-2"><span className="leyenda-bajo-minimo" aria-hidden="true" /> Fila naranja = stock igual o menor al mínimo (RN-14).</p>
       {editando && <FormInsumo insumo={editando === 'nuevo' ? null : editando} onCerrar={() => setEditando(null)} />}
       {kardexDe && <ModalKardex insumo={kardexDe} onCerrar={() => setKardexDe(null)} />}
       {ajusteDe && <ModalAjuste insumo={ajusteDe} onCerrar={() => setAjusteDe(null)} />}

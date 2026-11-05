@@ -80,6 +80,8 @@ export async function calcularImporte(db: Tx | typeof prisma, citaId: number): P
     if (adelantoVencido(cita)) throw new ErrorNegocio(409, 'ADELANTO_VENCIDO', MENSAJES.ADELANTO_VENCIDO);
     const monto = cita.montoAdelanto ?? CERO;
     if (monto.lessThanOrEqualTo(0)) throw sinCobro();
+    // El saldo a favor del paciente se usa primero para el adelanto
+    const saldoAdelanto = Prisma.Decimal.min(saldoFavor, monto);
     return {
       citaId,
       tipo: 'adelanto',
@@ -96,9 +98,9 @@ export async function calcularImporte(db: Tx | typeof prisma, citaId: number): P
       subtotal: monto.toFixed(2),
       descuento: '0.00',
       adelantoAplicado: '0.00',
-      saldoAplicado: '0.00',
+      saldoAplicado: saldoAdelanto.toFixed(2),
       sobrante: '0.00',
-      total: monto.toFixed(2),
+      total: monto.minus(saldoAdelanto).toFixed(2),
       pagoReportado:
         cita.estado === 'pago_en_verificacion' && cita.pagoOperacion && cita.pagoReportadoEn && cita.pagoMetodo
           ? { metodo: cita.pagoMetodo, numeroOperacion: cita.pagoOperacion, reportadoEn: cita.pagoReportadoEn.toISOString(), tieneCaptura: !!cita.pagoCapturaTipo }
@@ -122,7 +124,8 @@ export async function calcularImporte(db: Tx | typeof prisma, citaId: number): P
   const descuento = campanas.reduce((s, d) => s.plus(d.descuento), CERO);
   const base = subtotal.minus(descuento);
 
-  const pagado = cita.comprobantes.find((c) => c.tipo === 'adelanto')?.total ?? CERO;
+  // Valor del adelanto pagado: lo cobrado + el saldo a favor usado en él
+  const pagado = cita.comprobantes.find((c) => c.tipo === 'adelanto')?.subtotal ?? CERO;
   const adelanto = Prisma.Decimal.min(pagado, base);
   const sobrante = pagado.minus(adelanto); // regla acordada: lo que sobra queda como saldo a favor
   const resto = base.minus(adelanto);
@@ -161,7 +164,10 @@ export async function emitirComprobante(citaId: number, dto: ComprobanteDTO, usu
     const total = D(importe.total);
 
     const tipoPago = await tx.tipoPago.findUnique({ where: { id: dto.tipoPagoId } });
-    if (!tipoPago) throw new ErrorNegocio(422, 'TIPO_PAGO_NO_VALIDO', MENSAJES.TIPO_PAGO_NO_VALIDO, { tipoPagoId: MENSAJES.TIPO_PAGO_NO_VALIDO });
+    // «Saldo a favor» solo vale cuando el saldo cubre todo (total 0); no se elige a mano
+    if (!tipoPago || (tipoPago.nombre === TIPO_SALDO && !total.isZero())) {
+      throw new ErrorNegocio(422, 'TIPO_PAGO_NO_VALIDO', MENSAJES.TIPO_PAGO_NO_VALIDO, { tipoPagoId: MENSAJES.TIPO_PAGO_NO_VALIDO });
+    }
 
     // En efectivo se calcula el vuelto; con tarjeta o Yape/Plin se cobra el total exacto
     const efectivo = tipoPago.nombre.toLowerCase() === 'efectivo';
@@ -210,11 +216,22 @@ export async function emitirComprobante(citaId: number, dto: ComprobanteDTO, usu
       await moverSaldo(tx, { pacienteId: importe.paciente.id, tipo: 'abono_sobrante', monto: importe.sobrante, usuarioId: usuario.id, citaId, comprobanteId: comprobante.id, motivo: `Adelanto no usado en ${comprobante.numero}` });
       await tx.cita.update({ where: { id: citaId }, data: { estado: 'pagada' } });
     } else {
+      await moverSaldo(tx, { pacienteId: importe.paciente.id, tipo: 'uso_en_cobro', monto: D(importe.saldoAplicado).neg(), usuarioId: usuario.id, citaId, comprobanteId: comprobante.id, motivo: `Usado en el adelanto ${comprobante.numero}` });
       await tx.cita.update({ where: { id: citaId }, data: { estado: 'confirmada', adelantoVenceEn: null } });
     }
     return comprobante.id;
   });
   return obtenerComprobante(id);
+}
+
+const TIPO_SALDO = 'Saldo a favor';
+
+/** El saldo a favor cubre todo el adelanto: comprobante por S/ 0.00 pagado con saldo y la cita queda «Confirmada». */
+export async function pagarAdelantoConSaldo(citaId: number, usuario: UsuarioSesion) {
+  const importe = await calcularImporte(prisma, citaId);
+  if (importe.tipo !== 'adelanto' || !D(importe.total).isZero()) return null;
+  const tipo = await prisma.tipoPago.upsert({ where: { nombre: TIPO_SALDO }, update: {}, create: { nombre: TIPO_SALDO } });
+  return emitirComprobante(citaId, { tipoPagoId: tipo.id }, usuario);
 }
 
 /** Pago reportado por el paciente (Yape/Plin): la recepcionista verificó que llegó → se emite el comprobante del adelanto. */
@@ -300,7 +317,8 @@ export async function marcarEnviado(id: number) {
   await prisma.comprobante.update({ where: { id }, data: { enviadoEmail: true } });
 }
 
-export const tiposPago = () => prisma.tipoPago.findMany({ orderBy: { id: 'asc' } });
+/** Tipos de pago que se eligen en caja («Saldo a favor» se aplica solo, no se elige). */
+export const tiposPago = () => prisma.tipoPago.findMany({ where: { nombre: { not: TIPO_SALDO } }, orderBy: { id: 'asc' } });
 
 /** Campañas vigentes hoy (informativo para la recepcionista; se aplican solas). */
 export async function campanasDeHoy() {
@@ -368,18 +386,25 @@ export async function anularComprobante(id: number, motivo: string, usuario: Usu
       throw new ErrorNegocio(403, 'ANULACION_SOLO_HOY', MENSAJES.ANULACION_SOLO_HOY);
     }
 
-    if (c.tipo === 'servicio') {
-      // Lo que este cobro movió en el saldo a favor (uso −, sobrante +) se revierte
+    // Lo que este comprobante movió en el saldo a favor (uso −, sobrante +) se revierte
+    const revertirSaldo = async () => {
       const neto = c.movimientosSaldo.reduce((s, m) => s.plus(m.monto), CERO);
-      if (!neto.isZero()) {
-        const [p] = await tx.$queryRaw<{ saldo_favor: Prisma.Decimal }[]>`SELECT saldo_favor FROM pacientes WHERE id = ${c.pacienteId} FOR UPDATE`;
-        if (D(p.saldo_favor).minus(neto).isNegative()) throw new ErrorNegocio(409, 'SALDO_YA_USADO', MENSAJES.SALDO_YA_USADO);
-        await moverSaldo(tx, { pacienteId: c.pacienteId, tipo: 'reversion_anulacion', monto: neto.neg(), usuarioId: usuario.id, citaId: c.citaId, comprobanteId: c.id, motivo: `Anulación de ${c.numero}` });
-      }
+      if (neto.isZero()) return;
+      const [p] = await tx.$queryRaw<{ saldo_favor: Prisma.Decimal }[]>`SELECT saldo_favor FROM pacientes WHERE id = ${c.pacienteId} FOR UPDATE`;
+      if (D(p.saldo_favor).minus(neto).isNegative()) throw new ErrorNegocio(409, 'SALDO_YA_USADO', MENSAJES.SALDO_YA_USADO);
+      await moverSaldo(tx, { pacienteId: c.pacienteId, tipo: 'reversion_anulacion', monto: neto.neg(), usuarioId: usuario.id, citaId: c.citaId, comprobanteId: c.id, motivo: `Anulación de ${c.numero}` });
+    };
+
+    if (c.tipo === 'servicio') {
+      await revertirSaldo();
       await tx.cita.update({ where: { id: c.citaId }, data: { estado: 'atendida' } });
     } else {
       const cita = c.cita;
       if (cita.comprobantes.some((x) => x.tipo === 'servicio')) throw new ErrorNegocio(409, 'ANULAR_SERVICIO_PRIMERO', MENSAJES.ANULAR_SERVICIO_PRIMERO);
+      if (!(cita.estado === 'confirmada' && horasParaCita(cita.fecha, cita.hora) > 0) && cita.estado !== 'atendida') {
+        throw new ErrorNegocio(409, 'ANULACION_CITA_PASADA', MENSAJES.ANULACION_CITA_PASADA);
+      }
+      await revertirSaldo();
       if (cita.estado === 'confirmada' && horasParaCita(cita.fecha, cita.hora) > 0) {
         await tx.cita.update({
           where: { id: cita.id },

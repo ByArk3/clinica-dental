@@ -14,6 +14,11 @@ export default function Alertas() {
     mutationFn: (id: number) => insumosApi.revisarAlerta(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['alertas'] }),
   });
+  // Revisada por error: vuelve a pendiente (solo si el insumo sigue en el mínimo o por debajo)
+  const reabrir = useMutation({
+    mutationFn: (id: number) => insumosApi.reabrirAlerta(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['alertas'] }),
+  });
   const pendientes = alertas.data?.filter((a) => !a.revisada) ?? [];
   const insumosElegidos = pendientes.filter((a) => elegidas.includes(a.id)).map((a) => a.insumo.id);
 
@@ -30,6 +35,7 @@ export default function Alertas() {
         <label htmlFor="ver-todas" className="form-check-label">Mostrar también las revisadas</label>
       </div>
       {revisar.isError && <div className="alert alert-danger">{mensajeError(revisar.error)}</div>}
+      {reabrir.isError && <div className="alert alert-danger">{mensajeError(reabrir.error)}</div>}
       {alertas.data?.length === 0 && <div className="tarjeta text-muted">No hay alertas pendientes. 👍</div>}
       <div className="d-grid gap-2">
         {alertas.data?.map((a) => (
@@ -46,11 +52,18 @@ export default function Alertas() {
                 </div>
                 {a.revisada && <div className="small text-muted">Revisada por {a.revisadaPor} el {a.revisadaEn && fechaHoraPE(a.revisadaEn)}</div>}
               </div>
-              {!a.revisada && (
+              {!a.revisada ? (
                 <div className="d-flex gap-2">
                   <Link className="btn btn-sm btn-outline-secondary" to={`/pedidos/nuevo?insumos=${a.insumo.id}`}>Pedir</Link>
                   <button className="btn btn-sm btn-outline-secondary" disabled={revisar.isPending} onClick={() => revisar.mutate(a.id)}>Marcar revisada</button>
                 </div>
+              ) : (
+                a.insumo.bajoMinimo && !pendientes.some((x) => x.insumo.id === a.insumo.id) && (
+                  <div className="d-flex gap-2">
+                    <Link className="btn btn-sm btn-outline-secondary" to={`/pedidos/nuevo?insumos=${a.insumo.id}`}>Pedir</Link>
+                    <button className="btn btn-sm btn-outline-primary" disabled={reabrir.isPending} onClick={() => reabrir.mutate(a.id)}>Volver a pendiente</button>
+                  </div>
+                )
               )}
             </div>
           </div>

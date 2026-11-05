@@ -31,6 +31,7 @@ import * as AgendaService from '../services/agenda.service.js';
 import * as AuthService from '../services/auth.service.js';
 import * as AuditoriaService from '../services/auditoria.service.js';
 import * as PagoService from '../services/pago.service.js';
+import * as ReniecService from '../services/reniec.service.js';
 import { pdfPedido } from '../lib/pdf-pedido.js';
 import { enviarCorreo } from '../lib/correo.js';
 import { ErrorNegocio } from '../lib/errores.js';
@@ -97,6 +98,8 @@ export const alertas = async (req: Request, res: Response) => {
   res.json(await InsumoService.alertas({ revisada }));
 };
 export const revisarAlerta = async (req: Request, res: Response) => res.json(await InsumoService.revisarAlerta(idParam(req), usuarioActual(req).id));
+/** Volver a pendiente una alerta marcada como revisada por error */
+export const reabrirAlerta = async (req: Request, res: Response) => res.json(await InsumoService.reabrirAlerta(idParam(req), usuarioActual(req).id, req.ip));
 export const ajuste = async (req: Request, res: Response) =>
   res.status(201).json(await InsumoService.registrarAjuste(idParam(req), ajusteSchema.parse(req.body), usuarioActual(req).id));
 
@@ -193,4 +196,10 @@ export async function reporteInventario(req: Request, res: Response) {
       r.insumos.map((i) => [i.nombre, i.unidad, i.activo ? 'Sí' : 'No', i.stockActual, i.stockMinimo, i.bajoMinimo ? 'Sí' : 'No', i.entradas, i.consumo, i.ajustes, i.mermas]),
     ),
   );
+}
+
+/** GET /sunat/:ruc — razón social para autocompletar el registro de proveedores (si hay proveedor configurado) */
+export async function sunat(req: Request, res: Response) {
+  const ruc = z.string().regex(/^\d{11}$/, 'El RUC debe tener 11 dígitos').parse(req.params.ruc);
+  res.json(await ReniecService.consultarRuc(ruc));
 }

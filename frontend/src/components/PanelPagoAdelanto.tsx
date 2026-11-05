@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { ETIQUETA_BILLETERA, reportarPagoSchema, type Billetera } from '@clinica/shared';
+import { ETIQUETA_BILLETERA, LARGO_NUMERICO, reportarPagoSchema, soloDigitos, type Billetera } from '@clinica/shared';
 import { citasApi, type Cita } from '../api/recursos';
 import { erroresZod, mensajeError, solesPE } from '../formato';
 
@@ -32,6 +32,7 @@ export function PanelPagoAdelanto({ cita, modo, onReportado }: { cita: Cita; mod
   // Si la clínica acepta una sola billetera, no se pregunta
   const metodo: Billetera = billeteras.includes(elegido) ? elegido : billeteras[0];
   const nombres = billeteras.map((b) => ETIQUETA_BILLETERA[b]).join(' o ');
+  const aPagar = cita.aPagar ?? cita.montoAdelanto ?? '0';
   const [numero, setNumero] = useState('');
   const [captura, setCaptura] = useState<string | undefined>();
   const [errores, setErrores] = useState<Record<string, string>>({});
@@ -80,8 +81,14 @@ export function PanelPagoAdelanto({ cita, modo, onReportado }: { cita: Cita; mod
         )}
       </div>
       <p className="small text-muted mb-2">
-        50 % de {cita.tratamientoPrevisto ?? 'la consulta'}. Si no se paga en 1 hora, el horario se libera. Se descuenta del cobro final.
+        Adelanto de {cita.tratamientoPrevisto ?? 'la consulta'}. Si no se paga en 1 hora, el horario se libera. Se descuenta del cobro final; si sobra, queda como saldo a favor
+        {datos.data && (datos.data.saldoVigenciaMeses > 0 ? ` por ${datos.data.saldoVigenciaMeses} meses` : '')}.
       </p>
+      {cita.saldoAplicable && (
+        <div className="alert alert-success py-2 small mb-2" role="status">
+          Su saldo a favor cubre <strong>{solesPE(cita.saldoAplicable)}</strong>: solo debe pagar <strong>{solesPE(aPagar)}</strong>.
+        </div>
+      )}
       {modo === 'presencial' ? (
         <Link to="/caja" className="btn btn-acento btn-sm">Cobrar ahora en Caja</Link>
       ) : (
@@ -92,7 +99,7 @@ export function PanelPagoAdelanto({ cita, modo, onReportado }: { cita: Cita; mod
             )}
             <p className="mb-0" style={{ flex: '1 1 200px' }}>
               {datos.data?.tieneQr ? `Escanee el QR con ${nombres} o pague` : `Pague por ${nombres}`} al <strong>{datos.data?.numero ?? '…'}</strong> a nombre de{' '}
-              <strong>{datos.data?.titular ?? '…'}</strong> el monto de <strong>{solesPE(cita.montoAdelanto ?? 0)}</strong>. Luego registre aquí su pago:
+              <strong>{datos.data?.titular ?? '…'}</strong> el monto de <strong>{solesPE(aPagar)}</strong>. Luego registre aquí su pago:
             </p>
           </div>
           {billeteras.length > 1 && (
@@ -106,7 +113,7 @@ export function PanelPagoAdelanto({ cita, modo, onReportado }: { cita: Cita; mod
           )}
           <div className="mb-2">
             <label htmlFor={`op-${cita.id}`} className="form-label small mb-1">Número de operación</label>
-            <input id={`op-${cita.id}`} className={`form-control ${errores.numeroOperacion ? 'is-invalid' : ''}`} value={numero} onChange={(e) => setNumero(e.target.value)} inputMode="numeric" />
+            <input id={`op-${cita.id}`} className={`form-control ${errores.numeroOperacion ? 'is-invalid' : ''}`} value={numero} onChange={(e) => setNumero(soloDigitos(e.target.value, LARGO_NUMERICO.operacion))} inputMode="numeric" maxLength={LARGO_NUMERICO.operacion} />
             <div className="invalid-feedback">{errores.numeroOperacion}</div>
           </div>
           <div className="mb-2">

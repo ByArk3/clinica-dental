@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { enviarRecordatorios, liberarCitas } from './citas.jobs.js';
+import { enviarRecordatorios, liberarCitas, revisarSaldos } from './citas.jobs.js';
 
 const ejecutar = (nombre: string, tarea: () => Promise<unknown>) => async () => {
   try {
@@ -20,5 +20,13 @@ export function iniciarTareas() {
     },
     { timezone: 'America/Lima' },
   );
-  console.info('[tarea] programadas: liberar citas y recordatorios cada 5 min');
+  // Saldo a favor: vencimientos y avisos, una vez al día (07:10, hora de Lima)
+  cron.schedule(
+    '10 7 * * *',
+    async () => {
+      await ejecutar('saldo a favor (vencimientos y avisos)', revisarSaldos)();
+    },
+    { timezone: 'America/Lima' },
+  );
+  console.info('[tarea] programadas: liberar citas y recordatorios cada 5 min; saldo a favor a diario');
 }

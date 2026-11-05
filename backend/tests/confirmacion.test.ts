@@ -63,15 +63,15 @@ describe('CU-08 Confirmar cita — enlace', () => {
 });
 
 describe('Tareas programadas (sección 11)', () => {
-  it('recordatorio: envía a las citas pendientes dentro de 48 h, una sola vez', async () => {
-    const dentro = await crearCita({ horas: 40 });
-    const lejos = await crearCita({ horas: 72, odontologoEmail: 'carmen.diaz@clinica.local' });
-    const confirmada = await crearCita({ horas: 30, estado: 'confirmada', odontologoEmail: 'carmen.diaz@clinica.local' });
+  it('CU-08 Recordar cita: avisa a las confirmadas (adelanto pagado) dentro de 48 h, una sola vez; no a las que aún no pagan', async () => {
+    const dentro = await crearCita({ horas: 40, estado: 'confirmada' });
+    const lejos = await crearCita({ horas: 72, estado: 'confirmada', odontologoEmail: 'carmen.diaz@clinica.local' });
+    const sinPagar = await crearCita({ horas: 30, estado: 'pendiente_adelanto', montoAdelanto: 20, venceEnMin: 30, odontologoEmail: 'carmen.diaz@clinica.local' });
     const r = await enviarRecordatorios();
     expect(r).toEqual({ revisadas: 1, enviados: 1 });
     expect((await prisma.cita.findUniqueOrThrow({ where: { id: dentro.id } })).recordatorioEnviadoEn).not.toBeNull();
     expect((await prisma.cita.findUniqueOrThrow({ where: { id: lejos.id } })).recordatorioEnviadoEn).toBeNull();
-    expect((await prisma.cita.findUniqueOrThrow({ where: { id: confirmada.id } })).recordatorioEnviadoEn).toBeNull();
+    expect((await prisma.cita.findUniqueOrThrow({ where: { id: sinPagar.id } })).recordatorioEnviadoEn).toBeNull();
     expect(await enviarRecordatorios()).toEqual({ revisadas: 0, enviados: 0 }); // no se repite
   });
 

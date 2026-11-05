@@ -54,6 +54,7 @@ export async function sembrar(prisma: PrismaClient<any>, { silencioso = false, h
     ['pago_numero', '987654321'],
     ['pago_titular', 'Clínica Dental (ficticio)'],
     ['pago_billeteras', 'yape'], // billeteras aceptadas: yape, plin o ambas (Configuración → Pagos)
+    ['saldo_vigencia_meses', '12'], // vigencia del saldo a favor (0 = no vence)
   ]) {
     await prisma.configuracion.upsert({ where: { clave }, update: {}, create: { clave, valor } });
   }
@@ -146,6 +147,8 @@ export async function sembrar(prisma: PrismaClient<any>, { silencioso = false, h
           stockActual: i.stock,
           stockMinimo: i.minimo,
           movimientos: { create: { tipo: 'inicial', cantidad: i.stock, saldo: i.stock, motivo: 'Inventario inicial', usuarioId: admin.id } },
+          // RN-14: si ya empieza en el mínimo o por debajo, nace con su alerta
+          ...(i.stock <= i.minimo ? { alertas: { create: { stockAlGenerar: i.stock } } } : {}),
         },
       }));
     idInsumo[i.nombre] = ins.id;
@@ -188,7 +191,7 @@ export async function sembrar(prisma: PrismaClient<any>, { silencioso = false, h
   });
 
   // --- Tipos de pago ---
-  for (const nombre of ['Efectivo', 'Tarjeta']) {
+  for (const nombre of ['Efectivo', 'Tarjeta', 'Saldo a favor']) {
     await prisma.tipoPago.upsert({ where: { nombre }, update: {}, create: { nombre } });
   }
   // Billetera digital: se llama «Yape», «Plin» o «Yape/Plin» según lo que acepte la clínica (no se duplica al renombrarla)

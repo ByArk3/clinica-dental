@@ -70,11 +70,11 @@ export async function aplicarCampanas(db: Db, lineas: LineaPrecio[], fecha: stri
 }
 
 /**
- * Adelanto = 50 % del precio del tratamiento previsto, con la campaña vigente el día de la cita.
- * (Un 3x2 no aplica a una sola unidad.)
+ * Adelanto = 50 % (100 % con 3+ inasistencias) del precio del tratamiento previsto, con la campaña vigente
+ * el día de la cita. (Un 3x2 no aplica a una sola unidad.)
  */
-export async function calcularAdelanto(db: Db, tratamientoId: number, fecha: string, edad: number) {
+export async function calcularAdelanto(db: Db, tratamientoId: number, fecha: string, edad: number, porcentaje: number = PORCENTAJE_ADELANTO) {
   const t = await db.tratamiento.findUniqueOrThrow({ where: { id: tratamientoId } });
   const [d] = await aplicarCampanas(db, [{ tratamientoId, precio: t.precio }], fecha, edad);
-  return redondear(t.precio.minus(d.descuento).times(PORCENTAJE_ADELANTO).dividedBy(100));
+  return redondear(t.precio.minus(d.descuento).times(porcentaje).dividedBy(100));
 }

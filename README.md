@@ -135,12 +135,13 @@ presencial piden el mismo horario a la vez, una se graba y la otra recibe **409 
 
 | Regla | Decisión |
 |---|---|
-| Quién paga | Pacientes con 3 o más inasistencias (RN-12) y reservas con menos de 24 h de anticipación |
-| Cuánto | 50 % del **tratamiento previsto** elegido al reservar (por defecto, la Consulta), con la campaña vigente el **día de la cita** |
+| Quién paga | **Toda reserva** (web, presencial o por teléfono) — cambio v2 |
+| Cuánto | 50 % del **tratamiento previsto** elegido al reservar (por defecto, la «Consulta de evaluación»), con la campaña vigente el **día de la cita**; **100 %** si el paciente tiene 3 o más inasistencias (RN-12) |
 | Plazo | 1 hora desde la reserva. En la clínica se cobra en el momento |
+| Saldo a favor | Se usa primero para el adelanto: si lo cubre todo, la cita queda **Confirmada** al instante (comprobante S/ 0.00); si cubre una parte, se paga solo la diferencia |
 | Pago web | Yape/Plin: el paciente registra el N.° de operación (y una captura opcional) → «Pago en verificación» (ya no se libera) → la recepcionista aprueba o rechaza en Caja |
 | Sin pagar ni reportar en 1 hora | El horario se libera solo (tarea cada 5 min) |
-| Al aprobar o cobrar | Comprobante de adelanto y la cita queda **Confirmada**, sin enlace de confirmación |
+| Al aprobar o cobrar | Comprobante de adelanto y la cita queda **Confirmada**. **CU-08 pasa a «Recordar cita»**: 48 h antes se envía un aviso (correo o WhatsApp) con un enlace para cancelar o reprogramar; ya no hay que confirmar |
 | Cobro final | Se descuentan el adelanto y el saldo a favor; si el adelanto supera el cobro, lo que sobra queda como **saldo a favor** |
 | Cancela con ≥ 24 h / con < 24 h o no asiste / cancela la clínica | Saldo a favor / se pierde / se **devuelve** (los reportes de ingresos restan las devoluciones) |
 | Reprograma | El adelanto pagado pasa a la nueva fecha |
@@ -190,6 +191,20 @@ proveedor de consultas RENIEC (RENIEC no da acceso directo a clínicas privadas)
 recepcionista escribe los datos. Para el informe: el tratamiento de datos personales se rige por la **Ley 29733**.
 
 > Supuesto para el informe: los comprobantes son **internos** (P2). En una boleta electrónica real de SUNAT, la anulación se hace con una **nota de crédito**.
+
+**Saldo a favor con vigencia**: cada abono vence a los **12 meses** (Configuración → Pagos; 0 = no vence). Se usa primero lo
+que vence antes, se avisa por correo **30 y 7 días antes**, y el paciente ve sus vencimientos en «Mis datos». Lo vencido queda
+registrado como movimiento «vencimiento».
+
+**Otros ajustes**: horario de cada odontólogo en la lista al reservar («Lunes–Viernes 08:00–14:00») y debajo del campo; campos
+numéricos con solo dígitos y largo fijo (DNI 8, RUC 11, celular 9, N.° de operación, CMP, porcentaje, edad) también validados
+en la API; aviso de Insumos con todos los insumos en el mínimo y leyenda del color; alertas revisadas por error se pueden
+«Volver a pendiente» (auditoría); al subir el mínimo de un insumo por encima de su stock se crea la alerta; razón social con el
+RUC (SUNAT, mismo token que RENIEC).
+
+> Para el informe (v2): cambian **RN-12** (100 % con 3+ inasistencias), **P6** (adelanto en toda reserva), **CU-06**, **CU-07**,
+> **CU-08** (de «Confirmar cita» a «Recordar cita», `<<extend>>` hacia CU-07) y **CU-13**, y el diagrama de estados de la cita
+> («Pendiente de confirmación» queda solo para citas anteriores al cambio).
 
 ## Decisiones y supuestos
 

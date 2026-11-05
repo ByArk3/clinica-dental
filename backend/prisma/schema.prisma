@@ -44,6 +44,7 @@ enum TipoMovimientoSaldo {
   abono_cancelacion // canceló con ≥ 24 h después de pagar el adelanto
   uso_en_cobro // se descontó en un cobro
   reversion_anulacion // se anuló el comprobante que lo usó o generó
+  vencimiento // el abono cumplió su vigencia sin usarse
 }
 
 enum AccionAuditoria {
@@ -52,6 +53,7 @@ enum AccionAuditoria {
   anular_comprobante
   bloqueo_login
   desbloqueo_login
+  reabrir_alerta
 }
 
 enum MetodoPagoReportado {
@@ -450,6 +452,10 @@ model SaldoMovimiento {
   comprobanteId Int?                @map("comprobante_id")
   motivo        String?
   usuarioId     Int                 @map("usuario_id")
+  // Solo en abonos (monto > 0): lo que aún queda por usar y cuándo vence (se usa primero lo más antiguo)
+  restante      Decimal?            @db.Decimal(10, 2)
+  venceEn       DateTime?           @map("vence_en")
+  avisoDias     Int?                @map("aviso_dias") // último aviso de vencimiento enviado (30 o 7 días antes)
   createdAt     DateTime            @default(now()) @map("created_at")
 
   paciente    Paciente     @relation(fields: [pacienteId], references: [id])
@@ -458,6 +464,7 @@ model SaldoMovimiento {
   usuario     Usuario      @relation(fields: [usuarioId], references: [id])
 
   @@index([pacienteId, createdAt])
+  @@index([venceEn])
   @@map("saldo_movimientos")
 }
 

@@ -18,13 +18,14 @@ export async function panel() {
   const inicioMes = `${hoy.slice(0, 8)}01`;
   const fechaHoy = new Date(`${hoy}T00:00:00Z`);
 
-  const [citasHoy, ingresosHoy, ingresosMes, alertas, pedidosPendientes, porConfirmar, inasistenciasMes, restringidos, serie, pagosPorVerificar, devHoy, devMes] = await Promise.all([
+  const [citasHoy, ingresosHoy, ingresosMes, alertas, pedidosPendientes, adelantosPorPagar, inasistenciasMes, restringidos, serie, pagosPorVerificar, devHoy, devMes] = await Promise.all([
     prisma.cita.groupBy({ by: ['estado'], where: { fecha: fechaHoy }, _count: true }),
     prisma.comprobante.aggregate({ where: { createdAt: rango(hoy, hoy), anuladoEn: null }, _sum: { total: true }, _count: true }),
     prisma.comprobante.aggregate({ where: { createdAt: rango(inicioMes, hoy), anuladoEn: null }, _sum: { total: true }, _count: true }),
     prisma.alertaStock.findMany({ where: { revisada: false }, include: { insumo: { select: { nombre: true, stockActual: true, stockMinimo: true, unidad: true } } }, orderBy: { createdAt: 'desc' } }),
     prisma.pedido.count({ where: { estado: 'pendiente' } }),
-    prisma.cita.count({ where: { estado: 'pendiente_confirmacion', fecha: { gte: fechaHoy, lte: new Date(`${sumarDias(hoy, 2)}T00:00:00Z`) } } }),
+    // toda reserva paga adelanto: las que aún no lo pagan (el horario se libera si no pagan en 1 hora)
+    prisma.cita.count({ where: { estado: 'pendiente_adelanto', fecha: { gte: fechaHoy } } }),
     prisma.cita.count({ where: { estado: 'inasistencia', fecha: { gte: new Date(`${inicioMes}T00:00:00Z`), lte: fechaHoy } } }),
     prisma.paciente.count({ where: { restringido: true } }),
     prisma.$queryRaw<{ dia: Date; total: Prisma.Decimal }[]>`
@@ -60,7 +61,7 @@ export async function panel() {
       alertas: alertas.slice(0, 8).map((a) => ({ id: a.id, insumo: a.insumo.nombre, unidad: a.insumo.unidad, stockActual: D2(a.insumo.stockActual), stockMinimo: D2(a.insumo.stockMinimo) })),
       pedidosPendientes,
     },
-    agenda: { porConfirmar48h: porConfirmar, inasistenciasMes, pacientesRestringidos: restringidos, pagosPorVerificar },
+    agenda: { adelantosPorPagar, inasistenciasMes, pacientesRestringidos: restringidos, pagosPorVerificar },
   };
 }
 

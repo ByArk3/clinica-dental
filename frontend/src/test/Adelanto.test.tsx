@@ -24,7 +24,7 @@ describe('Adelanto: panel de pago', () => {
     expect(screen.getByText(/quedan (49|50) min/)).toBeInTheDocument();
     expect(await screen.findByText('987654321')).toBeInTheDocument();
     await u.click(screen.getByRole('button', { name: 'Ya pagué: registrar mi pago' }));
-    expect(screen.getByText('Ingrese el número de operación que le dio la aplicación')).toBeInTheDocument();
+    expect(screen.getByText('Ingrese el número de operación que le dio la aplicación (solo números)')).toBeInTheDocument();
     await u.click(screen.getByRole('radio', { name: 'Plin' }));
     await u.type(screen.getByLabelText('Número de operación'), '445566');
     await u.click(screen.getByRole('button', { name: 'Ya pagué: registrar mi pago' }));

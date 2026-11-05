@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { pacienteSchema, registroPacienteSchema } from '@clinica/shared';
+import { LARGO_NUMERICO, pacienteSchema, registroPacienteSchema, soloDigitos } from '@clinica/shared';
 import { ApiError } from '../api/cliente';
 import { CampoPassword } from './CampoPassword';
 
@@ -15,6 +15,9 @@ interface Props {
   onEnviar: (datos: any) => Promise<unknown>; // eslint-disable-line @typescript-eslint/no-explicit-any
   onCancelar?: () => void;
 }
+
+/** Campos solo de números, con su largo máximo */
+const NUMERICOS: Record<string, number> = { dni: LARGO_NUMERICO.dni, telefono: LARGO_NUMERICO.celular };
 
 const CAMPOS: { nombre: string; etiqueta: string; tipo?: string; col: string; opcional?: boolean }[] = [
   { nombre: 'dni', etiqueta: 'DNI', col: 'col-sm-4' },
@@ -93,7 +96,8 @@ export function FormPaciente({ conCuenta, dniInicial = '', inicial, textoBoton, 
                 type={c.tipo ?? 'text'}
                 className={`form-control ${errores[c.nombre] ? 'is-invalid' : ''}`}
                 value={v[c.nombre] ?? ''}
-                onChange={(e) => setV({ ...v, [c.nombre]: e.target.value })}
+                onChange={(e) => setV({ ...v, [c.nombre]: NUMERICOS[c.nombre] ? soloDigitos(e.target.value, NUMERICOS[c.nombre]) : e.target.value })}
+              maxLength={NUMERICOS[c.nombre]}
                 autoComplete={c.nombre === 'password' ? 'new-password' : undefined}
                 inputMode={c.nombre === 'dni' || c.nombre === 'telefono' ? 'numeric' : undefined}
               />
