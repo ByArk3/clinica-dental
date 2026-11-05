@@ -1,6 +1,8 @@
 import type { Request, Response } from 'express';
 import { loginSchema, recuperarSchema, registroPacienteSchema, restablecerSchema } from '@clinica/shared';
 import * as AuthService from '../services/auth.service.js';
+import { crearLimitador } from '../lib/limite.js';
+import { ErrorNegocio } from '../lib/errores.js';
 import * as PacienteService from '../services/paciente.service.js';
 
 function iniciarSesion(req: Request, usuario: NonNullable<Request['session']['usuario']>) {
@@ -32,7 +34,13 @@ export function yo(req: Request, res: Response) {
   res.json(req.session.usuario);
 }
 
+/** Límite por IP: 3 solicitudes cada 15 minutos (no revela si el correo existe). */
+const recuperacionPorIp = crearLimitador(AuthService.LIMITE_RECUPERACION.max, AuthService.LIMITE_RECUPERACION.ventanaMs);
+
 export async function recuperar(req: Request, res: Response) {
+  if (!recuperacionPorIp.consumir(req.ip ?? 'desconocida')) {
+    throw new ErrorNegocio(429, 'DEMASIADAS_SOLICITUDES', 'Demasiadas solicitudes de recuperación. Intente de nuevo en 15 minutos');
+  }
   const { email } = recuperarSchema.parse(req.body);
   await AuthService.solicitarRecuperacion(email);
   res.json({ mensaje: 'Si el correo está registrado, le enviamos un enlace para restablecer su contraseña' });

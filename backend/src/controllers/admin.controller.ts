@@ -37,6 +37,7 @@ import { enviarCorreo } from '../lib/correo.js';
 import { ErrorNegocio } from '../lib/errores.js';
 import { usuarioActual } from '../middlewares/auth.js';
 import { boolQuery, idParam, textoQuery } from './comun.js';
+import { escaparHtml } from '../lib/html.js';
 import { ahoraLima } from '../lib/fechas.js';
 
 // ---------- Proveedores CU-26..29 ----------
@@ -76,7 +77,7 @@ export async function enviarPedido(req: Request, res: Response) {
     await enviarCorreo(
       p.proveedor.email,
       `Pedido ${p.codigo} — Clínica Dental`,
-      `<p>Estimados ${p.proveedor.razonSocial}:</p><p>Adjuntamos nuestro pedido <b>${p.codigo}</b>. Por favor, confirmen disponibilidad y fecha de entrega.</p>`,
+      `<p>Estimados ${escaparHtml(p.proveedor.razonSocial)}:</p><p>Adjuntamos nuestro pedido <b>${p.codigo}</b>. Por favor, confirmen disponibilidad y fecha de entrega.</p>`,
       [{ filename: `${p.codigo}.pdf`, content: await pdfPedido(p), contentType: 'application/pdf' }],
     );
   } catch {

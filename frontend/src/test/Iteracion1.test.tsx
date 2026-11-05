@@ -26,8 +26,8 @@ const conToken = (ui: React.ReactNode) =>
 describe('CU-08 ConfirmarCita', () => {
   it('flujo básico: muestra la cita y la confirma', async () => {
     const llamadas = simularApi({
-      'GET /citas/confirmar/abc123': { body: confirmacion },
-      'POST /citas/confirmar/abc123': { body: { ...confirmacion, estado: 'confirmada' } },
+      'GET /citas/recordatorio/abc123': { body: confirmacion },
+      'POST /citas/recordatorio/abc123': { body: { ...confirmacion, estado: 'confirmada' } },
     });
     conToken(<ConfirmarCita />);
     expect(await screen.findByText(/07\/01\/2030 a las 10:00/)).toBeInTheDocument();
@@ -39,8 +39,8 @@ describe('CU-08 ConfirmarCita', () => {
 
   it('alterno 4.1: cancelar desde el enlace', async () => {
     const llamadas = simularApi({
-      'GET /citas/confirmar/abc123': { body: confirmacion },
-      'POST /citas/confirmar/abc123': { body: { ...confirmacion, estado: 'cancelada', puedeResponder: false, mensaje: MENSAJES.CITA_YA_CANCELADA } },
+      'GET /citas/recordatorio/abc123': { body: confirmacion },
+      'POST /citas/recordatorio/abc123': { body: { ...confirmacion, estado: 'cancelada', puedeResponder: false, mensaje: MENSAJES.CITA_YA_CANCELADA } },
     });
     conToken(<ConfirmarCita />);
     await userEvent.click(await screen.findByRole('button', { name: 'Cancelar cita' }));
@@ -50,14 +50,14 @@ describe('CU-08 ConfirmarCita', () => {
   });
 
   it('alterno 2.2: plazo vencido → mensaje y sin botones', async () => {
-    simularApi({ 'GET /citas/confirmar/abc123': { body: { ...confirmacion, estado: 'liberada', puedeResponder: false, mensaje: MENSAJES.PLAZO_VENCIDO } } });
+    simularApi({ 'GET /citas/recordatorio/abc123': { body: { ...confirmacion, estado: 'liberada', puedeResponder: false, mensaje: MENSAJES.PLAZO_VENCIDO } } });
     conToken(<ConfirmarCita />);
     expect(await screen.findByText(MENSAJES.PLAZO_VENCIDO)).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
   it('enlace inválido → mensaje de error', async () => {
-    simularApi({ 'GET /citas/confirmar/abc123': { status: 404, body: { codigo: 'ENLACE_CITA_INVALIDO', mensaje: MENSAJES.ENLACE_CITA_INVALIDO } } });
+    simularApi({ 'GET /citas/recordatorio/abc123': { status: 404, body: { codigo: 'ENLACE_CITA_INVALIDO', mensaje: MENSAJES.ENLACE_CITA_INVALIDO } } });
     conToken(<ConfirmarCita />);
     expect(await screen.findByText(MENSAJES.ENLACE_CITA_INVALIDO)).toBeInTheDocument();
   });

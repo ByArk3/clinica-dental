@@ -15,7 +15,11 @@ export interface Adjunto {
   contentType: string;
 }
 
+/** Solo en pruebas: los correos «enviados», para revisarlos. */
+export const bandejaDePrueba: { para: string; asunto: string; html: string }[] = [];
+
 export async function enviarCorreo(para: string, asunto: string, html: string, adjuntos: Adjunto[] = []) {
+  if (process.env.NODE_ENV === 'test') bandejaDePrueba.push({ para, asunto, html });
   const info = await transporte.sendMail({ from: process.env.MAIL_FROM, to: para, subject: asunto, html, attachments: adjuntos });
   if (!process.env.SMTP_HOST && process.env.NODE_ENV !== 'test') {
     // Sin SMTP el correo no sale: se muestran sus enlaces en el log para poder probar (recuperar contraseña, confirmar cita)

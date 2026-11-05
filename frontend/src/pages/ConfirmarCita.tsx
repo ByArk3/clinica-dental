@@ -4,7 +4,10 @@ import { citasApi } from '../api/recursos';
 import { ChipEstado } from '../components/ChipEstado';
 import { diaSemanaPE, fechaPE, mensajeError } from '../formato';
 
-/** CU-08 (i_confirmacion): el paciente abre el enlace del recordatorio desde su celular. Sin sesión. */
+/**
+ * CU-08 Recordar cita (i_recordatorio): el paciente abre el enlace del recordatorio desde su celular, sin sesión,
+ * y puede cancelar o ir a reprogramar (CU-07). «Confirmar» solo aparece en citas antiguas «Pendiente de confirmación».
+ */
 export default function ConfirmarCita() {
   const { token = '' } = useParams();
   const qc = useQueryClient();

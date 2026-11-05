@@ -16,7 +16,7 @@ export async function feriadoEn(db: Tx | typeof prisma, fecha: string) {
 }
 
 /**
- * Bloques del horario de atención (RN-03) de un odontólogo en una fecha.
+ * Bloques del horario de atención de un odontólogo en una fecha (RN-03: su propio horario; en feriados no se atiende).
  * Usa el horario propio del odontólogo si lo tiene; si no, el horario general (odontologo_id NULL). P4/P5.
  */
 export async function bloquesDelHorario(db: Tx | typeof prisma, odontologoId: number, fecha: string) {

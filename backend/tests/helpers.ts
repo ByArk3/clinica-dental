@@ -2,6 +2,7 @@ import request from 'supertest';
 import { crearApp } from '../src/app.js';
 import { prisma } from '../src/lib/prisma.js';
 import { sembrar, PASSWORD } from '../prisma/seed.js';
+import { reiniciarLimites } from '../src/lib/limite.js';
 import { ahoraLima, sumarDias, diaSemana } from '../src/lib/fechas.js';
 
 export const app = crearApp();
@@ -16,6 +17,7 @@ export const USUARIOS = {
 
 /** Vacía todas las tablas (menos las migraciones) y vuelve a cargar la semilla. */
 export async function reiniciarBD() {
+  reiniciarLimites();
   const tablas = await prisma.$queryRaw<{ tablename: string }[]>`
     SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`;
   await prisma.$executeRawUnsafe(

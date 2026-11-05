@@ -65,6 +65,8 @@ export function Rutas() {
         <Route path="/recuperar" element={<Recuperar />} />
         <Route path="/restablecer" element={<Restablecer />} />
         <Route path="/registro" element={<RegistroPaciente />} />
+        {/* CU-08 Recordar cita; /citas/confirmar/ se mantiene por los enlaces ya enviados */}
+        <Route path="/citas/recordatorio/:token" element={<ConfirmarCita />} />
         <Route path="/citas/confirmar/:token" element={<ConfirmarCita />} />
         <Route element={<Protegida roles={['paciente']} />}>
           <Route path="/reservar" element={<ReservaWeb />} />

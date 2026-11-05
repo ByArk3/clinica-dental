@@ -4,6 +4,8 @@ import { MAX_INTENTOS_LOGIN, MENSAJES, MINUTOS_BLOQUEO_LOGIN, type UsuarioSesion
 import { prisma } from '../lib/prisma.js';
 import { ErrorNegocio } from '../lib/errores.js';
 import { enviarCorreo } from '../lib/correo.js';
+import { escaparHtml } from '../lib/html.js';
+import { crearLimitador } from '../lib/limite.js';
 import { registrar as registrarAuditoria } from './auditoria.service.js';
 
 const RONDAS_BCRYPT = 10;
@@ -93,8 +95,13 @@ export async function bloqueosVigentes(emails: string[]) {
   return new Map(filas.map((f) => [f.email, f.bloqueadoHasta!]));
 }
 
-/** CU-02 Recuperar contraseña: siempre responde igual, exista o no el correo. */
+/** Recuperar contraseña: como máximo 3 correos cada 15 minutos por cuenta (evita llenar su bandeja). */
+export const LIMITE_RECUPERACION = { max: 3, ventanaMs: 15 * 60_000 };
+const recuperacionPorCorreo = crearLimitador(LIMITE_RECUPERACION.max, LIMITE_RECUPERACION.ventanaMs);
+
+/** CU-02 Recuperar contraseña: siempre responde igual, exista o no el correo (y aunque se supere el límite). */
 export async function solicitarRecuperacion(email: string) {
+  if (!recuperacionPorCorreo.consumir(email.toLowerCase())) return; // límite por correo: no se envía, sin avisar
   const usuario = await prisma.usuario.findUnique({ where: { email: email.toLowerCase() } });
   if (!usuario || !usuario.activo) return;
   const token = crypto.randomBytes(32).toString('hex');
@@ -109,7 +116,7 @@ export async function solicitarRecuperacion(email: string) {
   await enviarCorreo(
     usuario.email,
     'Recuperar contraseña — Clínica Dental',
-    `<p>Hola ${usuario.nombres}:</p><p>Para crear una nueva contraseña ingrese a <a href="${enlace}">este enlace</a>. ` +
+    `<p>Hola ${escaparHtml(usuario.nombres)}:</p><p>Para crear una nueva contraseña ingrese a <a href="${enlace}">este enlace</a>. ` +
       `Es válido por ${MINUTOS_RECUPERACION} minutos.</p><p>Si usted no lo solicitó, ignore este mensaje.</p>`,
   );
   return token; // solo lo usan las pruebas; el controlador no lo devuelve

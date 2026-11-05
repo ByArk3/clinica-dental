@@ -7,6 +7,7 @@ import { pdfComprobante } from '../lib/pdf.js';
 import { enviarCorreo } from '../lib/correo.js';
 import { ErrorNegocio } from '../lib/errores.js';
 import { usuarioActual } from '../middlewares/auth.js';
+import { escaparHtml } from '../lib/html.js';
 import { idParam } from './comun.js';
 
 export const pendientes = async (_req: Request, res: Response) => res.json(await CajaService.pendientes());
@@ -62,7 +63,7 @@ export async function enviar(req: Request, res: Response) {
     await enviarCorreo(
       c.paciente.email,
       `Comprobante ${c.numero} — Clínica Dental`,
-      `<p>Hola ${c.paciente.nombres}:</p><p>Adjuntamos su comprobante <b>${c.numero}</b> por <b>S/ ${c.total.toFixed(2)}</b>.</p><p>Gracias por su preferencia.</p>`,
+      `<p>Hola ${escaparHtml(c.paciente.nombres)}:</p><p>Adjuntamos su comprobante <b>${c.numero}</b> por <b>S/ ${c.total.toFixed(2)}</b>.</p><p>Gracias por su preferencia.</p>`,
       [{ filename: `${c.numero}.pdf`, content: archivo, contentType: 'application/pdf' }],
     );
   } catch {

@@ -1,4 +1,5 @@
-// CU-13 Emitir comprobante — Recepcionista. RN-10, RN-11, RN-12, P2 (comprobante interno).
+// CU-13 Emitir comprobante — Recepcionista. RN-10, RN-11, RN-12, RN-16, RN-17, P2 (comprobante interno).
+// CU-42 Verificar pago de adelanto (RN-18) · CU-43 Anular comprobante (RN-19).
 // Reglas acordadas: campañas por línea según la fecha de la cita; adelanto = 50 % del tratamiento previsto;
 // el adelanto pagado y el saldo a favor se descuentan del cobro final; lo que sobra del adelanto → saldo a favor.
 import { Prisma } from '@prisma/client';
@@ -13,6 +14,7 @@ import { moverSaldo } from './saldo.service.js';
 import { tipoPagoBilletera } from './pago.service.js';
 import { ahoraLima } from '../lib/fechas.js';
 import { registrar as registrarAuditoria } from './auditoria.service.js';
+import { escaparHtml } from '../lib/html.js';
 import { MINUTOS_PAGO_ADELANTO } from '@clinica/shared';
 
 const D = (n: Prisma.Decimal.Value) => new Prisma.Decimal(n);
@@ -256,7 +258,7 @@ export async function rechazarPago(citaId: number, motivo: string) {
     await enviarCorreo(
       cita.paciente.email,
       'No pudimos verificar su pago — Clínica Dental',
-      `<p>Hola ${cita.paciente.nombres}:</p><p>No pudimos verificar el pago del adelanto de su cita del <b>${fechaPE(dateAFecha(cita.fecha))} a las ${dateAHora(cita.hora)}</b> (operación ${cita.pagoOperacion}).</p><p>Motivo: ${motivo}</p><p>El horario fue liberado. Si cree que es un error, comuníquese con la clínica.</p>`,
+      `<p>Hola ${escaparHtml(cita.paciente.nombres)}:</p><p>No pudimos verificar el pago del adelanto de su cita del <b>${fechaPE(dateAFecha(cita.fecha))} a las ${dateAHora(cita.hora)}</b> (operación ${escaparHtml(cita.pagoOperacion)}).</p><p>Motivo: ${escaparHtml(motivo)}</p><p>El horario fue liberado. Si cree que es un error, comuníquese con la clínica.</p>`,
     ).catch(() => undefined);
   }
   return { citaId, estado: 'liberada' as const };

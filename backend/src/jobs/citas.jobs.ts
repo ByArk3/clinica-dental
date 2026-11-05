@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { enviarCorreo } from '../lib/correo.js';
 import { dateAFecha, dateAHora, fechaPE } from '../lib/fechas.js';
 import { enlaceConfirmacion } from '../services/cita.service.js';
+import { escaparHtml } from '../lib/html.js';
 import { porAvisar, vencerSaldos } from '../services/saldo.service.js';
 
 // Instante real de la cita: fecha + hora locales de Lima
@@ -34,8 +35,8 @@ export async function enviarRecordatorios(ahora = new Date()) {
       await enviarCorreo(
         c.paciente.email,
         'Recordatorio de su cita — Clínica Dental',
-        `<p>Hola ${c.paciente.nombres}:</p>` +
-          `<p>Le recordamos su cita del <b>${fechaPE(dateAFecha(c.fecha))} a las ${dateAHora(c.hora)}</b> con ${c.odontologo.usuario.nombres}.</p>` +
+        `<p>Hola ${escaparHtml(c.paciente.nombres)}:</p>` +
+          `<p>Le recordamos su cita del <b>${fechaPE(dateAFecha(c.fecha))} a las ${dateAHora(c.hora)}</b> con ${escaparHtml(c.odontologo.usuario.nombres)}.</p>` +
           (c.estado === 'pendiente_confirmacion'
             ? `<p><a href="${enlace}">Confirmar o cancelar mi cita</a></p><p>Si no la confirma hasta 24 horas antes, el horario se libera.</p>`
             : `<p>Si no puede asistir, <a href="${enlace}">cancele o reprograme su cita aquí</a> hasta 24 horas antes: su adelanto quedará como saldo a favor.</p>`),
@@ -49,8 +50,9 @@ export async function enviarRecordatorios(ahora = new Date()) {
 
 /**
  * Libera horarios (el horario queda libre):
- *  · RN-04 / CU-08 2.1: citas sin confirmar a menos de 24 h.
- *  · Adelanto no pagado ni reportado dentro de 1 hora (las «Pago en verificación» NO se liberan).
+ *  · RN-04: adelanto no pagado ni reportado dentro de 1 hora → el horario se libera.
+ *  · Solo citas antiguas (antes del cambio v2) en «Pendiente de confirmación» a menos de 24 h.
+ *  (Las «Pago en verificación» NO se liberan: esperan la verificación de la recepcionista, RN-18.)
  */
 export async function liberarCitas(ahora = new Date()) {
   const filas = await prisma.$queryRawUnsafe<{ id: number }[]>(
@@ -63,7 +65,7 @@ export async function liberarCitas(ahora = new Date()) {
   return filas.map((f) => f.id).sort((a, b) => a - b);
 }
 
-/** Saldo a favor: vencen los abonos sin usar y se avisa por correo 30 y 7 días antes de que venzan. */
+/** RN-17 Saldo a favor: vencen los abonos sin usar y se avisa por correo 30 y 7 días antes de que venzan. */
 export async function revisarSaldos(ahora = new Date()) {
   const vencidos = await vencerSaldos(ahora);
   let avisos = 0;
@@ -73,7 +75,7 @@ export async function revisarSaldos(ahora = new Date()) {
         await enviarCorreo(
           a.paciente.email,
           'Su saldo a favor está por vencer — Clínica Dental',
-          `<p>Hola ${a.paciente.nombres}:</p><p>Tiene <b>S/ ${a.restante.toFixed(2)}</b> de saldo a favor que vence el <b>${fechaPE(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(a.venceEn))}</b>.</p>` +
+          `<p>Hola ${escaparHtml(a.paciente.nombres)}:</p><p>Tiene <b>S/ ${a.restante.toFixed(2)}</b> de saldo a favor que vence el <b>${fechaPE(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(a.venceEn))}</b>.</p>` +
             `<p>Reserve su próxima cita para usarlo: se descuenta solo del adelanto o del cobro.</p>`,
         ).catch(() => undefined);
         avisos++;

@@ -1,4 +1,8 @@
-// Autocompletar nombres y apellidos con el DNI (RENIEC) y la razón social con el RUC (SUNAT) mediante un servicio intermedio.
+// CU-57 Consultar datos en RENIEC o SUNAT («extend» de CU-03 y de CU-26): autocompletar nombres y apellidos con el DNI
+// y la razón social con el RUC mediante un servicio intermedio. Es OPCIONAL: sin token, sin consultas, sin respuesta
+// en 5 s o sin datos, el registro sigue a mano.
+// Ley 29733 (RNF08): de la respuesta solo se devuelven los campos que se usan (nombres/apellidos, razón social y
+// estado); no se guarda la respuesta ni se escribe en el log el DNI/RUC ni lo que devuelve el proveedor.
 // RENIEC no da acceso directo a clínicas privadas; se usa un proveedor (p. ej. Decolecta, ex apis.net.pe)
 // con su token en .env. Si no hay token, se acabaron las consultas o no responde, la recepcionista escribe los datos.
 const URL_POR_DEFECTO = 'https://api.decolecta.com/v1/reniec/dni?numero={dni}';

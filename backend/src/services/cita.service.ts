@@ -62,7 +62,7 @@ async function validarHorario(tx: Tx, odontologoId: number, fecha: string, hora:
   if (ocupadas.has(hora)) throw horarioTomado();
 }
 
-/** Regla acordada (v2): toda reserva paga adelanto; 50 % del tratamiento, o 100 % con 3+ inasistencias (RN-12). */
+/** RN-12 (v2): toda reserva paga adelanto; 50 % del tratamiento previsto, o 100 % con 3 o más inasistencias. */
 export const porcentajeAdelanto = (restringido: boolean) => (restringido ? PORCENTAJE_ADELANTO_RESTRINGIDO : PORCENTAJE_ADELANTO);
 
 /** Tratamiento previsto: el elegido (activo) o, si no se eligió, la Consulta. */
@@ -313,7 +313,8 @@ export async function citasDelDia(fecha: string) {
   }));
 }
 
-export const enlaceConfirmacion = (token: string) => `${process.env.FRONTEND_URL}/citas/confirmar/${token}`;
+/** CU-08 Recordar cita: enlace público (la ruta antigua /citas/confirmar/ sigue funcionando). */
+export const enlaceConfirmacion = (token: string) => `${process.env.FRONTEND_URL}/citas/recordatorio/${token}`;
 
 /** P7: enlace wa.me con el recordatorio, sin API de pago. */
 export function enlaceWhatsapp(telefono: string, nombres: string, fecha: string, hora: string, token: string, pedirConfirmacion = false) {

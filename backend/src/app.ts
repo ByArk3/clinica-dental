@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import { rutas } from './routes/index.js';
 import { manejadorErrores } from './middlewares/errores.js';
+import { secretoDeSesion } from './lib/config.js';
 
 const QUINCE_MINUTOS = 15 * 60 * 1000; // RNF05
 
@@ -27,7 +28,7 @@ export function crearApp() {
     session({
       name: 'sid',
       store: new PgStore({ conString: process.env.DATABASE_URL, tableName: 'session' }),
-      secret: process.env.SESSION_SECRET ?? 'solo-desarrollo',
+      secret: secretoDeSesion(), // en producción exige un secreto seguro (lib/config.ts)
       resave: false,
       saveUninitialized: false,
       rolling: true, // expiración deslizante: 15 min desde la última petición

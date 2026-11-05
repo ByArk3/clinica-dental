@@ -138,10 +138,10 @@ export async function verParaEditar(atencionId: number, usuario: UsuarioSesion) 
 }
 
 /**
- * Editar una atención ya registrada (corregir diagnóstico, observaciones, tratamientos o piezas).
+ * CU-44 Corregir atención («extend» de CU-10; RN-20). Editar una atención ya registrada (corregir diagnóstico, observaciones, tratamientos o piezas).
  * Solo el odontólogo que la registró, con motivo. Se guarda la versión anterior (el historial la muestra).
  * Si ya se cobró, los tratamientos no cambian (cambiarían el importe): primero se anula el comprobante.
- * Si cambian los tratamientos, el stock se corrige con la diferencia de insumos (salida o devolución) y
+ * Flujo alterno (no es «include» de CU-12): si cambian los tratamientos, el stock se corrige con la diferencia de insumos (salida o devolución) y
  * los tratamientos que se mantienen conservan su precio congelado; los nuevos toman el del tarifario.
  */
 export async function editarAtencion(atencionId: number, usuario: UsuarioSesion, dto: EditarAtencionDTO, ip?: string) {

@@ -33,13 +33,15 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://clinica:${DB_PASSWORD:-clinica}@db:5432/clinica_dental?schema=public
-      SESSION_SECRET: ${SESSION_SECRET:-cambie-este-secreto-en-produccion}
+      # Vacío = la API genera uno aleatorio en cada arranque (seguro; las sesiones se cierran al reiniciar)
+      SESSION_SECRET: ${SESSION_SECRET:-}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
       # En local se accede por HTTP. Con HTTPS (producción) poner COOKIE_SECURE=true (RNF06).
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       TRUST_PROXY: "true"
       JOBS_ENABLED: "true"
-      SEED: ${SEED:-true}
+      # Datos de ejemplo (usuarios con contraseña Clinica2026): solo para la demo, con SEED=true en .env
+      SEED: ${SEED:-false}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}

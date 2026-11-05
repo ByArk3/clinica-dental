@@ -62,7 +62,7 @@ export async function inasistencia(req: Request, res: Response) {
   res.json(await CitaService.registrarInasistencia(idParam(req)));
 }
 
-/** CU-08: enlace público con token */
+/** CU-08 Recordar cita: enlace público con token (cancelar, o confirmar en citas antiguas) */
 export async function verConfirmacion(req: Request, res: Response) {
   res.json(await ConfirmacionService.obtenerPorToken(String(req.params.token)));
 }

@@ -26,7 +26,7 @@ describe('CU-09 Citas del día', () => {
     const fila = r.body.find((x: { id: number }) => x.id === r1.body.cita.id);
     expect(fila.whatsapp).toMatch(/^https:\/\/wa\.me\/51948222333\?text=/);
     const texto = decodeURIComponent(fila.whatsapp);
-    expect(texto).toContain('/citas/confirmar/');
+    expect(texto).toContain('/citas/recordatorio/');
     expect(texto).toContain('cancelar o reprogramar');
   });
 

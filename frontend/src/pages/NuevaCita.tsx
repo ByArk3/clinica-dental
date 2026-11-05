@@ -72,7 +72,7 @@ export default function NuevaCita() {
         <div className="tarjeta mb-3">
           <div className="alert alert-info">Paciente no encontrado. Regístrelo para continuar con la cita.</div>
           {reniec?.estado === 'buscando' && <p className="small text-muted" role="status">Buscando nombres en RENIEC…</p>}
-          {reniec?.estado === 'ok' && <p className="small text-success" role="status">Nombres y apellidos completados con RENIEC. Verifíquelos con el DNI del paciente.</p>}
+          {reniec?.estado === 'ok' && <p className="small text-success" role="status">Los nombres se completaron con una consulta a RENIEC; verifíquelos con el DNI y corríjalos si hace falta.</p>}
           {reniec?.estado === 'sin_datos' && <p className="small text-muted" role="status">RENIEC no devolvió datos para ese DNI; escríbalos a mano.</p>}
           {reniec?.estado === 'no_disponible' && <p className="small text-muted" role="status">No se pudo consultar RENIEC ahora; escriba los datos a mano.</p>}
           <FormPaciente

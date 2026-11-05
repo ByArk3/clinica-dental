@@ -97,9 +97,9 @@ export const citasApi = {
   delDia: (fecha: string) => api<CitaDelDia[]>(`/citas?fecha=${fecha}`),
   inasistencia: (id: number) =>
     api<{ inasistencias: number; restringido: boolean; aviso?: string; adelantoPerdido: string | null }>(`/citas/${id}/inasistencia`, { method: 'POST' }),
-  verConfirmacion: (token: string) => api<CitaConfirmacion>(`/citas/confirmar/${encodeURIComponent(token)}`),
+  verConfirmacion: (token: string) => api<CitaConfirmacion>(`/citas/recordatorio/${encodeURIComponent(token)}`),
   responderConfirmacion: (token: string, accion: 'confirmar' | 'cancelar') =>
-    api<CitaConfirmacion>(`/citas/confirmar/${encodeURIComponent(token)}`, { method: 'POST', body: { accion } }),
+    api<CitaConfirmacion>(`/citas/recordatorio/${encodeURIComponent(token)}`, { method: 'POST', body: { accion } }),
 };
 
 // ---------- Iteración 2: tarifario, insumos, historial y atención ----------

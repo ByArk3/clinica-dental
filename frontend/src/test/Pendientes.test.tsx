@@ -42,7 +42,7 @@ describe('Autocompletar con RENIEC (Nueva cita)', () => {
     await buscar();
     await waitFor(() => expect(screen.getByLabelText('Nombres')).toHaveValue('Juan Carlos'));
     expect(screen.getByLabelText('Apellidos')).toHaveValue('De la Cruz Quispe');
-    expect(screen.getByText(/completados con RENIEC/)).toBeInTheDocument();
+    expect(screen.getByText(/se completaron con una consulta a RENIEC/)).toBeInTheDocument();
   });
 
   it('sin proveedor configurado: formulario vacío, sin avisos', async () => {
@@ -56,6 +56,30 @@ describe('Autocompletar con RENIEC (Nueva cita)', () => {
     simularApi({ 'GET /pacientes': noEncontrado, 'GET /reniec/45678912': { body: { encontrado: false, motivo: 'no_disponible' } } });
     await buscar();
     expect(await screen.findByText('No se pudo consultar RENIEC ahora; escriba los datos a mano.')).toBeInTheDocument();
+  });
+
+  it('CU-57 es «extend»: con la API de RENIEC caída (error de red) el registro sigue a mano y se guarda', async () => {
+    const llamadas = simularApi({
+      'GET /pacientes': noEncontrado,
+      'POST /pacientes': { status: 201, body: { id: 9, dni: '45678912', nombres: 'Raúl', apellidos: 'Gómez', fechaNacimiento: '1970-02-02', telefono: '911222333', email: null, inasistencias: 0, restringido: false } },
+      'GET /odontologos': { body: [] },
+    });
+    const fetchOriginal = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('/reniec/')) throw new TypeError('Failed to fetch'); // proveedor o red caída
+      return fetchOriginal(input, init);
+    }) as typeof fetch;
+    try {
+      const u = await buscar();
+      await u.type(await screen.findByLabelText('Nombres'), 'Raúl');
+      await u.type(screen.getByLabelText('Apellidos'), 'Gómez');
+      await u.type(screen.getByLabelText('Fecha de nacimiento'), '1970-02-02');
+      await u.type(screen.getByLabelText('Celular'), '911222333');
+      await u.click(screen.getByRole('button', { name: 'Registrar paciente' }));
+      await waitFor(() => expect(llamadas.find((l) => l.metodo === 'POST')?.body).toMatchObject({ dni: '45678912', nombres: 'Raúl', apellidos: 'Gómez' }));
+    } finally {
+      globalThis.fetch = fetchOriginal;
+    }
   });
 
   it('no pisa lo que la recepcionista ya escribió', async () => {

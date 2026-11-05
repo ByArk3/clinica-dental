@@ -9,7 +9,11 @@ beforeEach(reiniciarBD);
 describe('CU-08 Confirmar cita — enlace', () => {
   it('flujo básico: abre el enlace, ve la cita y la confirma (sin iniciar sesión)', async () => {
     const c = await crearCita({ horas: 40, token: 'token-prueba-1234567890' });
+    // CU-08 Recordar cita: la ruta nueva y la antigua (enlaces ya enviados) responden igual
+    const nueva = await request(app).get('/api/citas/recordatorio/token-prueba-1234567890');
+    expect(nueva.status).toBe(200);
     const ver = await request(app).get('/api/citas/confirmar/token-prueba-1234567890');
+    expect(ver.body).toEqual(nueva.body);
     expect(ver.status).toBe(200);
     expect(ver.body).toMatchObject({ paciente: 'María', odontologo: 'Dr. Luis Paredes', estado: 'pendiente_confirmacion', puedeResponder: true });
     expect(ver.body.dni).toBeUndefined(); // sin datos personales en el enlace público

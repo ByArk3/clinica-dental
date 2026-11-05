@@ -15,8 +15,8 @@ export function iniciarTareas() {
   cron.schedule(
     '*/5 * * * *',
     async () => {
-      await ejecutar('liberar citas (RN-04)', liberarCitas)();
-      await ejecutar('enviar recordatorios (CU-08)', enviarRecordatorios)();
+      await ejecutar('liberar reservas sin adelanto (RN-04)', liberarCitas)();
+      await ejecutar('recordar citas (CU-08)', enviarRecordatorios)();
     },
     { timezone: 'America/Lima' },
   );
@@ -24,7 +24,7 @@ export function iniciarTareas() {
   cron.schedule(
     '10 7 * * *',
     async () => {
-      await ejecutar('saldo a favor (vencimientos y avisos)', revisarSaldos)();
+      await ejecutar('saldo a favor: vencimientos y avisos (RN-17)', revisarSaldos)();
     },
     { timezone: 'America/Lima' },
   );

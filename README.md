@@ -16,16 +16,26 @@ shared/    tipos (Rol, EstadoCita), mensajes exactos y esquemas Zod
 
 Requisito: [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows, macOS o Linux).
 
+Para la **demo** (con usuarios de prueba), copiar `.env.docker.example` a `.env` (ya trae `SEED=true`) o activarlo al arrancar:
+
+```bash
+copy .env.docker.example .env
+```
 ```bash
 docker compose up --build
 ```
 
+(Sin `.env`, en PowerShell: `$env:SEED="true"; docker compose up --build`; en Linux/macOS: `SEED=true docker compose up --build`.)
+
 Abrir **http://localhost:8080** y entrar con los usuarios de prueba de abajo. La primera vez tarda unos minutos.
+Si `docker compose up --build` falla con `failed to execute bake`, construir con
+`docker build -f backend/Dockerfile -t clinica-dental-api .` y `docker build -f frontend/Dockerfile -t clinica-dental-web .`,
+y luego `docker compose up`.
 
 | Contenedor | Qué es |
 |---|---|
 | `db` | PostgreSQL 16; los datos se guardan en el volumen `datos-db` |
-| `api` | Backend (Express + Prisma). Al arrancar aplica las migraciones y carga la semilla (`SEED=true`). Corre las tareas programadas |
+| `api` | Backend (Express + Prisma). Al arrancar aplica las migraciones y, solo si `SEED=true`, carga la semilla (por defecto `false`). Corre las tareas programadas |
 | `web` | Frontend compilado en nginx, que redirige `/api` al contenedor `api` (mismo origen: la cookie de sesión funciona sin CORS) |
 
 Comandos útiles:
@@ -38,7 +48,10 @@ docker compose exec db psql -U clinica clinica_dental   # consola SQL
 ```
 
 Para cambiar el puerto, la clave de la base, el SMTP, etc., copiar `.env.docker.example` a `.env` en la raíz.
-**En producción (con HTTPS):** `COOKIE_SECURE=true`, `SEED=false` y un `SESSION_SECRET` largo y aleatorio.
+**En producción (con HTTPS):** `COOKIE_SECURE=true`, `SEED=false` y un `SESSION_SECRET` aleatorio de 32+ caracteres
+(`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`). Fuera de Docker, con `NODE_ENV=production`
+la API **no arranca** si falta, es corto o es un valor de ejemplo. En Docker, si se deja vacío, el contenedor genera uno
+aleatorio en cada arranque (seguro, pero las sesiones se cierran al reiniciar).
 
 ## Instalación sin Docker (desarrollo)
 
@@ -82,7 +95,7 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | CU-05 Consultar disponibilidad (horario − citas activas − horas pasadas; sugiere fecha) | `cita.test.ts` |
 | CU-06 Registrar cita web y presencial: 4.1, 8.1, 8.2, RN-01/02/03/12 | `cita.test.ts`, `frontend/src/test/FormReserva*`, `NuevaCita*` |
 | CU-07 Reprogramar / cancelar (paciente hasta 24 h antes, P8; recepcionista hasta la hora de la cita) | `reprogramar.test.ts`, `Iteracion1.test.tsx` |
-| CU-08 Confirmar cita por enlace (2.1, 2.2, 4.1) + tareas programadas: recordatorio 48 h y liberación 24 h (RN-04) | `confirmacion.test.ts`, `Iteracion1.test.tsx` |
+| CU-08 Recordar cita (aviso 48 h con enlace para cancelar o reprogramar; v2) + tareas programadas | `confirmacion.test.ts`, `Iteracion1.test.tsx` |
 | CU-09 Citas del día e inasistencias (3.1, 6.1 → paciente restringido, RN-12) | `inasistencia.test.ts`, `Iteracion1.test.tsx` |
 | Menú y rutas por rol (RNF07), vistas móviles 360 px (RNF02) | |
 
@@ -102,8 +115,8 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | Caso de uso | Pruebas |
 |---|---|
 | CU-13 Emitir comprobante: pendientes de caja, importe (RN-10, precios congelados de la atención), descuento (P3), efectivo con vuelto / tarjeta / Yape-Plin, comprobante interno correlativo `C-000001` (P2) y cita «Pagada» en una transacción | `caja.test.ts`, `Caja.test.tsx` |
-| Flujos alternos 3.1 (adelanto RN-12 → la cita vuelve a «Pendiente de confirmación»), 4.1 (sin precio), 6.1 (monto insuficiente), 9.1 (sin correo), 10.1 (error al imprimir: reintentar) | `caja.test.ts`, `Caja.test.tsx` |
-| Adelanto (P6): S/ 30 configurable, se descuenta del cobro final | `caja.test.ts` |
+| Flujos alternos 3.1 (adelanto RN-12 → la cita queda «Confirmada»), 4.1 (sin precio), 6.1 (monto insuficiente), 9.1 (sin correo), 10.1 (error al imprimir: reintentar) | `caja.test.ts`, `Caja.test.tsx` |
+| Adelanto (P6, v2): 50 % del tratamiento previsto (100 % con 3+ inasistencias), se descuenta del cobro final | `caja.test.ts` |
 | PDF del comprobante (pdfkit) y envío por correo con el PDF adjunto | `caja.test.ts` |
 
 ## Avance — Iteración 4 ✅ completa
@@ -119,11 +132,13 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | Descuentos (P3) y monto del adelanto (P6) gestionados por el Administrador | `admin.test.ts` |
 | CU-38 Panel de control · CU-39 Reporte de ingresos · CU-40 Reporte de inventario (rango de fechas, exportación CSV para Excel) | `reporte.test.ts`, `Iteracion4.test.tsx` |
 
-Total: **211 pruebas de API + 58 de interfaz** (incluye las reglas acordadas en nov. 2026). Los 40 casos de uso del brief están implementados.
+Total: **273 pruebas de API + 96 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief y los CU-41 a CU-57 del informe v17 están implementados.
 
-**Tareas programadas** (`backend/src/jobs`, node-cron, cada 15 min, hora de Lima; se activan con `JOBS_ENABLED=true`):
-primero libera las citas sin confirmar a menos de 24 h y luego envía el recordatorio por correo a las que empiezan dentro de 48 h.
-Si el paciente no tiene correo, «Citas del día» muestra el botón **Recordar por WhatsApp** (enlace `wa.me`, P7).
+**Tareas programadas** (`backend/src/jobs`, node-cron, hora de Lima; se activan con `JOBS_ENABLED=true`):
+- **Cada 5 min:** libera las reservas cuyo adelanto no se pagó ni reportó en 1 hora (RN-04; también las citas antiguas
+  «Pendiente de confirmación» a menos de 24 h) y luego envía el recordatorio (CU-08) a las citas confirmadas que empiezan
+  dentro de 48 h. Si el paciente no tiene correo, «Citas del día» muestra **Recordar por WhatsApp** (enlace `wa.me`, P7).
+- **Diaria (07:10):** saldo a favor (RN-17): vence los abonos cumplidos y avisa por correo 30 y 7 días antes.
 
 **RN-02 (sin cruces de citas)** se protege en dos niveles: bloqueo `SELECT … FOR UPDATE` de la fila del odontólogo
 dentro de la transacción, y el índice único parcial `cita_horario_activo` (migración inicial). Si una reserva web y una
@@ -202,7 +217,7 @@ en la API; aviso de Insumos con todos los insumos en el mínimo y leyenda del co
 «Volver a pendiente» (auditoría); al subir el mínimo de un insumo por encima de su stock se crea la alerta; razón social con el
 RUC (SUNAT, mismo token que RENIEC).
 
-**Interfaz (v3)**: modo oscuro (🌙 en el menú; se recuerda), efectos al pasar el mouse (filas, botones, menú, pestañas,
+**Interfaz (v3)**: modo oscuro (botón 🌙/☀️ en la esquina de todas las pantallas; se recuerda), efectos al pasar el mouse (filas, botones, menú, pestañas,
 tarjetas), entrada suave de cada pantalla, botones que muestran «Guardando…» y ✓ al terminar, campos de dígitos con ✓/✗,
 copiar el número de Yape y el N.° de operación con un toque, globos de ayuda en los estados de la cita, vista previa en Caja,
 contadores animados en el Panel, «Pago en verificación» con un punto que late, QR ampliable, confirmación antes de registrar
@@ -210,8 +225,63 @@ un pago, pedido desde alertas resaltado (con proveedor sugerido) y buscador de i
 Respeta «reducir movimiento» del sistema operativo.
 
 > Para el informe (v2): cambian **RN-12** (100 % con 3+ inasistencias), **P6** (adelanto en toda reserva), **CU-06**, **CU-07**,
-> **CU-08** (de «Confirmar cita» a «Recordar cita», `<<extend>>` hacia CU-07) y **CU-13**, y el diagrama de estados de la cita
-> («Pendiente de confirmación» queda solo para citas anteriores al cambio).
+> **CU-08** (de «Confirmar cita» a «Recordar cita»; **CU-07 «extend» CU-08**: la flecha va de CU-07 hacia CU-08) y **CU-13**,
+> y el diagrama de estados de la cita («Pendiente de confirmación» queda solo para citas anteriores al cambio).
+
+## Numeración del informe v17
+
+**Reglas de negocio que cambiaron o se agregaron**
+
+| RN | Regla |
+|---|---|
+| RN-03 *(cambió)* | Citas solo dentro del horario de **cada odontólogo**; **en feriados no se atiende** |
+| RN-04 *(cambió)* | La reserva queda confirmada **al pagar el adelanto**; si no se paga ni se reporta en **1 hora**, se libera. 48 h antes se envía un **recordatorio** |
+| RN-10 *(cambió)* | Importe = tarifario − **campañas vigentes el día de la cita** (si dos aplican, la mayor) |
+| RN-12 *(cambió)* | **Toda reserva** requiere un adelanto del 50 % del tratamiento previsto; **100 %** con 3 o más inasistencias |
+| RN-16 | Cancelar con ≥ 24 h → saldo a favor; con < 24 h o inasistencia → se pierde; si cancela la clínica → devolución; al reprogramar, el adelanto pasa a la nueva fecha |
+| RN-17 | El saldo a favor se usa primero (lo que vence antes) y vence a los 12 meses (configurable); avisos 30 y 7 días antes |
+| RN-18 | El pago por Yape/Plin solo confirma la cita después de que la recepcionista lo verifica; solo se aceptan las billeteras habilitadas |
+| RN-19 | Los comprobantes no se borran: se anulan con motivo y conservan su número. La recepcionista anula solo los del día; el administrador, cualquiera |
+| RN-20 | Solo el odontólogo que registró una atención puede corregirla, con motivo y guardando la versión anterior; si ya está cobrada, solo diagnóstico y observaciones |
+| RN-21 | 3 intentos fallidos de inicio de sesión → bloqueo de 15 minutos |
+| RN-22 | Los accesos al historial, las correcciones, las anulaciones y los bloqueos quedan en la auditoría |
+
+**Casos de uso nuevos**
+
+| CU | Nombre | Actor | Relación | En el código |
+|---|---|---|---|---|
+| CU-41 | Pagar adelanto | Paciente | «extend» de CU-06 | `POST /citas/:id/pago` |
+| CU-42 | Verificar pago de adelanto | Recepcionista | — | `POST /caja/citas/:id/aprobar-pago` y `/rechazar-pago` |
+| CU-43 | Anular comprobante | Recepcionista, Administrador | — | `PATCH /comprobantes/:id/anular` |
+| CU-44 | Corregir atención | Odontólogo | «extend» de CU-10 | `GET/PATCH /atenciones/:id` |
+| CU-45 | Consultar auditoría | Administrador | — | `GET /admin/auditoria` |
+| CU-46 | Desbloquear usuario | Administrador | «extend» de CU-35 | `PATCH /usuarios/:id/desbloquear` |
+| CU-47 | Registrar campaña de descuento | Administrador | — | `POST /admin/descuentos` |
+| CU-48 | Listar campañas | Administrador | — | `GET /admin/descuentos` |
+| CU-49 | Modificar campaña | Administrador | «extend» de CU-48 | `PATCH /admin/descuentos/:id` |
+| CU-50 | Desactivar campaña | Administrador | «extend» de CU-48 | `PATCH /admin/descuentos/:id/desactivar` |
+| CU-51 | Registrar feriado | Administrador | — | `POST /admin/feriados` |
+| CU-52 | Listar feriados | Administrador | — | `GET /admin/feriados` |
+| CU-53 | Eliminar feriado | Administrador | «extend» de CU-52 | `DELETE /admin/feriados/:id` |
+| CU-54 | Configurar horario del odontólogo | Administrador | — | `GET/PUT /admin/odontologos/:id/horario` |
+| CU-55 | Configurar datos de pago | Administrador | — | `GET/PUT /admin/pago`, `PUT/DELETE /admin/pago/qr` |
+| CU-56 | Consultar saldo a favor | Paciente | — | «Mis datos» (`GET /pacientes/me`) |
+| CU-57 | Consultar datos en RENIEC o SUNAT | Recepcionista, Administrador + actor externo | «extend» de CU-03 y de CU-26 | `GET /reniec/:dni`, `GET /sunat/:ruc` |
+
+Los «include» del diagrama son solo tres: **CU-05** (desde CU-06 y CU-07), **CU-12** (desde CU-11, CU-25 y CU-33) y
+**CU-22 Buscar insumo** (desde CU-23, CU-25 y CU-30). En CU-44 el ajuste de stock es un flujo alterno, no un «include».
+CU-57 es «extend» porque es opcional: sin token, sin consultas, sin respuesta en 5 s o sin datos, el registro sigue a mano
+(hay pruebas con el proveedor caído).
+
+## Riesgos conocidos
+
+- **Bloqueo de cuentas (RN-21):** cualquiera que conozca el correo de un usuario puede bloquearlo 15 minutos fallando
+  3 veces. Se acepta para el curso; el administrador puede desbloquear desde Usuarios (CU-46). En producción se
+  complementaría con límite por IP o CAPTCHA.
+- **Límite de «Recuperar contraseña»:** 3 solicitudes cada 15 minutos por IP (la 4.ª responde 429) y por correo (no se
+  envían más, con la misma respuesta). Los contadores están en memoria: valen para un solo servidor.
+- **Datos personales (Ley 29733):** de RENIEC/SUNAT solo se usan nombres, apellidos, razón social y estado; no se guarda la
+  respuesta ni se registra el DNI/RUC en el log. Los correos escapan los datos que escriben los usuarios (nombres, motivos).
 
 ## Decisiones y supuestos
 
@@ -219,12 +289,12 @@ Se aplican los supuestos de la sección 14 del brief (P2–P17). Además:
 
 - `bcryptjs` en lugar de `bcrypt` (mismo algoritmo, sin compilación nativa).
 - Prisma 6 (versión estable).
-- `comprobantes.tipo` (`servicio` | `adelanto`), con único `(cita_id, tipo)`, para emitir el adelanto de RN-12 y luego
+- `comprobantes.tipo` (`servicio` | `adelanto`), con único `(cita_id, tipo)` entre los comprobantes vigentes (los anulados no cuentan), para emitir el adelanto de RN-12 y luego
   el comprobante final de la misma cita. Por eso `detalle_comprobante.tratamiento_id` admite NULL.
 - Tablas extra: `descuentos` + `descuento_tratamiento` (campañas), `saldo_movimientos`, `devoluciones`, `feriados`,
   `configuracion` (bloque de 30 min, datos de Yape/Plin), `session` (sesiones).
 - `citas.recordatorio_enviado_en` para no repetir el recordatorio de 48 h; `fichas_paciente.notas` para anotar inasistencias.
-- El enlace de confirmación (CU-08) no pide sesión y solo muestra el nombre de pila, el odontólogo, la fecha y la hora.
+- El enlace del recordatorio (CU-08, `/citas/recordatorio/:token`; `/citas/confirmar/:token` sigue funcionando) no pide sesión y solo muestra el nombre de pila, el odontólogo, la fecha y la hora.
   Al reprogramar se genera un enlace nuevo y el anterior deja de servir.
 - **Atención:** solo el odontólogo de la cita, con la cita «Confirmada» y de hoy o de un día anterior (no futura).
   Si se elige dos veces el mismo tratamiento (p. ej. dos piezas), se cobra y se descuenta dos veces.

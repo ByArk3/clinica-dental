@@ -10,7 +10,10 @@ type CitaToken = Omit<
   'pagoCaptura'
 >;
 
-/** Qué puede hacer el paciente con el enlace según el estado y el plazo de 24 h (RN-04). */
+/**
+ * CU-08 Recordar cita: qué puede hacer el paciente con el enlace del recordatorio según el estado y el plazo de 24 h
+ * (P8 / RN-16: cancelar con 24 h o más deja el adelanto como saldo a favor).
+ */
 function evaluar(c: CitaToken): { puedeResponder: boolean; mensaje?: string; codigo?: string; status?: number } {
   const horas = horasParaCita(c.fecha, c.hora);
   if (c.estado === 'cancelada') return { puedeResponder: false, mensaje: MENSAJES.CITA_YA_CANCELADA, codigo: 'CITA_YA_CANCELADA', status: 409 };
@@ -55,7 +58,11 @@ export async function obtenerPorToken(token: string) {
   return vista(await buscar(token));
 }
 
-/** CU-08: Confirmar → «Confirmada». 4.1: Cancelar → «Cancelada» (CU-07) y el horario queda libre. */
+/**
+ * CU-08 Recordar cita. Cancelar → «Cancelada» (CU-07, «extend» de CU-08) y el horario queda libre (RN-16 para el adelanto).
+ * La acción 'confirmar' solo aplica a citas ANTIGUAS en «Pendiente de confirmación» (antes del cambio v2,
+ * hoy toda reserva queda confirmada al pagar el adelanto, RN-04).
+ */
 export async function responder(token: string, accion: 'confirmar' | 'cancelar') {
   const actual = await buscar(token);
   return prisma.$transaction(async (tx) => {
