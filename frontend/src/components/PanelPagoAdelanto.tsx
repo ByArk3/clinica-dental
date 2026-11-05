@@ -76,11 +76,11 @@ export function PanelPagoAdelanto({ cita, modo, onReportado }: { cita: Cita; mod
   }
 
   return (
-    <div className="border rounded p-3 bg-light" data-testid="panel-adelanto">
+    <div className="border rounded p-3 bg-body-tertiary" data-testid="panel-adelanto">
       <div className="d-flex flex-wrap justify-content-between gap-2">
         <strong>Adelanto: {solesPE(cita.montoAdelanto ?? 0)}</strong>
         {cita.adelantoVenceEn && (
-          <span className={`small ${minutos !== null && minutos <= 15 ? 'text-danger fw-semibold' : 'text-muted'}`}>
+          <span className={`small ${minutos !== null && minutos <= 15 ? 'text-danger-emphasis fw-semibold' : 'text-muted'}`}>
             Pagar hasta las {horaLima(cita.adelantoVenceEn)}{minutos !== null && ` (quedan ${minutos} min)`}
           </span>
         )}
