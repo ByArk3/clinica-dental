@@ -1,0 +1,89 @@
+PRENDE EL PROYECTO USANDO DOCKER
+Clínica Dental — Grupo 1
+================================
+
+Carpeta del proyecto: D:\Proyectos\clinica-dental
+
+Antes de empezar: abrir Docker Desktop y esperar a que diga que está corriendo.
+Todos los comandos van en PowerShell, uno por uno y en este orden.
+
+
+1. Ir a la carpeta del proyecto
+-------------------------------
+cd D:\Proyectos\clinica-dental
+
+
+2. Traer lo último de GitHub
+----------------------------
+git pull origin main
+
+
+3. Revisar el archivo .env
+--------------------------
+Abrir el proyecto en VS Code:
+
+code .
+
+En el panel izquierdo está el archivo .env (junto a docker-compose.yml). Revisar que tenga:
+  - SEED=true             (sin esto no se cargan los usuarios de ejemplo)
+  - SESSION_SECRET        puede quedar vacío; el contenedor genera uno solo
+  - Los datos de SMTP (Gmail) y RENIEC_TOKEN
+
+Si se prefiere el Explorador de Windows:
+
+explorer .
+
+(El .env empieza con punto: si no aparece, activar en Vista -> Mostrar -> Elementos ocultos.)
+
+
+4. Apagar lo anterior y borrar la base vieja
+--------------------------------------------
+docker compose down -v
+
+OJO: el -v borra los datos guardados en Docker; la base se crea de nuevo con los datos de ejemplo.
+Para conservar lo registrado, usar solo: docker compose down
+
+
+5. Construir la imagen del backend
+----------------------------------
+docker build -f backend/Dockerfile -t clinica-dental-api .
+
+
+6. Construir la imagen del frontend
+-----------------------------------
+docker build -f frontend/Dockerfile -t clinica-dental-web .
+
+
+7. Levantar el sistema
+----------------------
+docker compose up
+
+Esperar a que la API diga que está escuchando en el puerto 3000.
+
+
+8. Abrir en el navegador
+------------------------
+http://localhost:8080
+
+
+USUARIOS DE PRUEBA (contraseña de todos: Clinica2026)
+-----------------------------------------------------
+Administrador   carlos.vega@clinica.local
+Recepcionista   ana.rios@clinica.local
+Odontólogo      luis.paredes@clinica.local
+Odontóloga      carmen.diaz@clinica.local
+Paciente        maria.quispe@correo.local
+
+
+PARA APAGARLO
+-------------
+Ctrl + C en la ventana donde corre, y luego:
+
+docker compose down
+
+
+NOTAS
+-----
+- Se construye cada imagen por separado (pasos 5 y 6) porque "docker compose up --build"
+  puede fallar en Windows con un error de "bake".
+- Si un paso da error, sacar captura de la ventana de PowerShell.
