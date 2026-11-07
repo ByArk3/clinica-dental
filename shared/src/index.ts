@@ -36,6 +36,8 @@ export type Canal = (typeof CANALES)[number];
 export const MENSAJES = {
   HORARIO_NO_DISPONIBLE: 'El horario ya no está disponible',
   CLINICA_NO_ATIENDE: 'La clínica no atiende ese día',
+  /** El odontólogo elegido no trabaja ese día, pero la clínica sí atiende (con otros odontólogos). */
+  odontologoNoAtiende: (nombres: string, dia: string) => `${nombres} no atiende los ${dia}`,
   SIN_HORARIOS: 'No hay horarios disponibles para esa fecha',
   FUERA_DE_HORARIO: 'La hora elegida está fuera del horario de atención',
   HORA_PASADA: 'No se puede reservar en una fecha u hora pasada',
@@ -505,4 +507,13 @@ export interface Disponibilidad {
   horarios: string[];
   mensaje?: string;
   siguienteFechaDisponible?: string | null;
+  /** Otros odontólogos con horarios libres ese mismo día (los que haya; ordenados por la primera hora libre). */
+  alternativas?: AlternativaOdontologo[];
+}
+
+export interface AlternativaOdontologo {
+  odontologoId: number;
+  nombres: string;
+  primeraHora: string;
+  libres: number;
 }

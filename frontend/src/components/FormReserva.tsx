@@ -157,7 +157,7 @@ export function FormReserva({ pacienteId, onRegistrada }: Props) {
       </div>
       <div className="mb-3">
         <span className="form-label d-block">Horario</span>
-        <SelectorHorarios disponibilidad={disponibilidad.data} cargando={disponibilidad.isFetching} seleccionado={hora} onSeleccionar={setHora} onIrAFecha={cambiarFecha} />
+        <SelectorHorarios disponibilidad={disponibilidad.data} cargando={disponibilidad.isFetching} seleccionado={hora} onSeleccionar={setHora} onIrAFecha={cambiarFecha} onCambiarOdontologo={(id) => { setOdontologoId(id); setHora(null); }} />
         {errores.hora && <div className="text-danger small mt-1">{errores.hora}</div>}
       </div>
       {error && <div className="alert alert-danger" role="alert">{error}</div>}

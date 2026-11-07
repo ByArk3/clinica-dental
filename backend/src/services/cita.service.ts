@@ -15,7 +15,7 @@ import {
 import { prisma, type Tx } from '../lib/prisma.js';
 import { ErrorNegocio } from '../lib/errores.js';
 import { ahoraLima, dateAFecha, dateAHora, fechaADate, fechaPE, horaADate, instanteCita } from '../lib/fechas.js';
-import { bloquesDelHorario, feriadoEn, horasOcupadas } from './disponibilidad.service.js';
+import { bloquesDelHorario, feriadoEn, horasOcupadas, mensajeSinAtencion } from './disponibilidad.service.js';
 import { calcularAdelanto, edadEn } from './precio.service.js';
 import { moverSaldo } from './saldo.service.js';
 import { billeterasAceptadas, datosPago } from './pago.service.js';
@@ -55,7 +55,7 @@ async function validarHorario(tx: Tx, odontologoId: number, fecha: string, hora:
   const feriado = await feriadoEn(tx, fecha);
   if (feriado) throw new ErrorNegocio(422, 'CLINICA_FERIADO', `${MENSAJES.CLINICA_FERIADO}: ${feriado}`);
   const bloques = await bloquesDelHorario(tx, odontologoId, fecha);
-  if (bloques.length === 0) throw new ErrorNegocio(422, 'CLINICA_NO_ATIENDE', MENSAJES.CLINICA_NO_ATIENDE);
+  if (bloques.length === 0) throw new ErrorNegocio(422, 'CLINICA_NO_ATIENDE', await mensajeSinAtencion(tx, odontologoId, fecha));
   if (!bloques.includes(hora)) throw new ErrorNegocio(422, 'FUERA_DE_HORARIO', MENSAJES.FUERA_DE_HORARIO);
 
   const ocupadas = await horasOcupadas(tx, odontologoId, fecha, excluirCitaId);

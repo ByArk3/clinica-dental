@@ -60,6 +60,29 @@ describe('FormReserva (CU-06)', () => {
     expect(screen.getByText('Pendiente de adelanto')).toBeInTheDocument();
   });
 
+  it('alterno: el odontólogo no atiende ese día → ofrece a los demás (3 visibles + «Ver N más») y cambia de odontólogo', async () => {
+    const varios = { body: [1, 2, 3, 4, 5].map((id) => ({ id, nombres: id === 1 ? 'Dr. Luis Paredes' : `Dr. Otro ${id}`, especialidad: null })) };
+    const alternativas = [2, 3, 4, 5].map((id, i) => ({ odontologoId: id, nombres: `Dr. Otro ${id}`, primeraHora: `1${i}:00`, libres: 4 }));
+    const llamadas = simularApi({
+      'GET /odontologos': varios,
+      'GET /disponibilidad': [
+        { body: { fecha: '2030-01-05', atiende: false, horarios: [], mensaje: MENSAJES.odontologoNoAtiende('Dr. Luis Paredes', 'sábados'), siguienteFechaDisponible: '2030-01-07', alternativas } },
+        { body: { fecha: '2030-01-05', atiende: true, horarios: ['10:00', '10:30'] } },
+      ],
+    });
+    renderizar(<FormReserva />);
+    const u = await elegirOdontologoYFecha('2030-01-05');
+    expect(await screen.findByText(/Dr. Luis Paredes no atiende los sábados/)).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /· desde/ })).toHaveLength(3);
+    await u.click(screen.getByRole('button', { name: 'Ver 1 más' }));
+    expect(screen.getAllByRole('button', { name: /· desde/ })).toHaveLength(4);
+    await u.click(screen.getByRole('button', { name: 'Dr. Otro 2 · desde 10:00' }));
+    expect(await screen.findByRole('button', { name: '10:30' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Odontólogo')).toHaveValue('2');
+    expect(screen.getByLabelText('Fecha')).toHaveValue('2030-01-05');
+    expect(llamadas.filter((l) => l.metodo === 'GET' && l.url.includes('/disponibilidad')).at(-1)?.url).toContain('odontologoId=2');
+  });
+
   it('alterno: día sin atención → mensaje y enlace a la siguiente fecha disponible', async () => {
     simularApi({
       'GET /odontologos': odontologos,

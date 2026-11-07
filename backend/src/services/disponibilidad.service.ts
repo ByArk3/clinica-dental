@@ -1,4 +1,4 @@
-import { MENSAJES, type Disponibilidad } from '@clinica/shared';
+import { MENSAJES, type AlternativaOdontologo, type Disponibilidad } from '@clinica/shared';
 import { prisma, type Tx } from '../lib/prisma.js';
 import { ahoraLima, aHora, dateAHora, diaSemana, fechaADate, minutos, sumarDias } from '../lib/fechas.js';
 
@@ -62,6 +62,44 @@ async function horariosLibres(odontologoId: number, fecha: string) {
   return { atiende: true, horarios: libres };
 }
 
+const DIAS_PLURAL = ['', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábados', 'domingos'];
+
+/** Odontólogos activos (sirve para cualquier cantidad: se leen de la base, no hay nombres fijos). */
+async function odontologosActivos(db: Tx | typeof prisma) {
+  return db.odontologo.findMany({
+    where: { activo: true, usuario: { activo: true } },
+    select: { id: true, usuario: { select: { nombres: true } } },
+    orderBy: { id: 'asc' },
+  });
+}
+
+/**
+ * Por qué no hay atención ese día con ese odontólogo (RN-03):
+ * - si nadie de la clínica trabaja ese día → «La clínica no atiende ese día» (domingo, por ejemplo);
+ * - si otros sí trabajan → «El Dr. X no atiende los sábados», para no dar a entender que la clínica cierra.
+ */
+export async function mensajeSinAtencion(db: Tx | typeof prisma, odontologoId: number, fecha: string) {
+  const otros = (await odontologosActivos(db)).filter((o) => o.id !== odontologoId);
+  for (const o of otros) {
+    if ((await bloquesDelHorario(db, o.id, fecha)).length > 0) {
+      const elegido = await db.odontologo.findUnique({ where: { id: odontologoId }, select: { usuario: { select: { nombres: true } } } });
+      return MENSAJES.odontologoNoAtiende(elegido?.usuario.nombres ?? 'El odontólogo', DIAS_PLURAL[diaSemana(fecha)]);
+    }
+  }
+  return MENSAJES.CLINICA_NO_ATIENDE;
+}
+
+/** Flujo alterno de CU-05: los demás odontólogos que sí tienen horarios libres ese día (todos los que haya). */
+async function alternativas(odontologoId: number, fecha: string): Promise<AlternativaOdontologo[]> {
+  const lista: AlternativaOdontologo[] = [];
+  for (const o of await odontologosActivos(prisma)) {
+    if (o.id === odontologoId) continue;
+    const { horarios } = await horariosLibres(o.id, fecha);
+    if (horarios.length > 0) lista.push({ odontologoId: o.id, nombres: o.usuario.nombres, primeraHora: horarios[0], libres: horarios.length });
+  }
+  return lista.sort((a, b) => a.primeraHora.localeCompare(b.primeraHora) || a.nombres.localeCompare(b.nombres));
+}
+
 /** CU-05 Consultar disponibilidad */
 export async function consultarDisponibilidad(odontologoId: number, fecha: string): Promise<Disponibilidad> {
   const hoy = ahoraLima().fecha;
@@ -71,12 +109,16 @@ export async function consultarDisponibilidad(odontologoId: number, fecha: strin
   const { atiende, horarios } = await horariosLibres(odontologoId, fecha);
   if (horarios.length > 0) return { fecha, atiende, horarios };
   const feriado = await feriadoEn(prisma, fecha);
+  if (feriado) {
+    return { fecha, atiende, horarios, mensaje: `${MENSAJES.CLINICA_FERIADO}: ${feriado}`, siguienteFechaDisponible: await siguienteFecha(odontologoId, sumarDias(fecha, 1)) };
+  }
   return {
     fecha,
     atiende,
     horarios,
-    mensaje: feriado ? `${MENSAJES.CLINICA_FERIADO}: ${feriado}` : atiende ? MENSAJES.SIN_HORARIOS : MENSAJES.CLINICA_NO_ATIENDE,
+    mensaje: atiende ? MENSAJES.SIN_HORARIOS : await mensajeSinAtencion(prisma, odontologoId, fecha),
     siguienteFechaDisponible: await siguienteFecha(odontologoId, sumarDias(fecha, 1)),
+    alternativas: await alternativas(odontologoId, fecha),
   };
 }
 

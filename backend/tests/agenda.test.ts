@@ -57,12 +57,42 @@ describe('Horario propio de cada odontólogo', () => {
     expect(lunes.body.horarios).toHaveLength(12);
     expect(lunes.body.horarios.at(-1)).toBe('13:30');
     const sabado = await pac.get(`/api/disponibilidad?odontologoId=${id}&fecha=${proximo(6)}`);
-    expect(sabado.body).toMatchObject({ atiende: false, mensaje: MENSAJES.CLINICA_NO_ATIENDE });
+    // la clínica sí atiende el sábado (con la Dra. Díaz): el mensaje nombra al odontólogo y ofrece a los demás
     const diaz = await idOdontologo('carmen.diaz@clinica.local');
+    expect(sabado.body).toMatchObject({ atiende: false, mensaje: MENSAJES.odontologoNoAtiende('Dr. Luis Paredes', 'sábados') });
+    expect(sabado.body.alternativas).toEqual([{ odontologoId: diaz, nombres: 'Dra. Carmen Díaz', primeraHora: '08:00', libres: 24 }]);
+    const noPuede = await pac.post('/api/citas').send({ odontologoId: id, fecha: proximo(6), hora: '10:00', motivo: 'Control' });
+    expect(noPuede.body.mensaje).toBe(MENSAJES.odontologoNoAtiende('Dr. Luis Paredes', 'sábados'));
     expect((await pac.get(`/api/disponibilidad?odontologoId=${diaz}&fecha=${proximo(6)}`)).body.horarios).toHaveLength(24);
     // fuera de su horario no se puede reservar
     const fuera = await pac.post('/api/citas').send({ odontologoId: id, fecha: proximo(1), hora: '15:00', motivo: 'Control' });
     expect(fuera.body.mensaje).toBe(MENSAJES.FUERA_DE_HORARIO);
+  });
+
+  it('alternativas: lista a todos los odontólogos con horas libres ese día, ordenados por la primera hora', async () => {
+    const admin = await sesion('administrador');
+    const paredes = await idOdontologo();
+    const diaz = await idOdontologo('carmen.diaz@clinica.local');
+    await admin.put(`/api/admin/odontologos/${paredes}/horario`).send({ tramos: [1, 2, 3, 4, 5].map((d) => ({ diaSemana: d, horaInicio: '08:00', horaFin: '14:00' })) });
+    await admin.put(`/api/admin/odontologos/${diaz}/horario`).send({ tramos: [{ diaSemana: 6, horaInicio: '14:00', horaFin: '20:00' }] });
+    // un tercer y un cuarto odontólogo (la lista no depende de cuántos haya)
+    const nuevo = async (nombres: string, email: string, desde: string, activo = true) => {
+      const u = await prisma.usuario.create({ data: { nombres, email, password: 'x', rol: 'odontologo', activo } });
+      const o = await prisma.odontologo.create({ data: { usuarioId: u.id } });
+      await prisma.horarioAtencion.create({ data: { odontologoId: o.id, diaSemana: 6, horaInicio: new Date(`1970-01-01T${desde}:00Z`), horaFin: new Date('1970-01-01T12:00:00Z') } });
+      return o.id;
+    };
+    const ramos = await nuevo('Dr. Ana Ramos', 'ana.ramos@clinica.local', '09:00');
+    await nuevo('Dr. Inactivo', 'inactivo@clinica.local', '08:00', false);
+    const d = await (await sesion('paciente')).get(`/api/disponibilidad?odontologoId=${paredes}&fecha=${proximo(6)}`);
+    expect(d.body.mensaje).toBe(MENSAJES.odontologoNoAtiende('Dr. Luis Paredes', 'sábados'));
+    expect(d.body.alternativas.map((a: { odontologoId: number }) => a.odontologoId)).toEqual([ramos, diaz]);
+    expect(d.body.alternativas[0]).toMatchObject({ primeraHora: '09:00', libres: 6 });
+  });
+
+  it('domingo: nadie atiende → «La clínica no atiende ese día» y sin alternativas', async () => {
+    const d = await (await sesion('paciente')).get(`/api/disponibilidad?odontologoId=${await idOdontologo()}&fecha=${proximo(7)}`);
+    expect(d.body).toMatchObject({ atiende: false, mensaje: MENSAJES.CLINICA_NO_ATIENDE, alternativas: [] });
   });
 
   it('dos tramos el mismo día (mañana y tarde)', async () => {

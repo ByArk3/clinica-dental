@@ -132,7 +132,7 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | Descuentos (P3) y monto del adelanto (P6) gestionados por el Administrador | `admin.test.ts` |
 | CU-38 Panel de control · CU-39 Reporte de ingresos · CU-40 Reporte de inventario (rango de fechas, exportación CSV para Excel) | `reporte.test.ts`, `Iteracion4.test.tsx` |
 
-Total: **273 pruebas de API + 96 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief y los CU-41 a CU-57 del informe v17 están implementados.
+Total: **275 pruebas de API + 97 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief y los CU-41 a CU-57 del informe v17 están implementados.
 
 **Tareas programadas** (`backend/src/jobs`, node-cron, hora de Lima; se activan con `JOBS_ENABLED=true`):
 - **Cada 5 min:** libera las reservas cuyo adelanto no se pagó ni reportó en 1 hora (RN-04; también las citas antiguas

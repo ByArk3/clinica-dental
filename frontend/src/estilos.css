@@ -47,6 +47,9 @@ body { background: var(--fondo); }
   --bs-btn-focus-shadow-rgb: 14, 124, 134;
 }
 
+.btn-alternativa { background: var(--bs-body-bg); color: var(--bs-body-color); border: 1px solid var(--acento); }
+.btn-alternativa:hover { background: var(--acento); color: #fff; border-color: var(--acento); }
+
 .grilla-horarios { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 0.4rem; }
 
 .pantalla-acceso { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1rem; background: var(--oscuro); }
