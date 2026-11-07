@@ -1,13 +1,17 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ModalEditarDatos } from './ModalEditarDatos';
 import type { Historial } from '../api/recursos';
 import { useUsuarioOpcional } from '../auth';
 import { fechaHoraPE, fechaPE, solesPE } from '../formato';
+import { DniPaciente } from './DniPaciente';
 
 const piezas = (t: { nombre: string; piezaDental: string | null }[]) => t.map((x) => (x.piezaDental ? `${x.nombre} (pieza ${x.piezaDental})` : x.nombre)).join(', ');
 
 /** Ficha y atenciones del paciente (CU-10). Solo se muestra a Odontólogo y Administrador (RN-07). */
 export function VistaHistorial({ h, compacto }: { h: Historial; compacto?: boolean }) {
   const usuario = useUsuarioOpcional();
+  const [editar, setEditar] = useState(false);
   const edad = Math.floor((Date.now() - new Date(`${h.paciente.fechaNacimiento}T00:00:00-05:00`).getTime()) / (365.25 * 86_400_000));
   return (
     <>
@@ -18,9 +22,15 @@ export function VistaHistorial({ h, compacto }: { h: Historial; compacto?: boole
           </h2>
         )}
         <p className="small text-muted mb-2">
-          DNI {h.paciente.dni} · {edad} años · Cel. {h.paciente.telefono}
+          <DniPaciente dni={h.paciente.dni} /> · {edad} años · Cel. {h.paciente.telefono}
           {h.paciente.apoderado && <> · Apoderado: {h.paciente.apoderado}</>}
+          {usuario?.rol === 'administrador' && (
+            <button type="button" className="btn btn-link btn-sm p-0 ms-2 align-baseline" onClick={() => setEditar(true)}>
+              Editar datos / DNI
+            </button>
+          )}
         </p>
+        {usuario?.rol === 'administrador' && <ModalEditarDatos pacienteId={editar ? h.paciente.id : null} onCerrar={() => setEditar(false)} />}
         <dl className="row mb-0 small">
           <dt className="col-4">Alergias</dt>
           <dd className={`col-8 ${h.ficha.alergias ? 'text-danger fw-semibold' : 'text-muted'}`}>{h.ficha.alergias || 'Ninguna registrada'}</dd>

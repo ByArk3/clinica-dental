@@ -1,9 +1,9 @@
-import type { Billetera, ConfigPagoDTO, AccionAuditoria, EditarAtencionDTO, HorarioDTO, ReportarPagoDTO, AjusteDTO, DescuentoDTO, EstadoPedido, PedidoDTO, ProveedorDTO, RecepcionDTO, Rol, UsuarioModificarDTO, UsuarioNuevoDTO, ComprobanteDTO, Importe, TipoCobro, AtencionDTO, InsumoDTO, InsumoNuevoDTO, TratamientoDTO, CitaConfirmacion, CitaDTO, ContactoDTO, Disponibilidad, PacienteDTO, RegistroPacienteDTO, ReprogramarDTO, UsuarioSesion, EstadoCita, Canal } from '@clinica/shared';
+import type { EditarPacienteDTO, PacienteSinDniDTO, Sexo, Billetera, ConfigPagoDTO, AccionAuditoria, EditarAtencionDTO, HorarioDTO, ReportarPagoDTO, AjusteDTO, DescuentoDTO, EstadoPedido, PedidoDTO, ProveedorDTO, RecepcionDTO, Rol, UsuarioModificarDTO, UsuarioNuevoDTO, ComprobanteDTO, Importe, TipoCobro, AtencionDTO, InsumoDTO, InsumoNuevoDTO, TratamientoDTO, CitaConfirmacion, CitaDTO, ContactoDTO, Disponibilidad, PacienteDTO, RegistroPacienteDTO, ReprogramarDTO, UsuarioSesion, EstadoCita, Canal } from '@clinica/shared';
 import { api } from './cliente';
 
 export interface Paciente {
   id: number;
-  dni: string;
+  dni: string | null;
   nombres: string;
   apellidos: string;
   fechaNacimiento: string;
@@ -13,9 +13,12 @@ export interface Paciente {
   saldoVencimientos?: { monto: string; venceEn: string }[];
   direccion?: string | null;
   apoderado?: string | null;
+  sexo?: Sexo | null;
   inasistencias: number;
   restringido: boolean;
 }
+/** Resultado de la búsqueda por nombre (recepcionista): solo lo necesario para distinguir homónimos. */
+export interface PacienteEncontrado { id: number; dni: string | null; nombres: string; apellidos: string; fechaNacimiento: string; edad: number; celular: string }
 export interface Odontologo {
   id: number;
   nombres: string;
@@ -34,6 +37,7 @@ export interface Cita {
   canal: Canal;
   estado: EstadoCita;
   tratamientoPrevisto: string | null;
+  tratamientoPrevistoId?: number | null;
   montoAdelanto: string | null;
   adelantoVenceEn: string | null;
   adelantoPagado: string | null;
@@ -79,6 +83,14 @@ export const pacientesApi = {
   actualizarMiContacto: (datos: ContactoDTO) => api<Paciente>('/pacientes/me', { method: 'PATCH', body: datos }),
   actualizarContacto: (id: number, datos: ContactoDTO) =>
     api<Paciente>(`/pacientes/${id}/contacto`, { method: 'PATCH', body: datos }),
+  // Paciente sin DNI, búsqueda por nombre y CU-58 Corregir datos
+  porNombre: (f: { apellidos: string; nombres?: string; fechaNacimiento?: string }) =>
+    api<PacienteEncontrado[]>(`/pacientes/por-nombre?${new URLSearchParams(Object.entries(f).filter(([, v]) => v) as [string, string][])}`),
+  registrarSinDni: (datos: PacienteSinDniDTO) => api<Paciente>('/pacientes/sin-dni', { method: 'POST', body: datos }),
+  sinDni: () => api<(Paciente & { edad: number })[]>('/pacientes/sin-dni'),
+  ver: (id: number) => api<Paciente>(`/pacientes/${id}`),
+  editar: (id: number, datos: EditarPacienteDTO) => api<{ paciente: Paciente; cambios: string[] }>(`/pacientes/${id}`, { method: 'PATCH', body: datos }),
+  guardarDni: (id: number, datos: { dni: string; motivo?: string; confirmar?: boolean }) => api<Paciente>(`/pacientes/${id}/dni`, { method: 'PUT', body: datos }),
 };
 
 export const citasApi = {
@@ -93,6 +105,7 @@ export const citasApi = {
   reportarPago: (id: number, d: ReportarPagoDTO) => api<Cita>(`/citas/${id}/pago`, { method: 'POST', body: d }),
   mias: () => api<Cita[]>('/citas/mias'),
   reprogramar: (id: number, datos: ReprogramarDTO) => api<Cita>(`/citas/${id}/reprogramar`, { method: 'PATCH', body: datos }),
+  editarDatos: (id: number, datos: { motivo: string; tratamientoPrevistoId?: number }) => api<Cita>(`/citas/${id}/datos`, { method: 'PATCH', body: datos }),
   cancelar: (id: number, porClinica = false) => api<ResultadoCancelacion>(`/citas/${id}/cancelar`, { method: 'PATCH', body: { porClinica } }),
   delDia: (fecha: string) => api<CitaDelDia[]>(`/citas?fecha=${fecha}`),
   inasistencia: (id: number) =>
@@ -149,14 +162,14 @@ export interface Alerta {
 }
 export interface PacienteEncontrado {
   id: number;
-  dni: string;
+  dni: string | null;
   nombres: string;
   apellidos: string;
   fechaNacimiento: string;
   atenciones: number;
 }
 export interface Historial {
-  paciente: { id: number; dni: string; nombres: string; apellidos: string; fechaNacimiento: string; telefono: string; apoderado: string | null; inasistencias: number };
+  paciente: { id: number; dni: string | null; nombres: string; apellidos: string; fechaNacimiento: string; telefono: string; apoderado: string | null; inasistencias: number };
   ficha: { alergias: string | null; antecedentes: string | null; notas: string | null };
   atenciones: {
     id: number;
@@ -180,7 +193,7 @@ export interface CitaOdontologo {
   estado: EstadoCita;
   puedeAtender: boolean;
   atencionId: number | null;
-  paciente: { id: number; dni: string; nombres: string; apellidos: string; fechaNacimiento: string; alergias: string | null };
+  paciente: { id: number; dni: string | null; nombres: string; apellidos: string; fechaNacimiento: string; alergias: string | null };
 }
 export interface ResultadoAtencion {
   atencionId: number;
@@ -229,7 +242,7 @@ export interface AtencionEditable {
   fecha: string;
   hora: string;
   motivo: string;
-  paciente: { id: number; dni: string; nombres: string; apellidos: string; alergias: string | null };
+  paciente: { id: number; dni: string | null; nombres: string; apellidos: string; alergias: string | null };
   diagnostico: string;
   observaciones: string | null;
   tratamientos: { tratamientoId: number; piezaDental: string | null; nombre: string; precio: string }[];
@@ -262,7 +275,7 @@ export interface PendienteCaja {
   fecha: string;
   hora: string;
   odontologo: string;
-  paciente: { id: number; dni: string; nombres: string; apellidos: string };
+  paciente: { id: number; dni: string | null; nombres: string; apellidos: string };
   importe: string;
 }
 export interface Comprobante {
@@ -272,7 +285,7 @@ export interface Comprobante {
   citaId: number;
   estadoCita: EstadoCita;
   fecha: string;
-  paciente: { dni: string; nombres: string; apellidos: string; tieneCorreo: boolean; saldoFavor: string };
+  paciente: { dni: string | null; nombres: string; apellidos: string; tieneCorreo: boolean; saldoFavor: string };
   tipoPago: string;
   operacion: string | null;
   lineas: { descripcion: string; precio: string; descuento: string; campana: string | null }[];
@@ -296,7 +309,7 @@ export interface ComprobanteDelDia {
   citaId: number;
   fecha: string;
   paciente: string;
-  dni: string;
+  dni: string | null;
   tipoPago: string;
   total: string;
   anulado: Anulacion | null;
@@ -379,7 +392,7 @@ export interface Panel {
   citasHoy: { total: number; porEstado: Partial<Record<EstadoCita, number>> };
   ingresos: { hoy: string; comprobantesHoy: number; mes: string; comprobantesMes: number; ultimos7Dias: { fecha: string; total: string }[] };
   inventario: { alertasPendientes: number; alertas: { id: number; insumo: string; unidad: string; stockActual: string; stockMinimo: string }[]; pedidosPendientes: number };
-  agenda: { adelantosPorPagar: number; inasistenciasMes: number; pacientesRestringidos: number; pagosPorVerificar: number };
+  agenda: { adelantosPorPagar: number; inasistenciasMes: number; pacientesRestringidos: number; pagosPorVerificar: number; pacientesSinDni: number };
 }
 export interface ReporteIngresos {
   desde: string;
@@ -388,7 +401,7 @@ export interface ReporteIngresos {
   porTipoPago: { tipo: string; total: string; cantidad: number }[];
   porDia: { fecha: string; total: string }[];
   porTratamiento: { tratamiento: string; cantidad: number; importe: string }[];
-  detalle: { id: number; numero: string; fecha: string; tipo: TipoCobro; paciente: string; dni: string; tipoPago: string; subtotal: string; descuento: string; adelantoAplicado: string; total: string; anulado: Anulacion | null }[];
+  detalle: { id: number; numero: string; fecha: string; tipo: TipoCobro; paciente: string; dni: string | null; tipoPago: string; subtotal: string; descuento: string; adelantoAplicado: string; total: string; anulado: Anulacion | null }[];
 }
 export interface ReporteInventario {
   desde: string;
@@ -429,7 +442,7 @@ export interface EventoAuditoria {
   fecha: string;
   accion: AccionAuditoria;
   usuario: { id: number; nombres: string; email: string; rol: Rol } | null;
-  paciente: { id: number; dni: string; nombres: string } | null;
+  paciente: { id: number; dni: string | null; nombres: string } | null;
   detalle: string | null;
   ip: string | null;
 }

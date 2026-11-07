@@ -99,13 +99,16 @@ describe('FormReserva (CU-06)', () => {
     expect(screen.getByLabelText('Fecha')).toHaveValue('2030-01-07');
   });
 
-  it('6.1: sin horario elegido no envía y marca el error', async () => {
+  it('6.1: sin horario elegido el botón queda desactivado y no envía', async () => {
     const llamadas = simularApi({ 'GET /odontologos': odontologos, 'GET /disponibilidad': libres });
     renderizar(<FormReserva />);
     const u = await elegirOdontologoYFecha();
     await screen.findByRole('button', { name: '08:00' });
-    await u.click(screen.getByRole('button', { name: 'Reservar cita' }));
-    expect(screen.getByText('Elija un horario')).toBeInTheDocument();
+    const boton = screen.getByRole('button', { name: 'Elija un horario para reservar' });
+    expect(boton).toBeDisabled();
+    await u.click(boton);
     expect(llamadas.some((l) => l.metodo === 'POST')).toBe(false);
+    await u.click(screen.getByRole('button', { name: '08:00' }));
+    expect(screen.getByRole('button', { name: 'Reservar a las 08:00' })).toBeEnabled();
   });
 });

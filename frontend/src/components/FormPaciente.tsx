@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { LARGO_NUMERICO, pacienteSchema, registroPacienteSchema } from '@clinica/shared';
+import { ETIQUETA_SEXO, LARGO_NUMERICO, SEXOS, pacienteSchema, pacienteSinDniSchema, registroPacienteSchema } from '@clinica/shared';
 import { ApiError } from '../api/cliente';
 import { CampoDigitos } from './Interaccion';
 import { CampoPassword } from './CampoPassword';
@@ -9,6 +9,8 @@ type Valores = Record<string, string>;
 interface Props {
   /** true = registro web (pide correo y contraseña para crear la cuenta) */
   conCuenta?: boolean;
+  /** true = registro presencial sin DNI a la mano (queda «DNI pendiente»; el sexo es obligatorio) */
+  sinDni?: boolean;
   dniInicial?: string;
   /** Valores precargados (p. ej. nombres y apellidos obtenidos de RENIEC) */
   inicial?: Valores;
@@ -25,6 +27,7 @@ const CAMPOS: { nombre: string; etiqueta: string; tipo?: string; col: string; op
   { nombre: 'nombres', etiqueta: 'Nombres', col: 'col-sm-4' },
   { nombre: 'apellidos', etiqueta: 'Apellidos', col: 'col-sm-4' },
   { nombre: 'fechaNacimiento', etiqueta: 'Fecha de nacimiento', tipo: 'date', col: 'col-sm-4' },
+  { nombre: 'sexo', etiqueta: 'Sexo', col: 'col-sm-4', opcional: true },
   { nombre: 'telefono', etiqueta: 'Celular', tipo: 'tel', col: 'col-sm-4' },
   { nombre: 'email', etiqueta: 'Correo', tipo: 'email', col: 'col-sm-4', opcional: true },
   { nombre: 'direccion', etiqueta: 'Dirección', col: 'col-sm-8', opcional: true },
@@ -34,7 +37,7 @@ const CAMPOS: { nombre: string; etiqueta: string; tipo?: string; col: string; op
 ];
 
 /** CU-03 Registrar paciente (crea también su ficha en el servidor, RN-05). */
-export function FormPaciente({ conCuenta, dniInicial = '', inicial, textoBoton, onEnviar, onCancelar }: Props) {
+export function FormPaciente({ conCuenta, sinDni, dniInicial = '', inicial, textoBoton, onEnviar, onCancelar }: Props) {
   const [v, setV] = useState<Valores>({ ...inicial, dni: dniInicial });
   // Si los datos precargados llegan después (RENIEC), solo se completan los campos que siguen vacíos
   useEffect(() => {
@@ -49,12 +52,14 @@ export function FormPaciente({ conCuenta, dniInicial = '', inicial, textoBoton, 
         ...CAMPOS.map((c) => (c.nombre === 'email' ? { ...c, opcional: false } : c)),
         { nombre: 'password', etiqueta: 'Contraseña', tipo: 'password', col: 'col-sm-6' },
       ]
-    : CAMPOS;
+    : sinDni
+      ? CAMPOS.filter((c) => c.nombre !== 'dni').map((c) => (c.nombre === 'sexo' ? { ...c, opcional: false } : c))
+      : CAMPOS;
 
   async function enviar(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    const r = (conCuenta ? registroPacienteSchema : pacienteSchema).safeParse(v);
+    const r = (conCuenta ? registroPacienteSchema : sinDni ? pacienteSinDniSchema : pacienteSchema).safeParse({ ...v, sexo: v.sexo || undefined });
     if (!r.success) {
       const c: Valores = {};
       for (const i of r.error.issues) c[i.path.join('.')] ??= i.message;
@@ -91,6 +96,14 @@ export function FormPaciente({ conCuenta, dniInicial = '', inicial, textoBoton, 
                 autoComplete="new-password"
                 error={errores.password}
               />
+            ) : c.nombre === 'sexo' ? (
+              <div role="group" aria-label="Sexo" className="d-flex gap-2">
+                {SEXOS.map((x) => (
+                  <button key={x} type="button" className={`btn ${v.sexo === x ? 'btn-acento' : 'btn-outline-secondary'} ${errores.sexo ? 'border-danger' : ''}`} aria-pressed={v.sexo === x} onClick={() => setV({ ...v, sexo: v.sexo === x ? '' : x })}>
+                    {ETIQUETA_SEXO[x]}
+                  </button>
+                ))}
+              </div>
             ) : NUMERICOS[c.nombre] ? (
               <CampoDigitos id={`p-${c.nombre}`} value={v[c.nombre] ?? ''} onChange={(x) => setV({ ...v, [c.nombre]: x })} largo={NUMERICOS[c.nombre]} error={errores[c.nombre]} />
             ) : (
@@ -102,7 +115,8 @@ export function FormPaciente({ conCuenta, dniInicial = '', inicial, textoBoton, 
                 onChange={(e) => setV({ ...v, [c.nombre]: e.target.value })}
               />
             )}
-            {c.nombre !== 'password' && !NUMERICOS[c.nombre] && <div className="invalid-feedback">{errores[c.nombre]}</div>}
+            {c.nombre === 'sexo' && errores.sexo && <div className="text-danger small mt-1">{errores.sexo}</div>}
+            {c.nombre !== 'password' && c.nombre !== 'sexo' && !NUMERICOS[c.nombre] && <div className="invalid-feedback">{errores[c.nombre]}</div>}
           </div>
         ))}
       </div>

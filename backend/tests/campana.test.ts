@@ -50,7 +50,7 @@ describe('Campañas de descuento en caja', () => {
     });
     const hoy = ahoraLima().fecha;
     await crearCampana({ nombre: 'Escolar 30 %', tratamientos: ['Aplicación de flúor'], desde: sumarDias(hoy, -5), hasta: sumarDias(hoy, 5), porcentaje: 30, edadMaxima: 17 });
-    const nino = await atendida(['Aplicación de flúor'], menor.dni);
+    const nino = await atendida(['Aplicación de flúor'], menor.dni!);
     const adulto = await atendida(['Aplicación de flúor'], '74556677'); // Diego, 2001
     expect((await importe(nino.id)).descuento).toBe('12.00');
     expect((await importe(adulto.id)).descuento).toBe('0.00');

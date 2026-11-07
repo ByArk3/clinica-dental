@@ -7,6 +7,7 @@ import { ModalConfirmar } from '../components/ModalConfirmar';
 import { BotonAccion, BotonCopiar } from '../components/Interaccion';
 import { OverlayTrigger, Popover } from 'react-bootstrap';
 import { fechaHoraPE, fechaPE, mensajeError, solesPE } from '../formato';
+import { DniPaciente } from '../components/DniPaciente';
 
 /** CU-13 (i_caja): cobrar citas atendidas y adelantos, verificar pagos reportados (Yape/Plin), emitir comprobante. */
 export default function Caja() {
@@ -66,7 +67,7 @@ export default function Caja() {
                         <strong>
                           {p.paciente.nombres} {p.paciente.apellidos}
                         </strong>{' '}
-                        · DNI {p.paciente.dni}
+                        · <DniPaciente dni={p.paciente.dni} />
                       </div>
                       <div>
                         {p.tipo === 'adelanto'
@@ -222,7 +223,7 @@ function Cobro({
             : 'Cobro de servicio'}
       </h2>
       <p className="small text-muted">
-        {imp.paciente.nombres} {imp.paciente.apellidos} · DNI {imp.paciente.dni}
+        {imp.paciente.nombres} {imp.paciente.apellidos} · <DniPaciente dni={imp.paciente.dni} />
         {Number(pendiente.saldoFavor) > 0 && (
           <>
             {' '}

@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { cancelarCitaSchema, reportarPagoSchema, citaSchema, confirmacionSchema, disponibilidadQuerySchema, fechaSchema, reprogramarSchema } from '@clinica/shared';
+import { editarCitaSchema, cancelarCitaSchema, reportarPagoSchema, citaSchema, confirmacionSchema, disponibilidadQuerySchema, fechaSchema, reprogramarSchema } from '@clinica/shared';
 import * as ConfirmacionService from '../services/confirmacion.service.js';
 import { prisma } from '../lib/prisma.js';
 import * as CitaService from '../services/cita.service.js';
@@ -77,4 +77,10 @@ export async function qrPago(_req: Request, res: Response) {
   res.setHeader('Content-Type', q.tipo);
   res.setHeader('Cache-Control', 'private, max-age=60');
   res.send(q.datos);
+}
+
+/** PATCH /citas/:id/datos — editar motivo y (sin adelanto pagado) tratamiento previsto */
+export async function editarDatos(req: Request, res: Response) {
+  const id = z.coerce.number().int().positive().parse(req.params.id);
+  res.json(await CitaService.editarDatosCita(id, editarCitaSchema.parse(req.body), usuarioActual(req).id, req.ip));
 }

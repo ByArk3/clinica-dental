@@ -162,8 +162,8 @@ export function FormReserva({ pacienteId, onRegistrada }: Props) {
       </div>
       {error && <div className="alert alert-danger" role="alert">{error}</div>}
       <div className="accion-fija">
-        <BotonAccion type="submit" className="btn btn-acento w-100" mutacion={grabar} textoPendiente="Registrando…">
-          {hora ? `Reservar a las ${hora}` : 'Reservar cita'}
+        <BotonAccion type="submit" className="btn btn-acento w-100" mutacion={grabar} textoPendiente="Registrando…" disabled={!hora} title={hora ? undefined : 'Elija un horario'}>
+          {hora ? `Reservar a las ${hora}` : 'Elija un horario para reservar'}
         </BotonAccion>
       </div>
     </form>

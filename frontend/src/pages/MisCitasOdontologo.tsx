@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { atencionApi } from '../api/recursos';
 import { ChipEstado } from '../components/ChipEstado';
 import { fechaPE, hoyLima } from '../formato';
+import { DniPaciente } from '../components/DniPaciente';
 
 /** CU-11 paso 1: «Mis citas del día» del odontólogo. */
 export default function MisCitasOdontologo() {
@@ -28,7 +29,7 @@ export default function MisCitasOdontologo() {
               <div>
                 <strong className="me-2">{c.hora}</strong>
                 {c.paciente.nombres} {c.paciente.apellidos}
-                <span className="small text-muted"> · DNI {c.paciente.dni}</span>
+                <span className="small text-muted"> · <DniPaciente dni={c.paciente.dni} /></span>
               </div>
               <ChipEstado estado={c.estado} />
             </div>

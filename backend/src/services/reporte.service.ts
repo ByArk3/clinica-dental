@@ -61,7 +61,7 @@ export async function panel() {
       alertas: alertas.slice(0, 8).map((a) => ({ id: a.id, insumo: a.insumo.nombre, unidad: a.insumo.unidad, stockActual: D2(a.insumo.stockActual), stockMinimo: D2(a.insumo.stockMinimo) })),
       pedidosPendientes,
     },
-    agenda: { adelantosPorPagar, inasistenciasMes, pacientesRestringidos: restringidos, pagosPorVerificar },
+    agenda: { adelantosPorPagar, inasistenciasMes, pacientesRestringidos: restringidos, pagosPorVerificar, pacientesSinDni: await prisma.paciente.count({ where: { dni: null } }) },
   };
 }
 

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { historialApi, type PacienteEncontrado } from '../api/recursos';
 import { VistaHistorial } from '../components/VistaHistorial';
 import { fechaPE, mensajeError } from '../formato';
+import { DniPaciente } from '../components/DniPaciente';
 
 /** CU-10 (i_historial): buscar paciente por DNI o nombre y ver su historial clínico. */
 export default function Historial() {
@@ -46,7 +47,7 @@ export default function Historial() {
           {resultados.map((p) => (
             <button key={p.id} type="button" className={`list-group-item list-group-item-action ${elegido === p.id ? 'active' : ''}`} onClick={() => setElegido(p.id)}>
               <strong>{p.apellidos}, {p.nombres}</strong>
-              <span className="small ms-2">DNI {p.dni} · nac. {fechaPE(p.fechaNacimiento)} · {p.atenciones} atención(es)</span>
+              <span className="small ms-2"><DniPaciente dni={p.dni} /> · nac. {fechaPE(p.fechaNacimiento)} · {p.atenciones} atención(es)</span>
             </button>
           ))}
         </div>

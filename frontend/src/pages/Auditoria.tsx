@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ACCIONES_AUDITORIA, ETIQUETA_AUDITORIA, rangoFechasSchema, type Rol } from '@clinica/shared';
 import { auditoriaApi, usuariosApi } from '../api/recursos';
 import { fechaHoraPE, hoyLima, mensajeError } from '../formato';
+import { DniPaciente } from '../components/DniPaciente';
 
 const ROL_PE: Record<Rol, string> = { paciente: 'Paciente', recepcionista: 'Recepcionista', odontologo: 'Odontólogo', administrador: 'Administrador' };
 
@@ -66,7 +67,7 @@ export default function Auditoria() {
                     <td className="text-nowrap">{fechaHoraPE(e.fecha)}</td>
                     <td>{e.usuario ? <>{e.usuario.nombres}<div className="text-muted">{ROL_PE[e.usuario.rol]}</div></> : <span className="text-muted">—</span>}</td>
                     <td>{ETIQUETA_AUDITORIA[e.accion]}</td>
-                    <td>{e.paciente ? <>{e.paciente.nombres}<div className="text-muted">DNI {e.paciente.dni}</div></> : <span className="text-muted">—</span>}</td>
+                    <td>{e.paciente ? <>{e.paciente.nombres}<div className="text-muted"><DniPaciente dni={e.paciente.dni} /></div></> : <span className="text-muted">—</span>}</td>
                     <td className="text-break">{e.detalle ?? ''}{e.ip && <div className="text-muted">IP {e.ip}</div>}</td>
                   </tr>
                 ))}

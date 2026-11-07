@@ -132,7 +132,7 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | Descuentos (P3) y monto del adelanto (P6) gestionados por el Administrador | `admin.test.ts` |
 | CU-38 Panel de control · CU-39 Reporte de ingresos · CU-40 Reporte de inventario (rango de fechas, exportación CSV para Excel) | `reporte.test.ts`, `Iteracion4.test.tsx` |
 
-Total: **275 pruebas de API + 97 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief y los CU-41 a CU-57 del informe v17 están implementados.
+Total: **292 pruebas de API + 104 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y el CU-58 están implementados.
 
 **Tareas programadas** (`backend/src/jobs`, node-cron, hora de Lima; se activan con `JOBS_ENABLED=true`):
 - **Cada 5 min:** libera las reservas cuyo adelanto no se pagó ni reportó en 1 hora (RN-04; también las citas antiguas
@@ -267,11 +267,25 @@ Respeta «reducir movimiento» del sistema operativo.
 | CU-55 | Configurar datos de pago | Administrador | — | `GET/PUT /admin/pago`, `PUT/DELETE /admin/pago/qr` |
 | CU-56 | Consultar saldo a favor | Paciente | — | «Mis datos» (`GET /pacientes/me`) |
 | CU-57 | Consultar datos en RENIEC o SUNAT | Recepcionista, Administrador + actor externo | «extend» de CU-03 y de CU-26 | `GET /reniec/:dni`, `GET /sunat/:ruc` |
+| CU-58 | Corregir datos del paciente y de la cita | Recepcionista (DNI ya registrado: solo Administrador) | «extend» de CU-04 | `PATCH /pacientes/:id`, `PUT /pacientes/:id/dni`, `PATCH /citas/:id/datos` |
 
 Los «include» del diagrama son solo tres: **CU-05** (desde CU-06 y CU-07), **CU-12** (desde CU-11, CU-25 y CU-33) y
 **CU-22 Buscar insumo** (desde CU-23, CU-25 y CU-30). En CU-44 el ajuste de stock es un flujo alterno, no un «include».
 CU-57 es «extend» porque es opcional: sin token, sin consultas, sin respuesta en 5 s o sin datos, el registro sigue a mano
 (hay pruebas con el proveedor caído).
+
+**Paciente sin DNI a la mano (presencial).** En «Nueva cita» la recepcionista busca **por DNI** o, en otra pestaña,
+**por nombre** (apellidos y nombres, sin importar tildes ni pequeños errores; muestra edad, celular parcial y DNI para
+distinguir homónimos, nada clínico). Si el paciente es nuevo y no trae su DNI, se registra con nombres, apellidos, fecha de
+nacimiento, sexo y celular: queda **«DNI pendiente»** y se le puede sacar cita, atender y cobrar. Antes de crearlo se avisa
+si ya hay pacientes parecidos. El DNI se completa después (Citas del día, Nueva cita o Panel); RENIEC verifica los nombres
+y no se acepta el DNI de otro paciente. El registro web sigue pidiendo DNI.
+
+**CU-58 Corregir datos.** «Editar datos» abre el formulario **con los datos actuales cargados**: se cambia solo lo que está
+mal, cada campo cambiado muestra su valor anterior y se puede deshacer. El contacto se cambia libremente; nombres,
+apellidos, nacimiento y sexo piden **motivo** y quedan en la auditoría con el antes y el después. Un DNI ya registrado solo
+lo cambia el Administrador (con motivo). En la cita se edita el motivo y, si el adelanto aún no se pagó, el tratamiento
+previsto (el adelanto se recalcula); fecha, hora y odontólogo siguen por «Reprogramar».
 
 ## Riesgos conocidos
 

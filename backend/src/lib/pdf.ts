@@ -53,7 +53,7 @@ export function pdfComprobante(c: ComprobanteCompleto): Promise<Buffer> {
     doc.x = izq;
     doc.text(`Fecha: ${fechaHora(c.createdAt)}`);
     doc.text(`Paciente: ${c.paciente.nombres} ${c.paciente.apellidos}`);
-    doc.text(`DNI: ${c.paciente.dni}`);
+    doc.text(`DNI: ${c.paciente.dni ?? "pendiente"}`);
     doc.text(`Cita N.° ${c.citaId}`);
     linea();
 

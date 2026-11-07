@@ -202,3 +202,6 @@ body { background: var(--fondo); }
 @media (prefers-reduced-motion: no-preference) {
   .cambiando-tema, .cambiando-tema * { transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease !important; }
 }
+
+/* Editar datos (CU-58): campo cambiado respecto del valor guardado */
+.campo-cambiado { border-color: #e0a106 !important; box-shadow: 0 0 0 0.15rem rgba(224, 161, 6, 0.25); }

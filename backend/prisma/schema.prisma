@@ -54,6 +54,14 @@ enum AccionAuditoria {
   bloqueo_login
   desbloqueo_login
   reabrir_alerta
+  corregir_paciente
+  cambiar_dni
+  editar_cita
+}
+
+enum Sexo {
+  femenino
+  masculino
 }
 
 enum MetodoPagoReportado {
@@ -112,7 +120,7 @@ model Usuario {
 model Paciente {
   id              Int      @id @default(autoincrement())
   usuarioId       Int?     @unique @map("usuario_id")
-  dni             String   @unique @db.Char(8)
+  dni             String?  @unique @db.Char(8) // null = «DNI pendiente» (registrado en la clínica sin DNI a la mano)
   nombres         String
   apellidos       String
   fechaNacimiento DateTime @map("fecha_nacimiento") @db.Date
@@ -120,6 +128,7 @@ model Paciente {
   email           String?
   direccion       String?
   apoderado       String? // P14
+  sexo            Sexo?
   inasistencias   Int      @default(0)
   restringido     Boolean  @default(false) // RN-12
   saldoFavor      Decimal  @default(0) @map("saldo_favor") @db.Decimal(10, 2) // adelantos sobrantes o de citas canceladas a tiempo

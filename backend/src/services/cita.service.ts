@@ -19,6 +19,7 @@ import { bloquesDelHorario, feriadoEn, horasOcupadas, mensajeSinAtencion } from 
 import { calcularAdelanto, edadEn } from './precio.service.js';
 import { moverSaldo } from './saldo.service.js';
 import { billeterasAceptadas, datosPago } from './pago.service.js';
+import { registrar as auditar } from './auditoria.service.js';
 
 const HORA_MS = 3_600_000;
 const horarioTomado = () => new ErrorNegocio(409, 'HORARIO_NO_DISPONIBLE', MENSAJES.HORARIO_NO_DISPONIBLE);
@@ -389,6 +390,7 @@ export function formatearCita(c: CitaCompleta, saldoFavor?: Prisma.Decimal) {
     canal: c.canal,
     estado: c.estado,
     tratamientoPrevisto: c.tratamientoPrevisto?.nombre ?? null,
+    tratamientoPrevistoId: c.tratamientoPrevisto?.id ?? null,
     montoAdelanto: c.montoAdelanto?.toFixed(2) ?? null,
     adelantoVenceEn: c.adelantoVenceEn?.toISOString() ?? null,
     adelantoPagado: pagado?.toFixed(2) ?? null,
@@ -398,4 +400,44 @@ export function formatearCita(c: CitaCompleta, saldoFavor?: Prisma.Decimal) {
     saldoAplicable: cubre && cubre.greaterThan(0) ? cubre.toFixed(2) : null,
     aPagar: pendiente ? pendiente.minus(cubre ?? 0).toFixed(2) : null,
   };
+}
+
+/**
+ * Editar datos de la cita (recepcionista): el motivo, mientras la cita no ocurra; el tratamiento previsto, solo
+ * si el adelanto aún no se pagó ni está en verificación (el monto del adelanto se recalcula con el nuevo tratamiento).
+ * Fecha, hora y odontólogo se cambian con «Reprogramar» (CU-07). Queda en la auditoría (RN-22).
+ */
+export async function editarDatosCita(citaId: number, dto: { motivo: string; tratamientoPrevistoId?: number }, usuarioId: number, ip?: string) {
+  const cita = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM citas WHERE id = ${citaId} FOR UPDATE`;
+    const c = await tx.cita.findUnique({ where: { id: citaId }, include: { paciente: true, tratamientoPrevisto: true, comprobantes: { where: { anuladoEn: null } } } });
+    if (!c) throw new ErrorNegocio(404, 'CITA_NO_ENCONTRADA', MENSAJES.CITA_NO_ENCONTRADA);
+    if (!ESTADOS_MODIFICABLES.includes(c.estado) && c.estado !== 'pago_en_verificacion') {
+      throw new ErrorNegocio(409, 'CITA_NO_EDITABLE', MENSAJES.CITA_NO_EDITABLE);
+    }
+    const cambios: string[] = [];
+    const data: Prisma.CitaUpdateInput = {};
+    if (dto.motivo !== c.motivo) {
+      data.motivo = dto.motivo;
+      cambios.push(`Motivo: «${c.motivo}» → «${dto.motivo}»`);
+    }
+    if (dto.tratamientoPrevistoId && dto.tratamientoPrevistoId !== c.tratamientoPrevistoId) {
+      const pagado = c.comprobantes.some((x) => x.tipo === 'adelanto');
+      if (c.estado !== 'pendiente_adelanto' || pagado) {
+        throw new ErrorNegocio(409, 'TRATAMIENTO_CON_ADELANTO', MENSAJES.TRATAMIENTO_CON_ADELANTO, { tratamientoPrevistoId: MENSAJES.TRATAMIENTO_CON_ADELANTO });
+      }
+      const nuevoId = await resolverTratamientoPrevisto(tx, dto.tratamientoPrevistoId);
+      const { montoAdelanto } = await estadoYAdelanto(tx, c.paciente, nuevoId, dateAFecha(c.fecha));
+      const nuevo = await tx.tratamiento.findUniqueOrThrow({ where: { id: nuevoId! } });
+      data.tratamientoPrevisto = { connect: { id: nuevoId! } };
+      data.montoAdelanto = montoAdelanto; // el plazo para pagar no cambia
+      cambios.push(`Tratamiento previsto: «${c.tratamientoPrevisto?.nombre ?? '—'}» → «${nuevo.nombre}» (adelanto S/ ${c.montoAdelanto?.toFixed(2) ?? '0.00'} → S/ ${montoAdelanto.toFixed(2)})`);
+    }
+    if (cambios.length === 0) throw new ErrorNegocio(422, 'SIN_CAMBIOS', MENSAJES.SIN_CAMBIOS);
+    await tx.cita.update({ where: { id: citaId }, data });
+    await auditar(tx, { usuarioId, accion: 'editar_cita', pacienteId: c.pacienteId, detalle: `Cita #${citaId}. ${cambios.join('; ')}`, ip });
+    return tx.cita.findUniqueOrThrow({ where: { id: citaId }, include: INCLUIR });
+  });
+  const { saldoFavor } = await prisma.paciente.findUniqueOrThrow({ where: { id: cita.pacienteId }, select: { saldoFavor: true } });
+  return formatearCita(cita, saldoFavor);
 }

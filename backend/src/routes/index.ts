@@ -24,6 +24,10 @@ rutas.post('/auth/registro-paciente', Auth.registroPaciente);
 rutas.post('/pacientes', requireRol('recepcionista'), Pacientes.registrar);
 rutas.get('/pacientes', requireRol('recepcionista'), Pacientes.buscarPorDni);
 rutas.get('/reniec/:dni', requireRol('recepcionista'), Pacientes.reniec); // CU-57 «extend» de CU-03 (opcional)
+// Paciente sin DNI a la mano (presencial): queda «DNI pendiente» y se completa después. Búsqueda por nombre sin datos clínicos.
+rutas.get('/pacientes/por-nombre', requireRol('recepcionista'), Pacientes.buscarPorNombre);
+rutas.post('/pacientes/sin-dni', requireRol('recepcionista'), Pacientes.registrarSinDni);
+rutas.get('/pacientes/sin-dni', requireRol('recepcionista', 'administrador'), Pacientes.listarSinDni);
 
 // CU-10 Historial clínico — RN-07: solo Odontólogo y Administrador; cada acceso queda en la auditoría (RN-22)
 const soloClinico = requireRolConMensaje(MENSAJES.SIN_PERMISO_HISTORIAL, 'odontologo', 'administrador');
@@ -34,6 +38,8 @@ rutas.get('/pacientes/:id/historial', soloClinico, Atencion.historial);
 rutas.get('/pacientes/me', requireRol('paciente'), Pacientes.miPerfil); // también CU-56 Consultar saldo a favor (RN-17)
 rutas.patch('/pacientes/me', requireRol('paciente'), Pacientes.actualizarMiContacto);
 rutas.patch('/pacientes/:id/contacto', requireRol('recepcionista'), Pacientes.actualizarContacto);
+// CU-58 Corregir datos del paciente («extend» de CU-04): identidad con motivo y auditoría (RN-22); DNI solo lo cambia el Administrador
+rutas.put('/pacientes/:id/dni', requireRol('recepcionista', 'administrador'), Pacientes.guardarDni);
 
 // CU-05 Consultar disponibilidad (RN-03) / CU-06 Registrar cita (RN-12 adelanto, RN-17 saldo primero)
 rutas.get('/odontologos', requireAuth, Citas.odontologos);
@@ -50,6 +56,7 @@ for (const base of ['/citas/recordatorio', '/citas/confirmar']) {
 // CU-07 Reprogramar o cancelar cita («extend» de CU-08; RN-16 para el adelanto)
 rutas.patch('/citas/:id/reprogramar', requireRol('paciente', 'recepcionista'), Citas.reprogramar);
 rutas.patch('/citas/:id/cancelar', requireRol('paciente', 'recepcionista'), Citas.cancelar);
+rutas.patch('/citas/:id/datos', requireRol('recepcionista'), Citas.editarDatos); // motivo y tratamiento previsto (sin adelanto pagado)
 // CU-41 Pagar adelanto («extend» de CU-06): el paciente reporta su pago por Yape/Plin (captura opcional, hasta 2 MB; RN-18)
 rutas.post('/citas/:id/pago', express.json({ limit: '3mb' }), requireRol('paciente'), Citas.reportarPago);
 rutas.get('/tarifario', requireRol('paciente', 'recepcionista'), Citas.tarifarioPublico);
@@ -156,3 +163,7 @@ rutas.put('/admin/odontologos/:id/horario', admin, Admin.guardarHorario);
 rutas.get('/panel', admin, Admin.panel);
 rutas.get('/reportes/ingresos', admin, Admin.reporteIngresos);
 rutas.get('/reportes/inventario', admin, Admin.reporteInventario);
+
+// CU-58: al final, para que /pacientes/me, /pacientes/buscar, /pacientes/por-nombre y /pacientes/sin-dni tengan prioridad
+rutas.get('/pacientes/:id', requireRol('recepcionista', 'administrador'), Pacientes.ver);
+rutas.patch('/pacientes/:id', requireRol('recepcionista', 'administrador'), Pacientes.editar);

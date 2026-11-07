@@ -43,6 +43,13 @@ export const MENSAJES = {
   HORA_PASADA: 'No se puede reservar en una fecha u hora pasada',
   PACIENTE_NO_ENCONTRADO: 'Paciente no encontrado',
   DNI_DUPLICADO: 'Ya existe un paciente registrado con ese DNI',
+  // Paciente sin DNI y correcciones (CU-58)
+  MOTIVO_CORRECCION: 'Indique el motivo de la corrección: cambió un dato de identidad',
+  SIN_CAMBIOS: 'No hay cambios para guardar',
+  DNI_SOLO_ADMIN: 'Solo el Administrador puede cambiar un DNI ya registrado',
+  DNI_RENIEC_NO_COINCIDE: 'Los nombres de RENIEC para ese DNI no coinciden con los del paciente',
+  CITA_NO_EDITABLE: 'Esta cita ya no se puede editar',
+  TRATAMIENTO_CON_ADELANTO: 'El tratamiento previsto no se puede cambiar: el adelanto ya se pagó o está en verificación',
   EMAIL_DUPLICADO: 'Ya existe una cuenta con ese correo',
   CREDENCIALES_INVALIDAS: 'Correo o contraseña incorrectos',
   SIN_PERMISO: 'No tiene permiso para realizar esta acción',
@@ -168,7 +175,7 @@ export const loginSchema = z.object({
 export const MAX_INTENTOS_LOGIN = 3;
 export const MINUTOS_BLOQUEO_LOGIN = 15;
 
-export const ACCIONES_AUDITORIA = ['ver_historial', 'editar_atencion', 'anular_comprobante', 'bloqueo_login', 'desbloqueo_login', 'reabrir_alerta'] as const;
+export const ACCIONES_AUDITORIA = ['ver_historial', 'editar_atencion', 'anular_comprobante', 'bloqueo_login', 'desbloqueo_login', 'reabrir_alerta', 'corregir_paciente', 'cambiar_dni', 'editar_cita'] as const;
 export type AccionAuditoria = (typeof ACCIONES_AUDITORIA)[number];
 export const ETIQUETA_AUDITORIA: Record<AccionAuditoria, string> = {
   ver_historial: 'Vio el historial clínico',
@@ -177,6 +184,9 @@ export const ETIQUETA_AUDITORIA: Record<AccionAuditoria, string> = {
   bloqueo_login: 'Cuenta bloqueada por intentos fallidos',
   desbloqueo_login: 'Desbloqueó una cuenta',
   reabrir_alerta: 'Reabrió una alerta de stock',
+  corregir_paciente: 'Corrigió datos del paciente',
+  cambiar_dni: 'Registró o cambió un DNI',
+  editar_cita: 'Editó datos de una cita',
 };
 
 /** Campos numéricos: solo dígitos y largo máximo (la interfaz no deja escribir otra cosa; la API también lo valida). */
@@ -201,8 +211,53 @@ export const pacienteSchema = z.object({
   apoderado: z.string().trim().optional(), // P14
   alergias: z.string().trim().optional(),
   antecedentes: z.string().trim().optional(),
+  sexo: z.enum(['femenino', 'masculino']).optional(),
 });
 export type PacienteDTO = z.infer<typeof pacienteSchema>;
+export const SEXOS = ['femenino', 'masculino'] as const;
+export type Sexo = (typeof SEXOS)[number];
+export const ETIQUETA_SEXO: Record<Sexo, string> = { femenino: 'Femenino', masculino: 'Masculino' };
+
+/** Registro presencial sin DNI a la mano: queda «DNI pendiente»; el sexo y el celular son obligatorios para distinguirlo. */
+export const pacienteSinDniSchema = pacienteSchema.omit({ dni: true }).extend({
+  sexo: z.enum(SEXOS, { errorMap: () => ({ message: 'Elija el sexo' }) }),
+});
+export type PacienteSinDniDTO = z.infer<typeof pacienteSinDniSchema>;
+
+/** Búsqueda por nombre (recepcionista): apellidos obligatorios, nombres opcionales. */
+export const buscarNombreSchema = z.object({
+  apellidos: z.string().trim().min(2, 'Escriba al menos 2 letras del apellido'),
+  nombres: z.string().trim().optional(),
+  fechaNacimiento: fechaSchema.optional(),
+});
+
+/** CU-58 Corregir datos del paciente. Contacto: libre. Identidad (nombres, apellidos, nacimiento, sexo): pide motivo y queda en la auditoría. */
+export const editarPacienteSchema = z.object({
+  telefono: telefonoSchema,
+  email: z.string().email('Correo inválido').optional().or(z.literal('').transform(() => undefined)),
+  direccion: z.string().trim().optional(),
+  apoderado: z.string().trim().optional(),
+  nombres: z.string().trim().min(2, 'Ingrese los nombres'),
+  apellidos: z.string().trim().min(2, 'Ingrese los apellidos'),
+  fechaNacimiento: fechaSchema,
+  sexo: z.enum(SEXOS).nullable().optional(),
+  motivo: z.string().trim().max(300).optional(),
+});
+export type EditarPacienteDTO = z.infer<typeof editarPacienteSchema>;
+
+/** Completar DNI (recepcionista, si está pendiente) o cambiarlo (solo Administrador, con motivo). */
+export const dniPacienteSchema = z.object({
+  dni: dniSchema,
+  motivo: z.string().trim().max(300).optional(),
+  // Si RENIEC devuelve otros nombres, se pide confirmar antes de guardar
+  confirmar: z.boolean().optional(),
+});
+
+/** Editar datos de la cita: motivo y (si el adelanto no se pagó) tratamiento previsto. */
+export const editarCitaSchema = z.object({
+  motivo: z.string().trim().min(3, 'Indique el motivo de la cita').max(200),
+  tratamientoPrevistoId: z.coerce.number().int().positive().optional(),
+});
 
 /** Registro web: el paciente crea su propia cuenta (correo obligatorio). */
 export const registroPacienteSchema = pacienteSchema.extend({
@@ -361,7 +416,7 @@ export interface LineaImporte {
 export interface Importe {
   citaId: number;
   tipo: TipoCobro;
-  paciente: { id: number; dni: string; nombres: string; apellidos: string; email: string | null };
+  paciente: { id: number; dni: string | null; nombres: string; apellidos: string; email: string | null };
   lineas: LineaImporte[];
   subtotal: string;
   descuento: string; // suma de los descuentos de campaña
@@ -517,3 +572,4 @@ export interface AlternativaOdontologo {
   primeraHora: string;
   libres: number;
 }
+export * from './buscar.js';

@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pacientesApi } from '../api/recursos';
 import { FormContacto } from '../components/FormContacto';
 import { fechaPE, solesPE } from '../formato';
+import { DniPaciente } from '../components/DniPaciente';
 
 const fechaLima = (iso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(new Date(iso));
 
@@ -14,7 +15,7 @@ export default function MiPerfil() {
       <h1 className="h4 mb-3">Mis datos</h1>
       {data && (
         <div className="tarjeta">
-          <p className="mb-3"><strong>{data.nombres} {data.apellidos}</strong> · DNI {data.dni}</p>
+          <p className="mb-3"><strong>{data.nombres} {data.apellidos}</strong> · <DniPaciente dni={data.dni} /></p>
           {Number(data.saldoFavor ?? 0) > 0 && (
             <div className="alert alert-success py-2">
               Tiene un saldo a favor de <strong>{solesPE(data.saldoFavor!)}</strong>: se usa solo en su próximo adelanto o cobro.

@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ETIQUETA_ESTADO_CITA, type EstadoCita } from '@clinica/shared';
-import { reportesApi } from '../api/recursos';
+import { pacientesApi, reportesApi } from '../api/recursos';
+import { ModalEditarDatos } from '../components/ModalEditarDatos';
 import { diaSemanaPE, fechaPE, numPE, solesPE } from '../formato';
 
 /** Número que sube desde 0 al entrar (0,6 s). Sin animación si el sistema pide reducir movimiento o en pruebas. */
@@ -71,6 +72,7 @@ export default function Panel() {
             <div className="small">Inasistencias este mes: <strong>{p.agenda.inasistenciasMes}</strong></div>
             <div className="small">Pacientes con 3+ faltas (pagan adelanto): <strong>{p.agenda.pacientesRestringidos}</strong></div>
             <div className="small">Pagos de adelanto por verificar en caja: <strong>{p.agenda.pagosPorVerificar}</strong></div>
+            <SinDni cantidad={p.agenda.pacientesSinDni} />
           </div>
         </div>
         <div className="col-lg-4">
@@ -100,5 +102,33 @@ export default function Panel() {
         </div>
       </div>
     </>
+  );
+}
+
+/** Pacientes registrados sin DNI a la mano: lista para completarlos (o cambiar un DNI, solo el Administrador). */
+function SinDni({ cantidad }: { cantidad: number }) {
+  const [abierto, setAbierto] = useState(false);
+  const [editar, setEditar] = useState<number | null>(null);
+  const lista = useQuery({ queryKey: ['pacientes-sin-dni'], queryFn: pacientesApi.sinDni, enabled: abierto });
+  return (
+    <div className="small" data-testid="sin-dni">
+      Pacientes con DNI pendiente: <strong>{cantidad}</strong>
+      {cantidad > 0 && (
+        <button type="button" className="btn btn-link btn-sm p-0 ms-2 align-baseline" onClick={() => setAbierto(!abierto)}>
+          {abierto ? 'Ocultar' : 'Ver y completar'}
+        </button>
+      )}
+      {abierto && (
+        <ul className="list-unstyled mt-2 mb-0">
+          {lista.data?.map((x) => (
+            <li key={x.id} className="d-flex justify-content-between align-items-center py-1 gap-2">
+              <span>{x.nombres} {x.apellidos} · {x.edad} años</span>
+              <button type="button" className="btn btn-sm btn-outline-warning" onClick={() => setEditar(x.id)}>Completar DNI</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <ModalEditarDatos pacienteId={editar} onCerrar={() => setEditar(null)} />
+    </div>
   );
 }

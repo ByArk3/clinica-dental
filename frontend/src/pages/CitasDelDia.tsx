@@ -6,6 +6,8 @@ import { citasApi, type CitaDelDia } from '../api/recursos';
 import { ChipEstado } from '../components/ChipEstado';
 import { ModalConfirmar } from '../components/ModalConfirmar';
 import { ModalReprogramar } from '../components/ModalReprogramar';
+import { ModalEditarDatos } from '../components/ModalEditarDatos';
+import { DniPaciente } from '../components/DniPaciente';
 import { fechaPE, hoyLima, horasPara, mensajeError, solesPE } from '../formato';
 
 /** CU-09 (i_citasDelDia): agenda del día, inasistencias y acciones de CU-07 para la recepcionista. */
@@ -15,6 +17,7 @@ export default function CitasDelDia() {
   const [inasistencia, setInasistencia] = useState<CitaDelDia | null>(null);
   const [cancelar, setCancelar] = useState<CitaDelDia | null>(null);
   const [reprogramar, setReprogramar] = useState<CitaDelDia | null>(null);
+  const [editar, setEditar] = useState<CitaDelDia | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [porClinica, setPorClinica] = useState(false);
 
@@ -61,7 +64,7 @@ export default function CitasDelDia() {
                 <div>
                   <strong className="me-2">{c.hora}</strong>
                   {c.paciente.nombres} {c.paciente.apellidos}
-                  <span className="text-muted small"> · DNI {c.paciente.dni} · Cel. {c.paciente.telefono}</span>
+                  <span className="text-muted small"> · <DniPaciente dni={c.paciente.dni} /> · Cel. {c.paciente.telefono}</span>
                 </div>
                 <ChipEstado estado={c.estado} />
               </div>
@@ -91,11 +94,16 @@ export default function CitasDelDia() {
                     Recordar por WhatsApp
                   </a>
                 )}
+                <button className={`btn btn-sm ${c.paciente.dni ? 'btn-outline-primary' : 'btn-outline-warning'}`} onClick={() => setEditar(c)}>
+                  {c.paciente.dni ? 'Editar datos' : 'Editar datos · completar DNI'}
+                </button>
               </div>
             </div>
           );
         })}
       </div>
+
+      <ModalEditarDatos pacienteId={editar?.paciente.id ?? null} cita={editar} onCerrar={() => setEditar(null)} />
 
       <ModalConfirmar
         abierto={!!inasistencia}
