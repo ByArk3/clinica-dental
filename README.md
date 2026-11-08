@@ -105,7 +105,7 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | CU-06 Registrar cita web y presencial: 4.1, 8.1, 8.2, RN-01/02/03/12 | `cita.test.ts`, `frontend/src/test/FormReserva*`, `NuevaCita*` |
 | CU-07 Reprogramar / cancelar (paciente hasta 24 h antes, P8; recepcionista hasta la hora de la cita) | `reprogramar.test.ts`, `Iteracion1.test.tsx` |
 | CU-08 Recordar cita (aviso 48 h con enlace para cancelar o reprogramar; v2) + tareas programadas | `confirmacion.test.ts`, `Iteracion1.test.tsx` |
-| CU-09 Citas del día e inasistencias (3.1, 6.1 → paciente restringido, RN-12) | `inasistencia.test.ts`, `Iteracion1.test.tsx` |
+| CU-09 Agenda (citas de una fecha) e inasistencias (3.1, 6.1 → paciente restringido, RN-12) | `inasistencia.test.ts`, `Iteracion1.test.tsx` |
 | Menú y rutas por rol (RNF07), vistas móviles 360 px (RNF02) | |
 
 ## Avance — Iteración 2 ✅ completa
@@ -141,12 +141,12 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | Descuentos (P3) y monto del adelanto (P6) gestionados por el Administrador | `admin.test.ts` |
 | CU-38 Panel de control · CU-39 Reporte de ingresos · CU-40 Reporte de inventario (rango de fechas, exportación CSV para Excel) | `reporte.test.ts`, `Iteracion4.test.tsx` |
 
-Total: **297 pruebas de API + 104 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y el CU-58 están implementados.
+Total: **307 pruebas de API + 107 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y el CU-58 están implementados.
 
 **Tareas programadas** (`backend/src/jobs`, node-cron, hora de Lima; se activan con `JOBS_ENABLED=true`):
 - **Cada 5 min:** libera las reservas cuyo adelanto no se pagó ni reportó en 1 hora (RN-04; también las citas antiguas
   «Pendiente de confirmación» a menos de 24 h) y luego envía el recordatorio (CU-08) a las citas confirmadas que empiezan
-  dentro de 48 h. Si el paciente no tiene correo, «Citas del día» muestra **Recordar por WhatsApp** (enlace `wa.me`, P7).
+  dentro de 48 h. Si el paciente no tiene correo, la «Agenda» muestra **Recordar por WhatsApp** (enlace `wa.me`, P7).
 - **Diaria (07:10):** saldo a favor (RN-17): vence los abonos cumplidos y avisa por correo 30 y 7 días antes.
 
 **RN-02 (sin cruces de citas)** se protege en dos niveles: bloqueo `SELECT … FOR UPDATE` de la fila del odontólogo
@@ -283,12 +283,22 @@ Los «include» del diagrama son solo tres: **CU-05** (desde CU-06 y CU-07), **C
 CU-57 es «extend» porque es opcional: sin token, sin consultas, sin respuesta en 5 s o sin datos, el registro sigue a mano
 (hay pruebas con el proveedor caído).
 
-**Paciente sin DNI a la mano (presencial).** En «Nueva cita» la recepcionista busca **por DNI** o, en otra pestaña,
-**por nombre** (apellidos y nombres, sin importar tildes ni pequeños errores; muestra edad, celular parcial y DNI para
+**Paciente sin DNI a la mano (presencial).** En «Nueva cita» la recepcionista usa **«Registrar por DNI»** (ahí está también
+el botón «Registrar sin DNI») o **«Registrar por nombre»** (apellidos y nombres, sin importar tildes ni pequeños errores; muestra edad, celular parcial y DNI para
 distinguir homónimos, nada clínico). Si el paciente es nuevo y no trae su DNI, se registra con nombres, apellidos, fecha de
 nacimiento, sexo y celular: queda **«DNI pendiente»** y se le puede sacar cita, atender y cobrar. Antes de crearlo se avisa
-si ya hay pacientes parecidos. El DNI se completa después (Citas del día, Nueva cita o Panel); RENIEC verifica los nombres
+si ya hay pacientes parecidos. El DNI se completa después (Agenda, Buscar cita, Nueva cita o Panel); RENIEC verifica los nombres
 y no se acepta el DNI de otro paciente. El registro web sigue pidiendo DNI.
+
+**Menú de la recepcionista:** Nueva cita (el paciente quiere una cita, nuevo o que ya vino) · **Buscar cita** (el paciente
+que ya tiene una cita y no sabe la fecha: se busca por DNI o nombre y se ven sus citas próximas, con Reprogramar, Cancelar,
+Cobrar adelanto, Editar datos y WhatsApp, y las anteriores solo para consultar; sin datos clínicos) · **Agenda** (antes
+«Citas del día»: las citas de una fecha) · Caja.
+
+**Reglas de validación añadidas.** Número de operación: **Yape** solo números, máximo 8; **Plin** letras y números, de 12 a
+20 (en mayúsculas). Fechas con sentido: nacimiento de hoy hacia atrás (máx. 120 años), citas de hoy hasta **un año**
+adelante, feriados de hoy en adelante, campañas que terminen hoy o después, y en reportes, kárdex y auditoría «hasta» no
+pasa de hoy. Los correos a direcciones de prueba (`.local`) no se envían aunque haya SMTP: se registran en el log.
 
 **CU-58 Corregir datos.** «Editar datos» abre el formulario **con los datos actuales cargados**: se cambia solo lo que está
 mal, cada campo cambiado muestra su valor anterior y se puede deshacer. El contacto se cambia libremente; nombres,

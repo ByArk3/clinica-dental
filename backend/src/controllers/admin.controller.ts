@@ -16,6 +16,7 @@ import {
   pedidoSchema,
   proveedorSchema,
   rangoFechasSchema,
+  hastaHoySchema,
   recepcionSchema,
   ROLES,
   usuarioModificarSchema,
@@ -90,7 +91,8 @@ export async function enviarPedido(req: Request, res: Response) {
 const TIPOS_MOV = ['entrada_recepcion', 'salida_tratamiento', 'ajuste', 'merma', 'inicial'] as const;
 export async function kardex(req: Request, res: Response) {
   const f = z
-    .object({ desde: fechaSchema.optional(), hasta: fechaSchema.optional(), tipo: z.enum(TIPOS_MOV).optional() })
+    .object({ desde: fechaSchema.optional(), hasta: hastaHoySchema.optional(), tipo: z.enum(TIPOS_MOV).optional() })
+    .refine((r) => !r.desde || !r.hasta || r.desde <= r.hasta, { message: 'La fecha inicial debe ser anterior a la final', path: ['hasta'] })
     .parse({ desde: req.query.desde || undefined, hasta: req.query.hasta || undefined, tipo: req.query.tipo || undefined });
   res.json(await InsumoService.kardex(idParam(req), f));
 }

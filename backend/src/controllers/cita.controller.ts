@@ -84,3 +84,8 @@ export async function editarDatos(req: Request, res: Response) {
   const id = z.coerce.number().int().positive().parse(req.params.id);
   res.json(await CitaService.editarDatosCita(id, editarCitaSchema.parse(req.body), usuarioActual(req).id, req.ip));
 }
+
+/** GET /pacientes/:id/citas — Buscar cita (recepcionista): próximas y anteriores del paciente */
+export async function delPaciente(req: Request, res: Response) {
+  res.json(await CitaService.buscarCitasDe(z.coerce.number().int().positive().parse(req.params.id)));
+}

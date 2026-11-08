@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { citasApi, type Cita } from '../api/recursos';
 import { SelectorHorarios } from './SelectorHorarios';
 import { fechaPE, hoyLima, mensajeError } from '../formato';
+import { fechaMaximaCita } from '@clinica/shared';
 
 /** CU-07 Reprogramar: elegir nuevo horario (CU-05) para una cita existente. */
 export function ModalReprogramar({ cita, onCerrar }: { cita: Cita | null; onCerrar: () => void }) {
@@ -58,7 +59,7 @@ export function ModalReprogramar({ cita, onCerrar }: { cita: Cita | null; onCerr
             </div>
             <div className="col-sm-6">
               <label htmlFor="r-fecha" className="form-label">Nueva fecha</label>
-              <input id="r-fecha" type="date" min={hoyLima()} className="form-control" value={fecha} onChange={(e) => { setFecha(e.target.value); setHora(null); }} />
+              <input id="r-fecha" type="date" min={hoyLima()} max={fechaMaximaCita()} className="form-control" value={fecha} onChange={(e) => { setFecha(e.target.value); setHora(null); }} />
             </div>
           </div>
           <SelectorHorarios disponibilidad={disponibilidad.data} cargando={disponibilidad.isFetching} seleccionado={hora} onSeleccionar={setHora} onIrAFecha={(f) => { setFecha(f); setHora(null); }} />

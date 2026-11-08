@@ -28,6 +28,8 @@ rutas.get('/reniec/:dni', requireRol('recepcionista'), Pacientes.reniec); // CU-
 rutas.get('/pacientes/por-nombre', requireRol('recepcionista'), Pacientes.buscarPorNombre);
 rutas.post('/pacientes/sin-dni', requireRol('recepcionista'), Pacientes.registrarSinDni);
 rutas.get('/pacientes/sin-dni', requireRol('recepcionista', 'administrador'), Pacientes.listarSinDni);
+// Buscar cita: las citas (próximas y anteriores) de un paciente, sin datos clínicos (RN-07)
+rutas.get('/pacientes/:id/citas', requireRol('recepcionista'), Citas.delPaciente);
 
 // CU-10 Historial clínico — RN-07: solo Odontólogo y Administrador; cada acceso queda en la auditoría (RN-22)
 const soloClinico = requireRolConMensaje(MENSAJES.SIN_PERMISO_HISTORIAL, 'odontologo', 'administrador');

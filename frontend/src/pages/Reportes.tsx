@@ -4,6 +4,7 @@ import { ETIQUETA_ESTADO_PEDIDO, rangoFechasSchema, type EstadoPedido } from '@c
 import { reportesApi, type ReporteIngresos } from '../api/recursos';
 import { ModalAnular } from '../components/ModalAnular';
 import { fechaHoraPE, fechaPE, hoyLima, mensajeError, numPE, solesPE } from '../formato';
+import { hoyEnLima } from '@clinica/shared';
 
 /** CU-39 Reporte de ingresos · CU-40 Reporte de inventario. */
 export default function Reportes() {
@@ -25,8 +26,8 @@ export default function Reportes() {
         <li className="nav-item"><button className={`nav-link ${tab === 'inventario' ? 'active' : ''}`} onClick={() => setTab('inventario')}>Inventario</button></li>
       </ul>
       <div className="d-flex flex-wrap gap-2 align-items-end mb-3">
-        <div><label htmlFor="r-desde" className="form-label small mb-1">Desde</label><input id="r-desde" type="date" className="form-control" value={desde} onChange={(e) => e.target.value && setDesde(e.target.value)} /></div>
-        <div><label htmlFor="r-hasta" className="form-label small mb-1">Hasta</label><input id="r-hasta" type="date" className="form-control" value={hasta} onChange={(e) => e.target.value && setHasta(e.target.value)} /></div>
+        <div><label htmlFor="r-desde" className="form-label small mb-1">Desde</label><input id="r-desde" type="date" max={hoyEnLima()} className="form-control" value={desde} onChange={(e) => e.target.value && setDesde(e.target.value)} /></div>
+        <div><label htmlFor="r-hasta" className="form-label small mb-1">Hasta</label><input id="r-hasta" type="date" max={hoyEnLima()} className="form-control" value={hasta} onChange={(e) => e.target.value && setHasta(e.target.value)} /></div>
         {valido.success && <a className="btn btn-outline-secondary" href={reportesApi.csvUrl(tab, desde, hasta)}>Exportar CSV (Excel)</a>}
       </div>
       {!valido.success && <div className="alert alert-warning">{valido.error.issues[0].message}</div>}

@@ -10,6 +10,7 @@ import { MisCitas, ReservaWeb } from './pages/ReservaWeb';
 import NuevaCita from './pages/NuevaCita';
 import Inicio from './pages/Inicio';
 import CitasDelDia from './pages/CitasDelDia';
+import BuscarCita from './pages/BuscarCita';
 import ConfirmarCita from './pages/ConfirmarCita';
 import MiPerfil from './pages/MiPerfil';
 import Historial from './pages/Historial';
@@ -75,6 +76,7 @@ export function Rutas() {
         </Route>
         <Route element={<Protegida roles={['recepcionista']} />}>
           <Route path="/citas/nueva" element={<NuevaCita />} />
+          <Route path="/citas/buscar" element={<BuscarCita />} />
           <Route path="/citas/dia" element={<CitasDelDia />} />
           <Route path="/caja" element={<Caja />} />
         </Route>

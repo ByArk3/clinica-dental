@@ -1,4 +1,4 @@
-import { MENSAJES, type AlternativaOdontologo, type Disponibilidad } from '@clinica/shared';
+import { MENSAJES, fechaMaximaCita, type AlternativaOdontologo, type Disponibilidad } from '@clinica/shared';
 import { prisma, type Tx } from '../lib/prisma.js';
 import { ahoraLima, aHora, dateAHora, diaSemana, fechaADate, minutos, sumarDias } from '../lib/fechas.js';
 
@@ -106,6 +106,7 @@ export async function consultarDisponibilidad(odontologoId: number, fecha: strin
   if (fecha < hoy) {
     return { fecha, atiende: true, horarios: [], mensaje: MENSAJES.HORA_PASADA, siguienteFechaDisponible: await siguienteFecha(odontologoId, hoy) };
   }
+  if (fecha > fechaMaximaCita(hoy)) return { fecha, atiende: true, horarios: [], mensaje: MENSAJES.FECHA_MUY_LEJANA, siguienteFechaDisponible: null };
   const { atiende, horarios } = await horariosLibres(odontologoId, fecha);
   if (horarios.length > 0) return { fecha, atiende, horarios };
   const feriado = await feriadoEn(prisma, fecha);
@@ -126,6 +127,7 @@ export async function consultarDisponibilidad(odontologoId: number, fecha: strin
 async function siguienteFecha(odontologoId: number, desde: string) {
   for (let i = 0; i < DIAS_BUSQUEDA_SIGUIENTE; i++) {
     const f = sumarDias(desde, i);
+    if (f > fechaMaximaCita(ahoraLima().fecha)) return null; // no se sugiere más allá de un año
     if ((await horariosLibres(odontologoId, f)).horarios.length > 0) return f;
   }
   return null;

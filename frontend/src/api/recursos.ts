@@ -18,7 +18,13 @@ export interface Paciente {
   restringido: boolean;
 }
 /** Resultado de la búsqueda por nombre (recepcionista): solo lo necesario para distinguir homónimos. */
-export interface PacienteEncontrado { id: number; dni: string | null; nombres: string; apellidos: string; fechaNacimiento: string; edad: number; celular: string }
+export interface PacienteEncontrado { id: number; dni: string | null; nombres: string; apellidos: string; fechaNacimiento: string; edad: number; celular: string; proximas: number; siguienteCita: string | null }
+/** Buscar cita: las citas de un paciente (sin datos clínicos) */
+export interface CitasDePaciente {
+  paciente: Pick<Paciente, 'id' | 'dni' | 'nombres' | 'apellidos' | 'telefono' | 'inasistencias' | 'restringido' | 'fechaNacimiento' | 'saldoFavor'>;
+  proximas: CitaDelDia[];
+  anteriores: { id: number; fecha: string; hora: string; odontologo: string; motivo: string; estado: EstadoCita }[];
+}
 export interface Odontologo {
   id: number;
   nombres: string;
@@ -105,6 +111,7 @@ export const citasApi = {
   reportarPago: (id: number, d: ReportarPagoDTO) => api<Cita>(`/citas/${id}/pago`, { method: 'POST', body: d }),
   mias: () => api<Cita[]>('/citas/mias'),
   reprogramar: (id: number, datos: ReprogramarDTO) => api<Cita>(`/citas/${id}/reprogramar`, { method: 'PATCH', body: datos }),
+  dePaciente: (pacienteId: number) => api<CitasDePaciente>(`/pacientes/${pacienteId}/citas`),
   editarDatos: (id: number, datos: { motivo: string; tratamientoPrevistoId?: number }) => api<Cita>(`/citas/${id}/datos`, { method: 'PATCH', body: datos }),
   cancelar: (id: number, porClinica = false) => api<ResultadoCancelacion>(`/citas/${id}/cancelar`, { method: 'PATCH', body: { porClinica } }),
   delDia: (fecha: string) => api<CitaDelDia[]>(`/citas?fecha=${fecha}`),

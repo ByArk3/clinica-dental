@@ -1,4 +1,5 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { buscarNombreSchema, dniSchema, LARGO_NUMERICO, type PacienteSinDniDTO } from '@clinica/shared';
 import { pacientesApi, type Paciente, type PacienteEncontrado } from '../api/recursos';
 import { ApiError } from '../api/cliente';
@@ -25,6 +26,12 @@ export default function NuevaCita() {
   const [sinDni, setSinDni] = useState(false);
   // Registro sin DNI: si hay pacientes parecidos (mismo nombre o nacimiento), se pregunta antes de crear otro
   const [parecidos, setParecidos] = useState<{ datos: PacienteSinDniDTO; lista: PacienteEncontrado[] } | null>(null);
+  // Desde «Buscar cita → Sacar otra cita»: el paciente llega ya elegido
+  const [params] = useSearchParams();
+  const pacienteInicial = Number(params.get('paciente')) || null;
+  useEffect(() => {
+    if (pacienteInicial) pacientesApi.ver(pacienteInicial).then(setPaciente).catch(() => setError('No se encontró el paciente'));
+  }, [pacienteInicial]);
   // Autocompletar con RENIEC (si la clínica configuró un proveedor): null = no se consultó o no hubo datos
   const [reniec, setReniec] = useState<{ estado: 'buscando' | 'ok' | 'sin_datos' | 'no_disponible'; nombres?: string; apellidos?: string } | null>(null);
 
@@ -125,11 +132,11 @@ export default function NuevaCita() {
       </button>
     </li>
   );
+  // El registro (con DNI o sin DNI) está en la pestaña «Registrar por DNI»
   const botonesNuevo = (
     <div className="d-flex flex-wrap gap-2 align-items-center">
       <span className="small text-muted">¿No es ninguno?</span>
-      <button type="button" className="btn btn-sm btn-acento" onClick={() => { limpiar(); setModo('dni'); }}>Registrar paciente nuevo (con DNI)</button>
-      <button type="button" className="btn btn-sm btn-outline-secondary" onClick={abrirSinDni}>No tiene DNI a la mano → registrar sin DNI</button>
+      <button type="button" className="btn btn-sm btn-acento" onClick={() => { limpiar(); setModo('dni'); }}>Registrar paciente nuevo →</button>
     </div>
   );
 
@@ -138,8 +145,8 @@ export default function NuevaCita() {
       <h1 className="h4 mb-3">Nueva cita presencial</h1>
       <div className="tarjeta mb-3">
         <ul className="nav nav-tabs mb-3">
-          {pestana('dni', 'Buscar por DNI')}
-          {pestana('nombre', 'Buscar por nombre')}
+          {pestana('dni', 'Registrar por DNI')}
+          {pestana('nombre', 'Registrar por nombre')}
         </ul>
         {modo === 'dni' ? (
           <form onSubmit={buscar}>
@@ -150,10 +157,10 @@ export default function NuevaCita() {
               </div>
               <button className="btn btn-acento">Buscar</button>
             </div>
-            <p className="small text-muted mt-2 mb-0">
-              ¿No recuerda su DNI? Use «Buscar por nombre». ¿No tiene DNI a la mano?{' '}
-              <button type="button" className="btn btn-link btn-sm p-0 align-baseline" onClick={abrirSinDni}>Registrar sin DNI</button>
-            </p>
+            <p className="small text-muted mt-2 mb-2">Si ya es paciente, aparece con sus datos; si es nuevo, se registra aquí. ¿No recuerda su DNI? Use «Registrar por nombre».</p>
+            <button type="button" className="btn btn-sm btn-outline-secondary" onClick={abrirSinDni}>
+              🪪 El paciente no tiene DNI a la mano → Registrar sin DNI
+            </button>
           </form>
         ) : (
           <form onSubmit={buscarNombre}>
@@ -204,7 +211,7 @@ export default function NuevaCita() {
               <h2 className="h5 mb-1">Registrar paciente sin DNI</h2>
               <p className="small text-muted mb-0">Quedará con <DniPaciente dni={null} />. Se le puede sacar cita, atender y cobrar; el DNI se completa después.</p>
             </div>
-            <button type="button" className="btn btn-link btn-sm" onClick={() => { limpiar(); setModo('dni'); }}>Volver a buscar por DNI</button>
+            <button type="button" className="btn btn-link btn-sm" onClick={() => { limpiar(); setModo('dni'); }}>Volver a «Registrar por DNI»</button>
           </div>
           {parecidos ? (
             <div className="alert alert-warning mb-0">

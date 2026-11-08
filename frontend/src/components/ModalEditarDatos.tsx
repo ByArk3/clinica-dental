@@ -8,6 +8,7 @@ import { useUsuarioOpcional } from '../auth';
 import { fechaPE, mensajeError, solesPE } from '../formato';
 import { BotonAccion, CampoDigitos } from './Interaccion';
 import { DniPaciente } from './DniPaciente';
+import { fechaMinimaNacimiento, hoyEnLima } from '@clinica/shared';
 
 type Campo = 'telefono' | 'email' | 'direccion' | 'apoderado' | 'nombres' | 'apellidos' | 'fechaNacimiento' | 'sexo';
 type Valores = Record<Campo, string>;
@@ -105,6 +106,7 @@ export function ModalEditarDatos({ pacienteId, cita, onCerrar }: Props) {
           <input
             id={`e-${k}`}
             type={opciones.tipo ?? 'text'}
+            {...(k === 'fechaNacimiento' ? { min: fechaMinimaNacimiento(), max: hoyEnLima() } : {})}
             className={`form-control ${errores[k] ? 'is-invalid' : ''} ${cambio ? 'campo-cambiado' : ''}`}
             value={v[k]}
             onChange={(e) => setV({ ...v, [k]: e.target.value })}

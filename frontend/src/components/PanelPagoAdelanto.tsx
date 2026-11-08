@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { ETIQUETA_BILLETERA, LARGO_NUMERICO, reportarPagoSchema, soloDigitos, type Billetera, type ReportarPagoDTO } from '@clinica/shared';
+import { ETIQUETA_BILLETERA, FORMATO_OPERACION, limpiarOperacion, reportarPagoSchema, type Billetera, type ReportarPagoDTO } from '@clinica/shared';
 import { Modal } from 'react-bootstrap';
 import { BotonAccion, BotonCopiar } from './Interaccion';
 import { citasApi, type Cita } from '../api/recursos';
@@ -116,7 +116,7 @@ export function PanelPagoAdelanto({ cita, modo, onReportado }: { cita: Cita; mod
           {billeteras.length > 1 && (
             <div className="btn-group mb-2" role="radiogroup" aria-label="Medio de pago">
               {billeteras.map((m) => (
-                <button key={m} type="button" role="radio" aria-checked={metodo === m} className={`btn btn-sm ${metodo === m ? 'btn-acento' : 'btn-outline-secondary'}`} onClick={() => setMetodo(m)}>
+                <button key={m} type="button" role="radio" aria-checked={metodo === m} className={`btn btn-sm ${metodo === m ? 'btn-acento' : 'btn-outline-secondary'}`} onClick={() => { setMetodo(m); setNumero((n) => limpiarOperacion(m, n)); }}>
                   {ETIQUETA_BILLETERA[m]}
                 </button>
               ))}
@@ -124,8 +124,18 @@ export function PanelPagoAdelanto({ cita, modo, onReportado }: { cita: Cita; mod
           )}
           <div className="mb-2">
             <label htmlFor={`op-${cita.id}`} className="form-label small mb-1">Número de operación</label>
-            <input id={`op-${cita.id}`} className={`form-control ${errores.numeroOperacion ? 'is-invalid' : ''}`} value={numero} onChange={(e) => setNumero(soloDigitos(e.target.value, LARGO_NUMERICO.operacion))} inputMode="numeric" maxLength={LARGO_NUMERICO.operacion} />
+            <input
+              id={`op-${cita.id}`}
+              className={`form-control ${errores.numeroOperacion ? 'is-invalid' : ''}`}
+              value={numero}
+              onChange={(e) => setNumero(limpiarOperacion(metodo, e.target.value))}
+              inputMode={FORMATO_OPERACION[metodo].soloDigitos ? 'numeric' : 'text'}
+              autoCapitalize="characters"
+              maxLength={FORMATO_OPERACION[metodo].max}
+              aria-describedby={`op-ayuda-${cita.id}`}
+            />
             <div className="invalid-feedback">{errores.numeroOperacion}</div>
+            <div id={`op-ayuda-${cita.id}`} className="form-text">{FORMATO_OPERACION[metodo].ayuda}</div>
           </div>
           <div className="mb-2">
             <label htmlFor={`cap-${cita.id}`} className="form-label small mb-1">Captura del pago (opcional, máx. 2 MB)</label>

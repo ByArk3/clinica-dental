@@ -17,7 +17,7 @@ const soloYape = { body: { numero: '987799567', titular: 'Clínica Dental', bill
 
 describe('Adelanto: panel de pago', () => {
   it('web: muestra monto, plazo y datos de Yape; registra el N.° de operación', async () => {
-    const llamadas = simularApi({ 'GET /datos-pago': datosPago, 'POST /citas/5/pago': { body: { ...cita, estado: 'pago_en_verificacion', pagoReportado: { metodo: 'plin', numeroOperacion: '445566', reportadoEn: '2030-01-01T00:00:00Z' } } } });
+    const llamadas = simularApi({ 'GET /datos-pago': datosPago, 'POST /citas/5/pago': { body: { ...cita, estado: 'pago_en_verificacion', pagoReportado: { metodo: 'plin', numeroOperacion: 'BCP445566778', reportadoEn: '2030-01-01T00:00:00Z' } } } });
     renderizar(<PanelPagoAdelanto cita={cita} modo="web" />);
     const u = userEvent.setup();
     expect(screen.getByText('Adelanto: S/ 40.00')).toBeInTheDocument();
@@ -26,24 +26,26 @@ describe('Adelanto: panel de pago', () => {
     await u.click(screen.getByRole('button', { name: 'Ya pagué: registrar mi pago' }));
     expect(screen.getByText('Ingrese el número de operación que le dio la aplicación')).toBeInTheDocument();
     await u.click(screen.getByRole('radio', { name: 'Plin' }));
-    await u.type(screen.getByLabelText('Número de operación'), '1');
+    expect(screen.getByText(/Letras y números, de 12 a 20/)).toBeInTheDocument();
+    await u.type(screen.getByLabelText('Número de operación'), 'bcp-1');
+    expect(screen.getByLabelText('Número de operación')).toHaveValue('BCP1'); // sin símbolos y en mayúsculas
     await u.click(screen.getByRole('button', { name: 'Ya pagué: registrar mi pago' }));
-    expect(screen.getByText('El número de operación debe tener al menos 4 dígitos')).toBeInTheDocument();
-    await u.type(screen.getByLabelText('Número de operación'), '45566');
+    expect(screen.getByText('El código de operación de Plin tiene de 12 a 20 caracteres')).toBeInTheDocument();
+    await u.type(screen.getByLabelText('Número de operación'), '45566778');
     await u.click(screen.getByRole('button', { name: 'Ya pagué: registrar mi pago' }));
     // confirmación con resumen antes de enviar
     const modal = await screen.findByRole('dialog');
     expect(within(modal).getByText('¿Ya realizó el pago?')).toBeInTheDocument();
-    expect(within(modal).getByText('145566')).toBeInTheDocument();
+    expect(within(modal).getByText('BCP145566778')).toBeInTheDocument();
     expect(within(modal).getByText('Sin captura')).toBeInTheDocument();
     expect(llamadas.some((l) => l.metodo === 'POST')).toBe(false);
     await u.click(within(modal).getByRole('button', { name: 'Volver y revisar' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await u.clear(screen.getByLabelText('Número de operación'));
-    await u.type(screen.getByLabelText('Número de operación'), '445566');
+    await u.type(screen.getByLabelText('Número de operación'), 'BCP445566778');
     await u.click(screen.getByRole('button', { name: 'Ya pagué: registrar mi pago' }));
     await u.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Sí, ya pagué' }));
-    await waitFor(() => expect(llamadas.find((l) => l.metodo === 'POST')?.body).toEqual({ metodo: 'plin', numeroOperacion: '445566' }));
+    await waitFor(() => expect(llamadas.find((l) => l.metodo === 'POST')?.body).toEqual({ metodo: 'plin', numeroOperacion: 'BCP445566778' }));
   });
 
   it('solo Yape: no pregunta la billetera, muestra el QR y envía «yape»', async () => {
@@ -59,6 +61,10 @@ describe('Adelanto: panel de pago', () => {
     await waitFor(() => expect(screen.queryByRole('img', { name: /ampliado/ })).toBeNull());
     expect(screen.getByText(/Escanee el QR con Yape o pague al/)).toBeInTheDocument();
     expect(screen.queryByRole('radio')).toBeNull();
+    // Yape: solo números y máximo 8 (no deja escribir más ni letras)
+    await u.type(screen.getByLabelText('Número de operación'), '7788a99112233');
+    expect(screen.getByLabelText('Número de operación')).toHaveValue('77889911');
+    await u.clear(screen.getByLabelText('Número de operación'));
     await u.type(screen.getByLabelText('Número de operación'), '778899');
     await u.click(screen.getByRole('button', { name: 'Ya pagué: registrar mi pago' }));
     await u.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Sí, ya pagué' }));

@@ -68,3 +68,13 @@ describe('Límite de «Recuperar contraseña»', () => {
     expect(bandejaDePrueba.filter((c) => c.para === 'maria.quispe@correo.local')).toHaveLength(3);
   });
 });
+
+describe('Correos a direcciones de prueba', () => {
+  it('las direcciones .local (semilla y demo) no se envían por SMTP', async () => {
+    const { esCorreoDePrueba } = await import('../src/lib/correo.js');
+    expect(esCorreoDePrueba('maria.quispe@correo.local')).toBe(true);
+    expect(esCorreoDePrueba('ana.rios@clinica.LOCAL ')).toBe(true);
+    expect(esCorreoDePrueba('alguien@gmail.com')).toBe(false);
+    expect(esCorreoDePrueba('ana@localidad.pe')).toBe(false);
+  });
+});

@@ -8,6 +8,7 @@ import { fechaPE, hoyLima, solesPE } from '../formato';
 import { ChipEstado } from './ChipEstado';
 import { BotonAccion } from './Interaccion';
 import { PanelPagoAdelanto } from './PanelPagoAdelanto';
+import { fechaMaximaCita } from '@clinica/shared';
 
 interface Props {
   /** Presencial: paciente buscado por DNI. Web: undefined (el servidor usa el de la sesión). */
@@ -151,7 +152,7 @@ export function FormReserva({ pacienteId, onRegistrada }: Props) {
         </div>
         <div className="col-sm-auto">
           <label htmlFor="fecha" className="form-label">Fecha</label>
-          <input id="fecha" type="date" min={hoyLima()} style={{ width: 180, maxWidth: '100%' }} className={`form-control ${errores.fecha ? 'is-invalid' : ''}`} value={fecha} onChange={(e) => cambiarFecha(e.target.value)} />
+          <input id="fecha" type="date" min={hoyLima()} max={fechaMaximaCita()} style={{ width: 180, maxWidth: '100%' }} className={`form-control ${errores.fecha ? 'is-invalid' : ''}`} value={fecha} onChange={(e) => cambiarFecha(e.target.value)} />
           <div className="invalid-feedback">{errores.fecha && 'Elija una fecha'}</div>
         </div>
       </div>

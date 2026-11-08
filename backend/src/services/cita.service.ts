@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { Prisma, type EstadoCita } from '@prisma/client';
 import {
   ESTADOS_MODIFICABLES,
+  fechaMaximaCita,
   HORAS_LIMITE_PACIENTE,
   MENSAJES,
   PORCENTAJE_ADELANTO,
@@ -47,6 +48,7 @@ async function validarHorario(tx: Tx, odontologoId: number, fecha: string, hora:
   if (fecha < ahora.fecha || (fecha === ahora.fecha && hora <= ahora.hora)) {
     throw new ErrorNegocio(422, 'HORA_PASADA', MENSAJES.HORA_PASADA);
   }
+  if (fecha > fechaMaximaCita(ahora.fecha)) throw new ErrorNegocio(422, 'FECHA_MUY_LEJANA', MENSAJES.FECHA_MUY_LEJANA);
   // RN-02: bloqueo de la fila del odontólogo → las reservas simultáneas (web y presencial) se serializan.
   // El índice único parcial `cita_horario_activo` es la última barrera.
   const [odontologo] = await tx.$queryRaw<{ id: number; activo: boolean }[]>`
@@ -288,7 +290,7 @@ export async function citasDelPaciente(pacienteId: number) {
 }
 
 /**
- * CU-09 paso 1 (c_listarCitas): «Citas del día» de la recepcionista.
+ * CU-09 paso 1 (c_listarCitas): «Agenda» (citas de una fecha) de la recepcionista.
  * Solo datos de agenda y contacto (RN-07). Para las pendientes de confirmación incluye el enlace
  * wa.me con el mensaje de recordatorio, para enviarlo manualmente (P7).
  */
@@ -302,7 +304,13 @@ export async function citasDelDia(fecha: string) {
     },
   });
   const ahora = new Date();
-  return citas.map((c) => ({
+  return citas.map((c) => itemAgenda(c, ahora));
+}
+
+type CitaConPaciente = CitaCompleta & { tokenConfirmacion: string | null; paciente: { id: number; dni: string | null; nombres: string; apellidos: string; telefono: string; inasistencias: number; restringido: boolean } };
+/** Una cita como la ve la recepcionista (Agenda y Buscar cita): agenda y contacto, nada clínico (RN-07). */
+function itemAgenda(c: CitaConPaciente, ahora: Date) {
+  return {
     ...formatearCita(c),
     paciente: c.paciente,
     puedeRegistrarInasistencia: c.estado === 'confirmada' && horasParaCita(c.fecha, c.hora, ahora) <= 0,
@@ -311,7 +319,57 @@ export async function citasDelDia(fecha: string) {
       (c.estado === 'confirmada' || c.estado === 'pendiente_confirmacion') && c.tokenConfirmacion && horasParaCita(c.fecha, c.hora, ahora) > 0
         ? enlaceWhatsapp(c.paciente.telefono, c.paciente.nombres, dateAFecha(c.fecha), dateAHora(c.hora), c.tokenConfirmacion, c.estado === 'pendiente_confirmacion')
         : undefined,
-  }));
+  };
+}
+
+/** Estados de una cita que todavía «está por venir» (o se atiende hoy y falta cobrar). */
+const ESTADOS_PROXIMOS = ['pendiente_confirmacion', 'pendiente_adelanto', 'pago_en_verificacion', 'confirmada', 'atendida'] as const;
+
+/**
+ * Buscar cita (recepcionista): las citas de un paciente. Próximas (con sus acciones) y anteriores (solo consulta).
+ * Solo agenda y contacto; los diagnósticos y tratamientos realizados son del odontólogo (RN-07).
+ */
+export async function buscarCitasDe(pacienteId: number) {
+  const paciente = await prisma.paciente.findUnique({
+    where: { id: pacienteId },
+    select: { id: true, dni: true, nombres: true, apellidos: true, telefono: true, inasistencias: true, restringido: true, fechaNacimiento: true, saldoFavor: true },
+  });
+  if (!paciente) throw new ErrorNegocio(404, 'PACIENTE_NO_ENCONTRADO', MENSAJES.PACIENTE_NO_ENCONTRADO);
+  const citas = await prisma.cita.findMany({
+    where: { pacienteId },
+    orderBy: [{ fecha: 'asc' }, { hora: 'asc' }],
+    include: { ...INCLUIR, paciente: { select: { id: true, dni: true, nombres: true, apellidos: true, telefono: true, inasistencias: true, restringido: true } } },
+  });
+  const ahora = new Date();
+  const hoy = ahoraLima().fecha;
+  const esProxima = (c: (typeof citas)[number]) => (ESTADOS_PROXIMOS as readonly string[]).includes(c.estado) && dateAFecha(c.fecha) >= hoy;
+  return {
+    paciente: { ...paciente, fechaNacimiento: dateAFecha(paciente.fechaNacimiento), saldoFavor: paciente.saldoFavor.toFixed(2) },
+    proximas: citas.filter(esProxima).map((c) => itemAgenda(c, ahora)),
+    anteriores: citas
+      .filter((c) => !esProxima(c))
+      .reverse()
+      .slice(0, 50)
+      .map((c) => ({ id: c.id, fecha: dateAFecha(c.fecha), hora: dateAHora(c.hora), odontologo: c.odontologo.usuario.nombres, motivo: c.motivo, estado: c.estado })),
+  };
+}
+
+/** Resumen para la lista de búsqueda: cuántas citas próximas tiene cada paciente y cuándo es la siguiente. */
+export async function resumenProximas(pacienteIds: number[]) {
+  if (pacienteIds.length === 0) return new Map<number, { proximas: number; siguiente: string | null }>();
+  const hoy = fechaADate(ahoraLima().fecha);
+  const citas = await prisma.cita.findMany({
+    where: { pacienteId: { in: pacienteIds }, fecha: { gte: hoy }, estado: { in: [...ESTADOS_PROXIMOS] } },
+    orderBy: [{ fecha: 'asc' }, { hora: 'asc' }],
+    select: { pacienteId: true, fecha: true, hora: true },
+  });
+  const r = new Map<number, { proximas: number; siguiente: string | null }>();
+  for (const c of citas) {
+    const x = r.get(c.pacienteId) ?? { proximas: 0, siguiente: `${dateAFecha(c.fecha)} ${dateAHora(c.hora)}` };
+    x.proximas++;
+    r.set(c.pacienteId, x);
+  }
+  return r;
 }
 
 /** CU-08 Recordar cita: enlace público (la ruta antigua /citas/confirmar/ sigue funcionando). */

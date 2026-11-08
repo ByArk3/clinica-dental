@@ -41,6 +41,7 @@ export const MENSAJES = {
   SIN_HORARIOS: 'No hay horarios disponibles para esa fecha',
   FUERA_DE_HORARIO: 'La hora elegida está fuera del horario de atención',
   HORA_PASADA: 'No se puede reservar en una fecha u hora pasada',
+  FECHA_MUY_LEJANA: 'Solo se puede reservar hasta un año adelante',
   PACIENTE_NO_ENCONTRADO: 'Paciente no encontrado',
   DNI_DUPLICADO: 'Ya existe un paciente registrado con ese DNI',
   // Paciente sin DNI y correcciones (CU-58)
@@ -162,7 +163,31 @@ export const passwordSchema = z
   .min(8, 'La contraseña debe tener al menos 8 caracteres')
   .regex(/[A-Za-z]/, 'La contraseña debe incluir letras')
   .regex(/\d/, 'La contraseña debe incluir números');
-export const fechaSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida (aaaa-mm-dd)');
+export const fechaSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida (aaaa-mm-dd)')
+  .refine((f) => !Number.isNaN(Date.parse(`${f}T00:00:00Z`)) && new Date(`${f}T00:00:00Z`).toISOString().startsWith(f), 'Fecha inválida');
+
+// ---------- Fechas con sentido (hora de Lima) ----------
+/** Fecha de hoy en Lima (aaaa-mm-dd), igual en el navegador y en el servidor. */
+export const hoyEnLima = (ahora = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit' }).format(ahora);
+/** Suma días (o años con `anios`) a una fecha aaaa-mm-dd. */
+export function moverFecha(fecha: string, { dias = 0, anios = 0 }: { dias?: number; anios?: number }) {
+  const d = new Date(`${fecha}T00:00:00Z`);
+  d.setUTCFullYear(d.getUTCFullYear() + anios);
+  d.setUTCDate(d.getUTCDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+/** Las citas se reservan desde hoy hasta un año adelante. */
+export const fechaMaximaCita = (hoy = hoyEnLima()) => moverFecha(hoy, { anios: 1 });
+/** Nacimiento: de hoy hacia atrás, como máximo 120 años. */
+export const EDAD_MAXIMA = 120;
+export const fechaMinimaNacimiento = (hoy = hoyEnLima()) => moverFecha(hoy, { anios: -EDAD_MAXIMA });
+export const fechaNacimientoSchema = fechaSchema
+  .refine((f) => f <= hoyEnLima(), 'La fecha de nacimiento no puede ser futura')
+  .refine((f) => f >= fechaMinimaNacimiento(), `Revise el año: la edad no puede pasar de ${EDAD_MAXIMA} años`);
+/** Filtros «desde / hasta» de consultas (reportes, kárdex, auditoría): «hasta» no pasa de hoy. */
+export const hastaHoySchema = fechaSchema.refine((f) => f <= hoyEnLima(), 'La fecha final no puede ser posterior a hoy');
 export const horaSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Hora inválida (hh:mm)');
 const telefonoSchema = z.string().regex(/^\d{9}$/, 'El teléfono debe tener 9 dígitos');
 
@@ -204,7 +229,7 @@ export const pacienteSchema = z.object({
   dni: dniSchema,
   nombres: z.string().trim().min(2, 'Ingrese los nombres'),
   apellidos: z.string().trim().min(2, 'Ingrese los apellidos'),
-  fechaNacimiento: fechaSchema,
+  fechaNacimiento: fechaNacimientoSchema,
   telefono: telefonoSchema,
   email: z.string().email('Correo inválido').optional().or(z.literal('').transform(() => undefined)),
   direccion: z.string().trim().optional(),
@@ -239,7 +264,7 @@ export const editarPacienteSchema = z.object({
   apoderado: z.string().trim().optional(),
   nombres: z.string().trim().min(2, 'Ingrese los nombres'),
   apellidos: z.string().trim().min(2, 'Ingrese los apellidos'),
-  fechaNacimiento: fechaSchema,
+  fechaNacimiento: fechaNacimientoSchema,
   sexo: z.enum(SEXOS).nullable().optional(),
   motivo: z.string().trim().max(300).optional(),
 });
@@ -292,20 +317,49 @@ function imagenDataUrl(formato: string, tamano: string) {
     .refine((d) => Math.floor(((d.length - d.indexOf(',') - 1) * 3) / 4) <= MAX_CAPTURA_BYTES, tamano);
 }
 
+/**
+ * Formato del número de operación según la billetera:
+ * Yape: solo números, de 4 a 8 dígitos. Plin (lo emite la app de cada banco): letras y números, de 12 a 20 caracteres.
+ */
+export const FORMATO_OPERACION = {
+  yape: { min: 4, max: 8, soloDigitos: true, ayuda: 'Solo números, máximo 8 (está en la constancia de Yape).' },
+  plin: { min: 12, max: 20, soloDigitos: false, ayuda: 'Letras y números, de 12 a 20 (cópielo de la constancia de su banco).' },
+} as const;
+/** Deja en el campo solo lo permitido para la billetera (en mayúsculas para Plin), hasta el largo máximo. */
+export const limpiarOperacion = (metodo: 'yape' | 'plin', texto: string) =>
+  FORMATO_OPERACION[metodo].soloDigitos
+    ? texto.replace(/\D/g, '').slice(0, FORMATO_OPERACION.yape.max)
+    : texto.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, FORMATO_OPERACION.plin.max);
+
 /** El paciente reporta su pago de adelanto por Yape/Plin (opción 1: verificación manual en caja). */
 const MAX_CAPTURA_BYTES = 2 * 1024 * 1024;
-export const reportarPagoSchema = z.object({
-  metodo: z.enum(['yape', 'plin'], { errorMap: () => ({ message: 'Elija Yape o Plin' }) }),
-  numeroOperacion: z
-    .string()
-    .trim()
-    .min(1, 'Ingrese el número de operación que le dio la aplicación')
-    .regex(/^\d+$/, 'El número de operación tiene solo números')
-    .min(4, 'El número de operación debe tener al menos 4 dígitos')
-    .max(20, 'El número de operación tiene como máximo 20 dígitos'),
-  // Imagen opcional como data URL (png/jpeg/webp), máx. 2 MB
-  captura: imagenDataUrl('La captura debe ser una imagen PNG, JPG o WEBP', 'La captura no debe pasar de 2 MB').optional(),
-});
+export const reportarPagoSchema = z
+  .object({
+    metodo: z.enum(['yape', 'plin'], { errorMap: () => ({ message: 'Elija Yape o Plin' }) }),
+    numeroOperacion: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .min(1, 'Ingrese el número de operación que le dio la aplicación')
+      .regex(/^[A-Z0-9]+$/, 'El número de operación tiene solo letras y números')
+      .min(4, 'El número de operación es demasiado corto')
+      .max(20, 'El número de operación tiene como máximo 20 caracteres'),
+    // Imagen opcional como data URL (png/jpeg/webp), máx. 2 MB
+    captura: imagenDataUrl('La captura debe ser una imagen PNG, JPG o WEBP', 'La captura no debe pasar de 2 MB').optional(),
+  })
+  .superRefine((d, ctx) => {
+    const f = FORMATO_OPERACION[d.metodo];
+    const n = d.numeroOperacion;
+    const error = (message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['numeroOperacion'], message });
+    if (d.metodo === 'yape') {
+      if (!/^\d+$/.test(n)) return error('El número de operación de Yape tiene solo números');
+      if (n.length < f.min) return error(`El número de operación de Yape debe tener al menos ${f.min} dígitos`);
+      if (n.length > f.max) return error(`El número de operación de Yape tiene como máximo ${f.max} dígitos`);
+    } else {
+      if (!/^[A-Z0-9]+$/.test(n)) return error('El código de operación de Plin tiene solo letras y números');
+      if (n.length < f.min || n.length > f.max) return error(`El código de operación de Plin tiene de ${f.min} a ${f.max} caracteres`);
+    }
+  });
 export type ReportarPagoDTO = z.infer<typeof reportarPagoSchema>;
 export const rechazarPagoSchema = z.object({ motivo: z.string().trim().min(5, 'Indique el motivo del rechazo').max(300) });
 export const cancelarCitaSchema = z.object({ porClinica: z.boolean().optional() });
@@ -499,11 +553,15 @@ export const descuentoSchema = z
     tratamientos: z.array(z.coerce.number().int().positive()).min(1, 'Elija al menos un tratamiento'),
   })
   .refine((d) => d.fechaInicio <= d.fechaFin, { message: 'La fecha de inicio debe ser anterior al fin', path: ['fechaFin'] })
+  .refine((d) => d.fechaFin >= hoyEnLima(), { message: 'La campaña debe terminar hoy o después', path: ['fechaFin'] })
   .refine((d) => d.tipo === 'tres_por_dos' || (d.porcentaje ?? 0) > 0, { message: 'Ingrese un porcentaje', path: ['porcentaje'] });
 export type DescuentoDTO = z.infer<typeof descuentoSchema>;
 
 // ---------- Feriados y horarios ----------
-export const feriadoSchema = z.object({ fecha: fechaSchema, nombre: z.string().trim().min(3, 'Ingrese el nombre').max(80) });
+export const feriadoSchema = z.object({
+  fecha: fechaSchema.refine((f) => f >= hoyEnLima(), 'El feriado debe ser de hoy en adelante'),
+  nombre: z.string().trim().min(3, 'Ingrese el nombre').max(80),
+});
 export const horarioSchema = z.object({
   tramos: z.array(
     z.object({
@@ -538,7 +596,7 @@ export const qrPagoSchema = z.object({ qr: imagenDataUrl('El QR debe ser una ima
 
 // ---------- Reportes ----------
 export const rangoFechasSchema = z
-  .object({ desde: fechaSchema, hasta: fechaSchema })
+  .object({ desde: fechaSchema, hasta: hastaHoySchema })
   .refine((r) => r.desde <= r.hasta, { message: 'La fecha inicial debe ser anterior a la final', path: ['hasta'] });
 
 export interface ErrorApi {

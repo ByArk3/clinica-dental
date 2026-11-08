@@ -5,6 +5,7 @@ import { BILLETERAS, configPagoSchema, LARGO_NUMERICO, soloDigitos, descuentoSch
 import { citasApi, configApi, tarifarioApi, type DatosPago, type Descuento } from '../api/recursos';
 import { BotonAccion, CampoDigitos } from '../components/Interaccion';
 import { camposApi, erroresZod, fechaPE, hoyLima, mensajeError } from '../formato';
+import { hoyEnLima } from '@clinica/shared';
 
 type Pestana = 'campanas' | 'feriados' | 'horarios' | 'pagos';
 const PESTANAS: [Pestana, string][] = [
@@ -115,6 +116,7 @@ function FormCampana({ campana, onCerrar }: { campana: Descuento | null; onCerra
       <input
         id={`c-${k}`}
         type={tipo}
+        {...(k === 'fechaFin' ? { min: hoyEnLima() } : {})}
         inputMode={NUM[k] ? 'numeric' : undefined}
         maxLength={NUM[k]}
         className={`form-control ${errores[k] ? 'is-invalid' : ''}`}
@@ -216,7 +218,7 @@ function Feriados() {
           <h2 className="h6">Agregar feriado o día no laborable</h2>
           <div className="mb-2">
             <label htmlFor="f-fecha" className="form-label small mb-1">Fecha</label>
-            <input id="f-fecha" type="date" className={`form-control ${errores.fecha ? 'is-invalid' : ''}`} value={v.fecha} onChange={(e) => setV({ ...v, fecha: e.target.value })} />
+            <input id="f-fecha" type="date" min={hoyEnLima()} className={`form-control ${errores.fecha ? 'is-invalid' : ''}`} value={v.fecha} onChange={(e) => setV({ ...v, fecha: e.target.value })} />
             <div className="invalid-feedback">{errores.fecha}</div>
           </div>
           <div className="mb-3">

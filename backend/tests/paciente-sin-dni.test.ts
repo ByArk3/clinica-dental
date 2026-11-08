@@ -16,7 +16,7 @@ describe('Búsqueda por nombre (recepcionista)', () => {
     const r = await (await sesion('recepcionista')).get('/api/pacientes/por-nombre').query({ apellidos: 'quizpe', nombres: 'maria' });
     expect(r.status).toBe(200);
     expect(r.body).toHaveLength(1);
-    expect(r.body[0]).toEqual({ id: await idPaciente('72458190'), dni: '72458190', nombres: 'María', apellidos: 'Quispe Rojas', fechaNacimiento: '1990-04-12', edad: expect.any(Number), celular: '***-***-456' });
+    expect(r.body[0]).toEqual({ id: await idPaciente('72458190'), dni: '72458190', nombres: 'María', apellidos: 'Quispe Rojas', fechaNacimiento: '1990-04-12', edad: expect.any(Number), celular: '***-***-456', proximas: 0, siguienteCita: null });
     const tilde = await (await sesion('recepcionista')).get('/api/pacientes/por-nombre').query({ apellidos: 'huaman' });
     expect(tilde.body.map((p: { nombres: string }) => p.nombres)).toEqual(['Rosa']);
   });

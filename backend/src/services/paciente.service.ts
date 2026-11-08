@@ -130,7 +130,7 @@ export async function buscarPorNombre(f: { apellidos: string; nombres?: string; 
     select: { id: true, dni: true, nombres: true, apellidos: true, fechaNacimiento: true, telefono: true },
   });
   const hoy = ahoraLima().fecha;
-  return candidatos
+  const lista = candidatos
     .map((p) => {
       const pa = puntaje(p.apellidos, f.apellidos);
       const pn = f.nombres ? puntaje(p.nombres, f.nombres) : 0;
@@ -141,7 +141,9 @@ export async function buscarPorNombre(f: { apellidos: string; nombres?: string; 
     .filter((x): x is NonNullable<typeof x> => x !== null)
     .sort((a, b) => a.orden - b.orden || a.p.apellidos.localeCompare(b.p.apellidos, 'es') || a.p.nombres.localeCompare(b.p.nombres, 'es'))
     .slice(0, 20)
-    .map(({ p }) => ({
+    .map(({ p }) => p);
+  const proximas = await (await import('./cita.service.js')).resumenProximas(lista.map((p) => p.id));
+  return lista.map((p) => ({
       id: p.id,
       dni: p.dni,
       nombres: p.nombres,
@@ -149,6 +151,8 @@ export async function buscarPorNombre(f: { apellidos: string; nombres?: string; 
       fechaNacimiento: dateAFecha(p.fechaNacimiento),
       edad: edadEn(p.fechaNacimiento, hoy),
       celular: celularOculto(p.telefono),
+      proximas: proximas.get(p.id)?.proximas ?? 0,
+      siguienteCita: proximas.get(p.id)?.siguiente ?? null,
     }));
 }
 

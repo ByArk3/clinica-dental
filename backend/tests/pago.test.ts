@@ -14,7 +14,7 @@ describe('Billeteras aceptadas', () => {
     expect((await recep.get('/api/tipos-pago')).body.map((t: { nombre: string }) => t.nombre)).toEqual(['Efectivo', 'Tarjeta', 'Yape']);
     const cita = await crearCita({ horas: 72, estado: 'pendiente_adelanto', montoAdelanto: 20, venceEnMin: 50 });
     const pac = await sesion('paciente');
-    const plin = await pac.post(`/api/citas/${cita.id}/pago`).send({ metodo: 'plin', numeroOperacion: '123456' });
+    const plin = await pac.post(`/api/citas/${cita.id}/pago`).send({ metodo: 'plin', numeroOperacion: 'IBK123456789' });
     expect(plin.status).toBe(422);
     expect(plin.body.mensaje).toBe(MENSAJES.BILLETERA_NO_ACEPTADA);
     expect((await pac.post(`/api/citas/${cita.id}/pago`).send({ metodo: 'yape', numeroOperacion: '123456' })).body.estado).toBe('pago_en_verificacion');
@@ -28,7 +28,7 @@ describe('Billeteras aceptadas', () => {
     expect((await prisma.tipoPago.findUniqueOrThrow({ where: { id: antes.id } })).nombre).toBe('Yape/Plin');
     expect(await prisma.tipoPago.count()).toBe(4); // + «Saldo a favor»
     const cita = await crearCita({ horas: 72, estado: 'pendiente_adelanto', montoAdelanto: 20, venceEnMin: 50 });
-    expect((await (await sesion('paciente')).post(`/api/citas/${cita.id}/pago`).send({ metodo: 'plin', numeroOperacion: '654321' })).status).toBe(200);
+    expect((await (await sesion('paciente')).post(`/api/citas/${cita.id}/pago`).send({ metodo: 'plin', numeroOperacion: 'bbva6543210987' })).status).toBe(200);
     // la semilla no lo duplica al volver a correr
     const { sembrar } = await import('../prisma/seed.js');
     await sembrar(prisma, { silencioso: true, horariosEjemplo: false, campanas: false, feriados: false });
@@ -67,5 +67,22 @@ describe('QR de pago', () => {
     const grande = `data:image/png;base64,${'A'.repeat(2_900_000)}`;
     expect((await admin.put('/api/admin/pago/qr').send({ qr: grande })).body.campos.qr).toBe('El QR no debe pasar de 2 MB');
     expect((await (await sesion('recepcionista')).put('/api/admin/pago/qr').send({ qr: PNG })).status).toBe(403);
+  });
+});
+
+describe('Número de operación según la billetera', () => {
+  it('Yape: solo números, máximo 8; Plin: letras y números de 12 a 20 (se guarda en mayúsculas)', async () => {
+    const admin = await sesion('administrador');
+    await admin.put('/api/admin/pago').send({ numero: '987654321', titular: 'Clínica Dental', billeteras: ['yape', 'plin'] });
+    const pac = await sesion('paciente');
+    const cita = await crearCita({ horas: 72, estado: 'pendiente_adelanto', montoAdelanto: 20, venceEnMin: 40 });
+    const campo = async (metodo: string, numeroOperacion: string) => (await pac.post(`/api/citas/${cita.id}/pago`).send({ metodo, numeroOperacion })).body.campos?.numeroOperacion;
+    expect(await campo('yape', '123456789')).toBe('El número de operación de Yape tiene como máximo 8 dígitos');
+    expect(await campo('yape', '12AB5678')).toBe('El número de operación de Yape tiene solo números');
+    expect(await campo('plin', '12345678')).toBe('El código de operación de Plin tiene de 12 a 20 caracteres');
+    expect(await campo('plin', 'ABC-12345678')).toBe('El número de operación tiene solo letras y números');
+    const ok = await pac.post(`/api/citas/${cita.id}/pago`).send({ metodo: 'plin', numeroOperacion: 'ibk123456789' });
+    expect(ok.status).toBe(200);
+    expect(ok.body.pagoReportado.numeroOperacion).toBe('IBK123456789');
   });
 });

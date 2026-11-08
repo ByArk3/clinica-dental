@@ -165,7 +165,7 @@ describe('Campañas de descuento y datos de pago (Administrador)', () => {
     expect(r.status).toBe(422);
     expect(r.body.campos).toMatchObject({ porcentaje: 'Máximo 100 %', tratamientos: 'Elija al menos un tratamiento' });
     const resina = (await prisma.tratamiento.findUniqueOrThrow({ where: { nombre: 'Curación con resina' } })).id;
-    const tres = await admin.post('/api/admin/descuentos').send({ nombre: 'Resinas 3x2', tipo: 'tres_por_dos', fechaInicio: '2026-07-01', fechaFin: '2026-07-31', tratamientos: [resina] });
+    const tres = await admin.post('/api/admin/descuentos').send({ nombre: 'Resinas 3x2', tipo: 'tres_por_dos', fechaInicio: '2099-07-01', fechaFin: '2099-07-31', tratamientos: [resina] });
     expect(tres.body).toMatchObject({ tipo: 'tres_por_dos', porcentaje: null });
   });
 

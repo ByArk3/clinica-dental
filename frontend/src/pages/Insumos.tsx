@@ -8,6 +8,7 @@ import { FiltroLista } from '../components/FiltroLista';
 import { ModalConfirmar } from '../components/ModalConfirmar';
 import { BotonAccion } from '../components/Interaccion';
 import { camposApi, erroresZod, fechaHoraPE, mensajeError } from '../formato';
+import { hoyEnLima } from '@clinica/shared';
 
 const num = (s: string) => Number(s).toLocaleString('es-PE', { maximumFractionDigits: 2 });
 const TIPO: Record<MovimientoKardex['tipo'], string> = {
@@ -187,11 +188,11 @@ function ModalKardex({ insumo, onCerrar }: { insumo: Insumo; onCerrar: () => voi
         <div className="row g-2 mb-3">
           <div className="col-sm-4">
             <label htmlFor="k-desde" className="form-label small mb-1">Desde</label>
-            <input id="k-desde" type="date" className="form-control form-control-sm" value={f.desde} onChange={(e) => setF({ ...f, desde: e.target.value })} />
+            <input id="k-desde" type="date" max={hoyEnLima()} className="form-control form-control-sm" value={f.desde} onChange={(e) => setF({ ...f, desde: e.target.value })} />
           </div>
           <div className="col-sm-4">
             <label htmlFor="k-hasta" className="form-label small mb-1">Hasta</label>
-            <input id="k-hasta" type="date" className="form-control form-control-sm" value={f.hasta} onChange={(e) => setF({ ...f, hasta: e.target.value })} />
+            <input id="k-hasta" type="date" max={hoyEnLima()} className="form-control form-control-sm" value={f.hasta} onChange={(e) => setF({ ...f, hasta: e.target.value })} />
           </div>
           <div className="col-sm-4">
             <label htmlFor="k-tipo" className="form-label small mb-1">Movimiento</label>

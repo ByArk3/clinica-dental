@@ -4,6 +4,7 @@ import { ACCIONES_AUDITORIA, ETIQUETA_AUDITORIA, rangoFechasSchema, type Rol } f
 import { auditoriaApi, usuariosApi } from '../api/recursos';
 import { fechaHoraPE, hoyLima, mensajeError } from '../formato';
 import { DniPaciente } from '../components/DniPaciente';
+import { hoyEnLima } from '@clinica/shared';
 
 const ROL_PE: Record<Rol, string> = { paciente: 'Paciente', recepcionista: 'Recepcionista', odontologo: 'Odontólogo', administrador: 'Administrador' };
 
@@ -30,8 +31,8 @@ export default function Auditoria() {
       <p className="text-muted small mb-3">Accesos al historial clínico, correcciones de atenciones, anulaciones de comprobantes y bloqueos de inicio de sesión.</p>
       <div className="tarjeta mb-3">
         <div className="row g-2 align-items-end">
-          <div className="col-6 col-md-2"><label htmlFor="a-desde" className="form-label small mb-1">Desde</label><input id="a-desde" type="date" className="form-control" value={desde} onChange={(e) => e.target.value && setDesde(e.target.value)} /></div>
-          <div className="col-6 col-md-2"><label htmlFor="a-hasta" className="form-label small mb-1">Hasta</label><input id="a-hasta" type="date" className="form-control" value={hasta} onChange={(e) => e.target.value && setHasta(e.target.value)} /></div>
+          <div className="col-6 col-md-2"><label htmlFor="a-desde" className="form-label small mb-1">Desde</label><input id="a-desde" type="date" max={hoyEnLima()} className="form-control" value={desde} onChange={(e) => e.target.value && setDesde(e.target.value)} /></div>
+          <div className="col-6 col-md-2"><label htmlFor="a-hasta" className="form-label small mb-1">Hasta</label><input id="a-hasta" type="date" max={hoyEnLima()} className="form-control" value={hasta} onChange={(e) => e.target.value && setHasta(e.target.value)} /></div>
           <div className="col-12 col-md-2">
             <label htmlFor="a-dni" className="form-label small mb-1">DNI del paciente</label>
             <input id="a-dni" inputMode="numeric" maxLength={8} className={`form-control ${dniValido ? '' : 'is-invalid'}`} value={dni} onChange={(e) => setDni(e.target.value.replace(/\D/g, ''))} />

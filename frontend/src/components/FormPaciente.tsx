@@ -3,6 +3,7 @@ import { ETIQUETA_SEXO, LARGO_NUMERICO, SEXOS, pacienteSchema, pacienteSinDniSch
 import { ApiError } from '../api/cliente';
 import { CampoDigitos } from './Interaccion';
 import { CampoPassword } from './CampoPassword';
+import { fechaMinimaNacimiento, hoyEnLima } from '@clinica/shared';
 
 type Valores = Record<string, string>;
 
@@ -110,6 +111,7 @@ export function FormPaciente({ conCuenta, sinDni, dniInicial = '', inicial, text
               <input
                 id={`p-${c.nombre}`}
                 type={c.tipo ?? 'text'}
+                {...(c.nombre === 'fechaNacimiento' ? { min: fechaMinimaNacimiento(), max: hoyEnLima() } : {})}
                 className={`form-control ${errores[c.nombre] ? 'is-invalid' : ''}`}
                 value={v[c.nombre] ?? ''}
                 onChange={(e) => setV({ ...v, [c.nombre]: e.target.value })}
