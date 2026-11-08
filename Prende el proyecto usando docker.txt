@@ -25,10 +25,8 @@ Abrir el proyecto en VS Code:
 code .
 
 En el panel izquierdo está el archivo .env (junto a docker-compose.yml). Revisar que tenga:
-  - SEED=true             (sin esto no se cargan los usuarios de ejemplo)
-  - SEED_DEMO=true        (opcional: carga 3 meses de historia ficticia — citas, cobros, pedidos —
-                           para que el Panel, los Reportes y la Caja tengan datos. Solo funciona con la
-                           base vacía, por eso va junto con el paso 4: docker compose down -v)
+  - SEED=true             (carga los usuarios de prueba y 3 meses de historia ficticia: citas,
+                           cobros, pedidos. Solo en una base vacía: por eso el paso 4, docker compose down -v)
   - SESSION_SECRET        puede quedar vacío; el contenedor genera uno solo
   - Los datos de SMTP (Gmail) y RENIEC_TOKEN
 
@@ -77,7 +75,7 @@ Odontólogo      luis.paredes@clinica.local
 Odontóloga      carmen.diaz@clinica.local
 Paciente        maria.quispe@correo.local
 
-Solo con SEED_DEMO=true:
+También:
 Recepcionista   sofia.mendoza@clinica.local
 Odontólogo      andres.chavez@clinica.local
 

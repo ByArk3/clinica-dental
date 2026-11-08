@@ -1,4 +1,4 @@
-// Datos de DEMOSTRACIÓN (opcional, SEED_DEMO=true). TODO ES FICTICIO: nombres, DNI, celulares y montos.
+// Datos de DEMOSTRACIÓN (se cargan con la semilla: npm run db:seed o SEED=true en Docker). TODO ES FICTICIO.
 // Simula ~3 meses de historia de la clínica y las próximas 2 semanas, respetando las reglas del sistema:
 // adelanto del 50 % (100 % si está restringido), cobro final con el adelanto y el saldo a favor descontados,
 // stock que baja con cada atención y sube con los pedidos recibidos, comprobantes numerados sin huecos y en orden.

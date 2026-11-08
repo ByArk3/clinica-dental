@@ -27,12 +27,12 @@ docker compose up --build
 
 (Sin `.env`, en PowerShell: `$env:SEED="true"; docker compose up --build`; en Linux/macOS: `SEED=true docker compose up --build`.)
 
-**Datos de demostración (opcional).** Con `SEED=true` y además `SEED_DEMO=true` en `.env`, la primera vez se cargan
-~3 meses de historia **ficticia**: 60 pacientes más (menores con apoderado y 3 sin DNI), citas atendidas, cobradas,
+**Datos de demostración.** Con `SEED=true`, además de los usuarios de prueba, la primera vez se cargan ~3 meses de
+historia **ficticia**: 60 pacientes más (menores con apoderado y 3 sin DNI), citas atendidas, cobradas,
 canceladas, liberadas e inasistencias, comprobantes (con adelantos, descuentos de campaña, saldo a favor y uno anulado),
 pedidos recibidos y uno pendiente, kárdex coherente, alertas de stock y auditoría; además, las citas de las próximas
 2 semanas en todos los estados. Se genera siempre igual (las fechas son relativas a hoy) y solo en una base sin citas:
-para volver a empezar, `docker compose down -v`. Sin Docker: `npm run db:demo -w @clinica/backend`.
+si ya tenía datos, primero `docker compose down -v`. Sin Docker: `npm run db:seed -w @clinica/backend`.
 El código está en `backend/prisma/demo.ts` (hay una prueba que verifica que el stock, la numeración y el saldo cuadren).
 
 Abrir **http://localhost:8080** y entrar con los usuarios de prueba de abajo. La primera vez tarda unos minutos.
@@ -89,7 +89,7 @@ npm test          # backend (Vitest + Supertest contra PostgreSQL) y frontend (R
 | Odontólogo | luis.paredes@clinica.local · carmen.diaz@clinica.local |
 | Administrador | carlos.vega@clinica.local |
 | Paciente (con cuenta web) | maria.quispe@correo.local (DNI 72458190) |
-| Solo con `SEED_DEMO=true` | sofia.mendoza@clinica.local (Recepcionista) · andres.chavez@clinica.local (Odontólogo, ma–sá 09:00–13:00) |
+| Más personal de la demo | sofia.mendoza@clinica.local (Recepcionista) · andres.chavez@clinica.local (Odontólogo, ma–sá 09:00–13:00) |
 
 Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo se registran en consola.
 

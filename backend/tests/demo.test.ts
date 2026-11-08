@@ -1,4 +1,4 @@
-// Datos de demostración (SEED_DEMO=true): deben respetar las reglas del sistema
+// Datos de demostración (se cargan con la semilla): deben respetar las reglas del sistema
 import { beforeAll, describe, expect, it } from 'vitest';
 import { prisma, reiniciarBD } from './helpers.js';
 import { sembrarDemo } from '../prisma/demo.js';
