@@ -494,3 +494,31 @@ Se aplican los supuestos de la sección 14 del brief (P2–P17). Además:
 - **Usuarios:** los pacientes crean su cuenta en la web; el Administrador gestiona al personal. El rol de odontólogo no
   se asigna ni se quita a una cuenta existente, porque tiene citas y atenciones vinculadas: se registra un usuario nuevo.
 - `TODO(decisión)`: confirmar los precios del tarifario y los porcentajes de las campañas con la clínica.
+
+## Seguimiento de revisión con CodexGPT
+
+Este apartado registra los acuerdos y hallazgos importantes de las conversaciones de trabajo sobre el proyecto. Se anotan
+resúmenes y tareas, no transcripciones, contraseñas, tokens ni otros secretos.
+
+### Revisión de seguridad local — 2026-11-08
+
+Alcance: comprobaciones no destructivas contra `http://localhost:8080/` y lectura del código. No se modificaron pacientes,
+citas, pagos ni inventario. La prueba de inicio de sesión creó sesiones temporales.
+
+- **Urgente antes de exponer la instancia:** una cuenta de demostración de administrador inició sesión con la contraseña
+  de prueba documentada en este README. Las cuentas demo están disponibles en la instancia revisada. Desactivar la semilla
+  fuera de demos, cambiar las contraseñas conocidas y verificar que los datos sean ficticios antes de abrir el acceso.
+- **Posible apropiación de ficha por registro web (pendiente de corregir):** el registro público puede vincular una cuenta
+  a un paciente existente sin cuenta usando su DNI y actualizar correo/teléfono, sin verificar los datos de identidad ya
+  registrados. Se identificó leyendo el servicio; no se ejecutó el flujo para evitar cambiar datos. Exigir una verificación
+  de identidad o un proceso de activación aprobado por la clínica antes de vincular fichas existentes.
+- **Cabeceras de la página:** nginx entrega la página principal sin CSP ni cabeceras anti-iframe / anti-MIME; las respuestas
+  de la API sí incluyen cabeceras de Helmet. Configurarlas también en nginx.
+- **Publicación de Docker:** `8080:80` no fija una IP de host y puede publicar el sitio en las interfaces de red disponibles.
+  Limitar el enlace a localhost para desarrollo y usar HTTPS, cookies `Secure` y controles de red para despliegues.
+- **Controles comprobados:** sin sesión, las rutas protegidas respondieron 401; con rol de paciente, recursos de
+  administración e historial clínico respondieron 403. CORS mantuvo el origen configurado y las rutas `.env` no expusieron
+  archivos. No se probaron contraseñas repetidas ni acciones que escriban datos.
+
+Pendiente: corregir el vínculo de cuentas con fichas existentes, configurar cabeceras de nginx y confirmar que la
+configuración de demo no se use en despliegues accesibles a terceros.
