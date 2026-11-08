@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
+    "db:demo": "tsx prisma/seed.ts --demo",
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset --force",
     "test": "dotenv -e .env.test -- prisma migrate deploy && dotenv -e .env.test -- vitest run"

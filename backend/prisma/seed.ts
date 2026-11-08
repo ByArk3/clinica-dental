@@ -247,6 +247,10 @@ export async function sembrar(prisma: PrismaClient<any>, { silencioso = false, h
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const prisma = new PrismaClient();
   sembrar(prisma)
+    // Datos de demostración (3 meses de historia y próximas citas), solo con SEED_DEMO=true
+    .then(async () => {
+      if (process.env.SEED_DEMO === 'true' || process.argv.includes('--demo')) await (await import('./demo.js')).sembrarDemo(prisma);
+    })
     .catch((e) => {
       console.error(e);
       process.exit(1);

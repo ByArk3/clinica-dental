@@ -42,6 +42,8 @@ services:
       JOBS_ENABLED: "true"
       # Datos de ejemplo (usuarios con contraseña Clinica2026): solo para la demo, con SEED=true en .env
       SEED: ${SEED:-false}
+      # Con SEED=true, además 3 meses de historia ficticia (citas, cobros, pedidos) para la demo y las capturas
+      SEED_DEMO: ${SEED_DEMO:-false}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}

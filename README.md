@@ -27,6 +27,14 @@ docker compose up --build
 
 (Sin `.env`, en PowerShell: `$env:SEED="true"; docker compose up --build`; en Linux/macOS: `SEED=true docker compose up --build`.)
 
+**Datos de demostración (opcional).** Con `SEED=true` y además `SEED_DEMO=true` en `.env`, la primera vez se cargan
+~3 meses de historia **ficticia**: 60 pacientes más (menores con apoderado y 3 sin DNI), citas atendidas, cobradas,
+canceladas, liberadas e inasistencias, comprobantes (con adelantos, descuentos de campaña, saldo a favor y uno anulado),
+pedidos recibidos y uno pendiente, kárdex coherente, alertas de stock y auditoría; además, las citas de las próximas
+2 semanas en todos los estados. Se genera siempre igual (las fechas son relativas a hoy) y solo en una base sin citas:
+para volver a empezar, `docker compose down -v`. Sin Docker: `npm run db:demo -w @clinica/backend`.
+El código está en `backend/prisma/demo.ts` (hay una prueba que verifica que el stock, la numeración y el saldo cuadren).
+
 Abrir **http://localhost:8080** y entrar con los usuarios de prueba de abajo. La primera vez tarda unos minutos.
 Si `docker compose up --build` falla con `failed to execute bake`, construir con
 `docker build -f backend/Dockerfile -t clinica-dental-api .` y `docker build -f frontend/Dockerfile -t clinica-dental-web .`,
@@ -81,6 +89,7 @@ npm test          # backend (Vitest + Supertest contra PostgreSQL) y frontend (R
 | Odontólogo | luis.paredes@clinica.local · carmen.diaz@clinica.local |
 | Administrador | carlos.vega@clinica.local |
 | Paciente (con cuenta web) | maria.quispe@correo.local (DNI 72458190) |
+| Solo con `SEED_DEMO=true` | sofia.mendoza@clinica.local (Recepcionista) · andres.chavez@clinica.local (Odontólogo, ma–sá 09:00–13:00) |
 
 Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo se registran en consola.
 
@@ -132,7 +141,7 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | Descuentos (P3) y monto del adelanto (P6) gestionados por el Administrador | `admin.test.ts` |
 | CU-38 Panel de control · CU-39 Reporte de ingresos · CU-40 Reporte de inventario (rango de fechas, exportación CSV para Excel) | `reporte.test.ts`, `Iteracion4.test.tsx` |
 
-Total: **292 pruebas de API + 104 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y el CU-58 están implementados.
+Total: **297 pruebas de API + 104 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y el CU-58 están implementados.
 
 **Tareas programadas** (`backend/src/jobs`, node-cron, hora de Lima; se activan con `JOBS_ENABLED=true`):
 - **Cada 5 min:** libera las reservas cuyo adelanto no se pagó ni reportó en 1 hora (RN-04; también las citas antiguas
