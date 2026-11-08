@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useCallback, useState, type FormEvent } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ajusteSchema, insumoNuevoSchema, insumoSchema, type InsumoDTO, type InsumoNuevoDTO } from '@clinica/shared';
@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 import { insumosApi, type Insumo, type MovimientoKardex } from '../api/recursos';
 import { FiltroLista } from '../components/FiltroLista';
 import { ModalConfirmar } from '../components/ModalConfirmar';
-import { BotonAccion } from '../components/Interaccion';
+import { AvisoFlotante, BotonAccion } from '../components/Interaccion';
 import { camposApi, erroresZod, fechaHoraPE, mensajeError } from '../formato';
 import { hoyEnLima } from '@clinica/shared';
 
@@ -19,7 +19,7 @@ const TIPO: Record<MovimientoKardex['tipo'], string> = {
   merma: 'Merma',
 };
 
-/** CU-18 Registrar · CU-19 Listar · CU-20 Modificar · CU-21 Desactivar insumos. */
+/** CU-18 Registrar · CU-19 Listar · CU-21 Modificar (con CU-25 Corregir stock) · CU-22 Desactivar insumos. */
 export default function Insumos() {
   const qc = useQueryClient();
   const [q, setQ] = useState('');
@@ -27,7 +27,10 @@ export default function Insumos() {
   const [soloBajos, setSoloBajos] = useState(false);
   const [editando, setEditando] = useState<Insumo | 'nuevo' | null>(null);
   const [kardexDe, setKardexDe] = useState<Insumo | null>(null);
-  const [ajusteDe, setAjusteDe] = useState<Insumo | null>(null);
+  // «Modificar» abre una ventana con dos pestañas: datos del insumo (CU-21) y corregir stock (CU-25)
+  const [modificar, setModificar] = useState<{ insumo: Insumo; pestana: 'datos' | 'stock' } | null>(null);
+  const [hecho, setHecho] = useState<string | null>(null);
+  const quitarHecho = useCallback(() => setHecho(null), []);
   const [cambiarEstado, setCambiarEstado] = useState<Insumo | null>(null);
 
   const lista = useQuery({ queryKey: ['insumos', q, estado, soloBajos], queryFn: () => insumosApi.listar({ q, activo: estado, bajoMinimo: soloBajos ? '1' : undefined }) });
@@ -79,8 +82,7 @@ export default function Insumos() {
                   <td className="text-end">{num(i.stockMinimo)}</td>
                   <td className="text-end text-nowrap">
                     <button className="btn btn-sm btn-outline-secondary me-1" onClick={() => setKardexDe(i)}>Kárdex</button>
-                    {i.activo && <button className="btn btn-sm btn-outline-secondary me-1" onClick={() => setAjusteDe(i)}>Ajuste</button>}
-                    <button className="btn btn-sm btn-outline-secondary me-1" onClick={() => setEditando(i)}>Modificar</button>
+                    <button className="btn btn-sm btn-outline-secondary me-1" onClick={() => setModificar({ insumo: i, pestana: 'datos' })}>Modificar</button>
                     <button className={`btn btn-sm ${i.activo ? 'btn-outline-danger' : 'btn-outline-success'}`} onClick={() => setCambiarEstado(i)}>
                       {i.activo ? 'Desactivar' : 'Activar'}
                     </button>
@@ -93,9 +95,10 @@ export default function Insumos() {
         </div>
       </div>
       <p className="small text-muted mt-2"><span className="leyenda-bajo-minimo" aria-hidden="true" /> Fila naranja = stock igual o menor al mínimo (RN-14).</p>
-      {editando && <FormInsumo insumo={editando === 'nuevo' ? null : editando} onCerrar={() => setEditando(null)} />}
+      {editando === 'nuevo' && <ModalRegistrar onCerrar={() => setEditando(null)} onHecho={setHecho} />}
+      {modificar && <ModalModificar insumo={modificar.insumo} pestanaInicial={modificar.pestana} onCerrar={() => setModificar(null)} onHecho={setHecho} />}
+      {hecho && <AvisoFlotante icono="✓" duracion={4500} onCerrar={quitarHecho}>{hecho}</AvisoFlotante>}
       {kardexDe && <ModalKardex insumo={kardexDe} onCerrar={() => setKardexDe(null)} />}
-      {ajusteDe && <ModalAjuste insumo={ajusteDe} onCerrar={() => setAjusteDe(null)} />}
       <ModalConfirmar
         abierto={!!cambiarEstado}
         titulo={cambiarEstado?.activo ? 'Desactivar insumo' : 'Activar insumo'}
@@ -112,7 +115,8 @@ export default function Insumos() {
   );
 }
 
-function FormInsumo({ insumo, onCerrar }: { insumo: Insumo | null; onCerrar: () => void }) {
+/** Datos del insumo: nombre, unidad y stock mínimo (y stock inicial al registrar). Lo usan «Registrar» y «Modificar». */
+function DatosInsumo({ insumo, onCancelar, onGuardado }: { insumo: Insumo | null; onCancelar: () => void; onGuardado: (mensaje: string) => void }) {
   const qc = useQueryClient();
   const [v, setV] = useState({
     nombre: insumo?.nombre ?? '',
@@ -124,9 +128,14 @@ function FormInsumo({ insumo, onCerrar }: { insumo: Insumo | null; onCerrar: () 
   const guardar = useMutation({
     mutationFn: (d: InsumoDTO | InsumoNuevoDTO) =>
       insumo ? insumosApi.modificar(insumo.id, d) : insumosApi.crear(d as InsumoNuevoDTO),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['insumos'] }); qc.invalidateQueries({ queryKey: ['alertas'] }); onCerrar(); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['insumos'] });
+      qc.invalidateQueries({ queryKey: ['alertas'] });
+      onGuardado(insumo ? `Insumo «${v.nombre.trim()}» actualizado` : `Insumo «${v.nombre.trim()}» registrado`);
+    },
     onError: (e) => setErrores((e as { datos?: { campos?: Record<string, string> } }).datos?.campos ?? {}),
   });
+  const sinCambios = !!insumo && v.nombre.trim() === insumo.nombre && v.unidad.trim() === insumo.unidad && Number(v.stockMinimo) === Number(insumo.stockMinimo);
 
   function enviar(e: FormEvent) {
     e.preventDefault();
@@ -148,31 +157,66 @@ function FormInsumo({ insumo, onCerrar }: { insumo: Insumo | null; onCerrar: () 
   );
 
   return (
+    <form onSubmit={enviar} noValidate>
+      <Modal.Body>
+        <div className="row g-3">
+          {campo('nombre', 'Nombre', 'col-12')}
+          {campo('unidad', 'Unidad', 'col-sm-4')}
+          {campo('stockMinimo', 'Stock mínimo', 'col-sm-4', true)}
+          {insumo ? (
+            <div className="col-sm-4">
+              <span className="form-label d-block">Stock actual</span>
+              <div className="form-control-plaintext fw-semibold">{num(insumo.stockActual)} {insumo.unidad}</div>
+            </div>
+          ) : (
+            campo('stockInicial', 'Stock inicial', 'col-sm-4', true)
+          )}
+        </div>
+        {insumo && <p className="small text-muted mt-3 mb-0">El stock se corrige en la pestaña «Corregir stock» (queda en el kárdex con su motivo).</p>}
+        {guardar.isError && <div className="alert alert-danger mt-3 mb-0" role="alert">{mensajeError(guardar.error)}</div>}
+      </Modal.Body>
+      <Modal.Footer>
+        <button type="button" className="btn btn-outline-secondary" onClick={onCancelar}>Cancelar</button>
+        <BotonAccion mutacion={guardar} disabled={sinCambios} title={sinCambios ? 'No hay cambios' : undefined}>{insumo ? 'Guardar datos' : 'Registrar'}</BotonAccion>
+      </Modal.Footer>
+    </form>
+  );
+}
+
+/** CU-18 Registrar insumo. */
+function ModalRegistrar({ onCerrar, onHecho }: { onCerrar: () => void; onHecho: (m: string) => void }) {
+  return (
     <Modal show onHide={onCerrar} centered>
-      <form onSubmit={enviar} noValidate>
-        <Modal.Header closeButton><Modal.Title className="h5">{insumo ? 'Modificar insumo' : 'Registrar insumo'}</Modal.Title></Modal.Header>
-        <Modal.Body>
-          <div className="row g-3">
-            {campo('nombre', 'Nombre', 'col-12')}
-            {campo('unidad', 'Unidad', 'col-sm-4')}
-            {campo('stockMinimo', 'Stock mínimo', 'col-sm-4', true)}
-            {insumo ? (
-              <div className="col-sm-4">
-                <span className="form-label d-block">Stock actual</span>
-                <div className="form-control-plaintext fw-semibold">{num(insumo.stockActual)}</div>
-              </div>
-            ) : (
-              campo('stockInicial', 'Stock inicial', 'col-sm-4', true)
-            )}
-          </div>
-          {insumo && <p className="small text-muted mt-2 mb-0">El stock actual solo cambia por recepción de pedidos o ajustes de stock.</p>}
-          {guardar.isError && <div className="alert alert-danger mt-3 mb-0" role="alert">{mensajeError(guardar.error)}</div>}
-        </Modal.Body>
-        <Modal.Footer>
-          <button type="button" className="btn btn-outline-secondary" onClick={onCerrar}>Cancelar</button>
-          <BotonAccion mutacion={guardar}>Guardar</BotonAccion>
-        </Modal.Footer>
-      </form>
+      <Modal.Header closeButton><Modal.Title className="h5">Registrar insumo</Modal.Title></Modal.Header>
+      <DatosInsumo insumo={null} onCancelar={onCerrar} onGuardado={(m) => { onHecho(m); onCerrar(); }} />
+    </Modal>
+  );
+}
+
+/** «Modificar»: CU-21 Modificar insumo y CU-25 Corregir stock («extend»), en dos pestañas de la misma ventana. */
+function ModalModificar({ insumo, pestanaInicial, onCerrar, onHecho }: { insumo: Insumo; pestanaInicial: 'datos' | 'stock'; onCerrar: () => void; onHecho: (m: string) => void }) {
+  const [pestana, setPestana] = useState(pestanaInicial);
+  const terminar = (m: string) => { onHecho(m); onCerrar(); };
+  const bajo = Number(insumo.stockActual) <= Number(insumo.stockMinimo);
+  return (
+    <Modal show onHide={onCerrar} centered>
+      <Modal.Header closeButton>
+        <Modal.Title className="h5">
+          Modificar insumo
+          <div className="small fw-normal text-muted">{insumo.nombre} · stock {num(insumo.stockActual)} {insumo.unidad}{bajo && <span className="badge text-bg-warning ms-2">En stock mínimo</span>}</div>
+        </Modal.Title>
+      </Modal.Header>
+      <div className="px-3 pt-3">
+        <ul className="nav nav-pills nav-fill pestanas-insumo">
+          <li className="nav-item"><button type="button" className={`nav-link ${pestana === 'datos' ? 'active' : ''}`} aria-pressed={pestana === 'datos'} onClick={() => setPestana('datos')}>Datos del insumo</button></li>
+          <li className="nav-item">
+            <button type="button" className={`nav-link ${pestana === 'stock' ? 'active' : ''}`} aria-pressed={pestana === 'stock'} onClick={() => setPestana('stock')} disabled={!insumo.activo} title={insumo.activo ? undefined : 'Active el insumo para corregir su stock'}>
+              Corregir stock
+            </button>
+          </li>
+        </ul>
+      </div>
+      {pestana === 'datos' ? <DatosInsumo insumo={insumo} onCancelar={onCerrar} onGuardado={terminar} /> : <CorregirStock insumo={insumo} onCancelar={onCerrar} onGuardado={terminar} />}
     </Modal>
   );
 }
@@ -224,75 +268,87 @@ function ModalKardex({ insumo, onCerrar }: { insumo: Insumo; onCerrar: () => voi
   );
 }
 
-/** CU-25 Registrar ajuste de stock o merma (RN-13: solo el Administrador). */
-function ModalAjuste({ insumo, onCerrar }: { insumo: Insumo; onCerrar: () => void }) {
+/**
+ * CU-25 Corregir stock (RN-13: solo el Administrador): «Conteo físico» (se escribe lo que se contó) o «Merma»
+ * (vencido o dañado: se escribe lo que se retira). Siempre con motivo; queda en el kárdex con fecha y usuario.
+ */
+function CorregirStock({ insumo, onCancelar, onGuardado }: { insumo: Insumo; onCancelar: () => void; onGuardado: (mensaje: string) => void }) {
   const qc = useQueryClient();
   const [tipo, setTipo] = useState<'ajuste' | 'merma'>('ajuste');
-  const [sentido, setSentido] = useState<1 | -1>(1);
-  const [cantidad, setCantidad] = useState('');
+  const [valor, setValor] = useState('');
   const [motivo, setMotivo] = useState('');
   const [errores, setErrores] = useState<Record<string, string>>({});
+  const actual = Number(insumo.stockActual);
+  const n = Number(valor.replace(',', '.'));
+  // Conteo: la cantidad contada es el nuevo stock (la diferencia es el ajuste). Merma: lo que se retira.
+  const cantidad = tipo === 'merma' ? n : n - actual;
+  const resultado = tipo === 'merma' ? actual - n : n;
+  const valido = valor !== '' && !Number.isNaN(n);
   const guardar = useMutation({
     mutationFn: (d: Parameters<typeof insumosApi.ajuste>[1]) => insumosApi.ajuste(insumo.id, d),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['insumos'] });
       qc.invalidateQueries({ queryKey: ['alertas'] });
       qc.invalidateQueries({ queryKey: ['kardex', insumo.id] });
-      onCerrar();
+      onGuardado(`Stock de «${insumo.nombre}» corregido: ${num(String(actual))} → ${num(String(resultado))} ${insumo.unidad}`);
     },
     onError: (e) => setErrores(camposApi(e)),
   });
-  const n = Number(cantidad.replace(',', '.'));
-  const resultado = Number(insumo.stockActual) + (tipo === 'merma' ? -n : sentido * n);
 
   function enviar(e: FormEvent) {
     e.preventDefault();
-    const r = ajusteSchema.safeParse({ tipo, cantidad: tipo === 'merma' ? n : sentido * n, motivo });
+    if (tipo === 'ajuste' && valido && cantidad === 0) return setErrores({ cantidad: 'Es igual al stock actual: no hay nada que corregir' });
+    if (valido && resultado < 0) return setErrores({ cantidad: 'El stock no puede quedar negativo' });
+    const r = ajusteSchema.safeParse({ tipo, cantidad: valido ? cantidad : '', motivo });
     if (!r.success) return setErrores(erroresZod(r.error.issues));
     setErrores({});
     guardar.mutate(r.data);
   }
+  const cambio = valido ? resultado - actual : 0;
 
   return (
-    <Modal show onHide={onCerrar} centered>
-      <form onSubmit={enviar} noValidate>
-        <Modal.Header closeButton><Modal.Title className="h5">Ajuste de stock — {insumo.nombre}</Modal.Title></Modal.Header>
-        <Modal.Body>
-          <div className="btn-group w-100 mb-3" role="group" aria-label="Tipo de movimiento">
-            <button type="button" className={`btn ${tipo === 'ajuste' ? 'btn-acento' : 'btn-outline-secondary'}`} onClick={() => setTipo('ajuste')}>Ajuste (conteo físico)</button>
-            <button type="button" className={`btn ${tipo === 'merma' ? 'btn-acento' : 'btn-outline-secondary'}`} onClick={() => setTipo('merma')}>Merma (vencido, dañado)</button>
+    <form onSubmit={enviar} noValidate>
+      <Modal.Body>
+        <div className="btn-group w-100 mb-3" role="group" aria-label="Tipo de corrección">
+          <button type="button" className={`btn ${tipo === 'ajuste' ? 'btn-acento' : 'btn-outline-secondary'}`} aria-pressed={tipo === 'ajuste'} onClick={() => { setTipo('ajuste'); setValor(''); setErrores({}); }}>
+            Conteo físico
+          </button>
+          <button type="button" className={`btn ${tipo === 'merma' ? 'btn-acento' : 'btn-outline-secondary'}`} aria-pressed={tipo === 'merma'} onClick={() => { setTipo('merma'); setValor(''); setErrores({}); }}>
+            Merma (vencido, dañado)
+          </button>
+        </div>
+        <div className="row g-3 align-items-start">
+          <div className="col-sm-6">
+            <label htmlFor="a-cantidad" className="form-label">{tipo === 'merma' ? `Cantidad a retirar (${insumo.unidad})` : `Cantidad contada (${insumo.unidad})`}</label>
+            <input id="a-cantidad" inputMode="decimal" className={`form-control ${errores.cantidad ? 'is-invalid' : ''}`} value={valor} onChange={(e) => setValor(e.target.value.replace(/[^\d.,]/g, ''))} placeholder={tipo === 'merma' ? 'Ej.: 2' : `Ej.: ${num(String(actual))}`} />
+            <div className="invalid-feedback">{errores.cantidad}</div>
+            <div className="form-text">{tipo === 'merma' ? 'Lo que se bota o se devuelve.' : 'Lo que hay físicamente en el almacén.'}</div>
           </div>
-          {tipo === 'ajuste' && (
-            <div className="btn-group mb-3" role="group" aria-label="Sentido">
-              <button type="button" className={`btn btn-sm ${sentido === 1 ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setSentido(1)}>Sumar</button>
-              <button type="button" className={`btn btn-sm ${sentido === -1 ? 'btn-secondary' : 'btn-outline-secondary'}`} onClick={() => setSentido(-1)}>Restar</button>
-            </div>
-          )}
-          <div className="row g-3">
-            <div className="col-sm-5">
-              <label htmlFor="a-cantidad" className="form-label">Cantidad ({insumo.unidad})</label>
-              <input id="a-cantidad" inputMode="decimal" className={`form-control ${errores.cantidad ? 'is-invalid' : ''}`} value={cantidad} onChange={(e) => setCantidad(e.target.value)} />
-              <div className="invalid-feedback">{errores.cantidad}</div>
-            </div>
-            <div className="col-sm-7">
-              <span className="form-label d-block">Stock</span>
-              <div className="form-control-plaintext">
-                {num(insumo.stockActual)} → <strong className={resultado < 0 ? 'text-danger' : ''}>{cantidad ? num(String(resultado)) : '—'}</strong>
+          <div className="col-sm-6">
+            <div className="vista-stock" aria-live="polite">
+              <div className="small text-muted mb-1">Stock</div>
+              <div className="fs-5">
+                <span>{num(String(actual))}</span>
+                <span className="mx-2 text-muted" aria-hidden="true">→</span>
+                <strong className={valido && resultado < 0 ? 'text-danger' : ''}>{valido ? num(String(resultado)) : '—'}</strong>
+                <span className="small text-muted ms-1">{insumo.unidad}</span>
               </div>
-            </div>
-            <div className="col-12">
-              <label htmlFor="a-motivo" className="form-label">Motivo</label>
-              <input id="a-motivo" className={`form-control ${errores.motivo ? 'is-invalid' : ''}`} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej.: conteo físico mensual, jeringas vencidas" />
-              <div className="invalid-feedback">{errores.motivo}</div>
+              {valido && cambio !== 0 && <span className={`badge ${cambio > 0 ? 'text-bg-success' : 'text-bg-danger'}`}>{cambio > 0 ? '+' : ''}{num(String(cambio))}</span>}
             </div>
           </div>
-          {guardar.isError && <div className="alert alert-danger mt-3 mb-0" role="alert">{mensajeError(guardar.error)}</div>}
-        </Modal.Body>
-        <Modal.Footer>
-          <button type="button" className="btn btn-outline-secondary" onClick={onCerrar}>Cancelar</button>
-          <BotonAccion mutacion={guardar}>Registrar</BotonAccion>
-        </Modal.Footer>
-      </form>
-    </Modal>
+          <div className="col-12">
+            <label htmlFor="a-motivo" className="form-label">Motivo</label>
+            <input id="a-motivo" className={`form-control ${errores.motivo ? 'is-invalid' : ''}`} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder={tipo === 'merma' ? 'Ej.: jeringas vencidas en octubre' : 'Ej.: conteo físico mensual'} />
+            <div className="invalid-feedback">{errores.motivo}</div>
+            <div className="form-text">Queda en el kárdex con la fecha y su usuario.</div>
+          </div>
+        </div>
+        {guardar.isError && <div className="alert alert-danger mt-3 mb-0" role="alert">{mensajeError(guardar.error)}</div>}
+      </Modal.Body>
+      <Modal.Footer>
+        <button type="button" className="btn btn-outline-secondary" onClick={onCancelar}>Cancelar</button>
+        <BotonAccion mutacion={guardar}>Guardar corrección</BotonAccion>
+      </Modal.Footer>
+    </form>
   );
 }

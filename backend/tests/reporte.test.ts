@@ -13,7 +13,8 @@ async function cobrada(tratamientos: string[], pago: string, horas: number, dni 
   const od = await sesion('odontologo');
   await od.post(`/api/citas/${c.id}/atencion`).send({ diagnostico: 'Prueba', tratamientos: await Promise.all(tratamientos.map(async (t) => ({ tratamientoId: await idTrat(t) }))) });
   const recep = await sesion('recepcionista');
-  const r = await recep.post(`/api/caja/citas/${c.id}/comprobante`).send({ tipoPagoId: await tipoPago(pago), montoRecibido: 1000 });
+  const total = Number((await recep.get(`/api/caja/citas/${c.id}/importe`)).body.total);
+  const r = await recep.post(`/api/caja/citas/${c.id}/comprobante`).send({ tipoPagoId: await tipoPago(pago), montoRecibido: total });
   if (r.status !== 201) throw new Error(JSON.stringify(r.body));
   return r.body;
 }

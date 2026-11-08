@@ -61,7 +61,9 @@ export async function sembrar(prisma: PrismaClient<any>, { silencioso = false, h
 
   // --- Usuarios del personal ---
   await usuario(prisma, 'Ana Ríos', 'ana.rios@clinica.local', 'recepcionista', hash);
-  await usuario(prisma, 'Carlos Vega', 'carlos.vega@clinica.local', 'administrador', hash);
+  const carlos = await usuario(prisma, 'Carlos Vega', 'carlos.vega@clinica.local', 'administrador', hash);
+  // RN-23: Carlos Vega es el administrador principal (si todavía no hay uno)
+  if (!(await prisma.usuario.findFirst({ where: { principal: true } }))) await prisma.usuario.update({ where: { id: carlos.id }, data: { principal: true } });
   const odontologos = [
     { nombres: 'Dr. Luis Paredes', email: 'luis.paredes@clinica.local', cmp: '00001', especialidad: 'Odontología general' },
     { nombres: 'Dra. Carmen Díaz', email: 'carmen.diaz@clinica.local', cmp: '00002', especialidad: 'Endodoncia' },

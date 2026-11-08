@@ -57,6 +57,11 @@ enum AccionAuditoria {
   corregir_paciente
   cambiar_dni
   editar_cita
+  crear_usuario
+  modificar_usuario
+  desactivar_usuario
+  activar_usuario
+  traspasar_principal
 }
 
 enum Sexo {
@@ -96,6 +101,7 @@ model Usuario {
   password         String // hash bcrypt (RNF05)
   rol              Rol
   activo           Boolean   @default(true)
+  principal        Boolean   @default(false) // RN-23: administrador principal (uno solo; protegido)
   resetTokenHash   String?   @unique @map("reset_token_hash") // CU-02, guardado como hash SHA-256
   resetTokenExpira DateTime? @map("reset_token_expira") // P16: 30 min
   createdAt        DateTime  @default(now()) @map("created_at")

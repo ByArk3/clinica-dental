@@ -139,6 +139,8 @@ rutas.patch('/usuarios/:id', admin, Admin.modificarUsuario);
 rutas.patch('/usuarios/:id/desactivar', admin, Admin.desactivarUsuario);
 rutas.patch('/usuarios/:id/activar', admin, Admin.activarUsuario);
 rutas.patch('/usuarios/:id/desbloquear', admin, Admin.desbloquearUsuario); // CU-46 «extend» de CU-35 (RN-21)
+// RN-23 Administrador principal: solo él gestiona a otros administradores y nadie lo modifica ni desactiva
+rutas.post('/usuarios/:id/principal', admin, Admin.traspasarPrincipal); // CU-59 «extend» de CU-35
 // CU-45 Consultar auditoría (RN-22: accesos al historial, correcciones, anulaciones y bloqueos)
 rutas.get('/admin/auditoria', admin, Admin.auditoria);
 

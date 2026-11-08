@@ -3,7 +3,7 @@
 // Reglas acordadas: campañas por línea según la fecha de la cita; adelanto = 50 % del tratamiento previsto;
 // el adelanto pagado y el saldo a favor se descuentan del cobro final; lo que sobra del adelanto → saldo a favor.
 import { Prisma } from '@prisma/client';
-import { MENSAJES, type ComprobanteDTO, type Importe, type UsuarioSesion } from '@clinica/shared';
+import { MENSAJES, type ComprobanteDTO, type Importe, type UsuarioSesion, VUELTO_MAXIMO } from '@clinica/shared';
 import { prisma, type Tx } from '../lib/prisma.js';
 import { ErrorNegocio } from '../lib/errores.js';
 import { dateAFecha, dateAHora, fechaPE } from '../lib/fechas.js';
@@ -176,6 +176,10 @@ export async function emitirComprobante(citaId: number, dto: ComprobanteDTO, usu
     const recibido = efectivo ? D(dto.montoRecibido ?? -1) : total;
     if (recibido.lessThan(total)) {
       throw new ErrorNegocio(422, 'MONTO_INSUFICIENTE', MENSAJES.MONTO_INSUFICIENTE, { montoRecibido: MENSAJES.MONTO_INSUFICIENTE }); // 6.1
+    }
+    if (efectivo && recibido.greaterThan(total.plus(VUELTO_MAXIMO))) {
+      const m = MENSAJES.montoFueraDeRango(total.toFixed(2), total.plus(VUELTO_MAXIMO).toFixed(2));
+      throw new ErrorNegocio(422, 'MONTO_FUERA_DE_RANGO', m, { montoRecibido: m });
     }
 
     // Correlativo sin huecos (P2: C-000001): bloqueo consultivo mientras dura la transacción

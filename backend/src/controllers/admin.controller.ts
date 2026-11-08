@@ -20,6 +20,7 @@ import {
   recepcionSchema,
   ROLES,
   usuarioModificarSchema,
+  traspasoPrincipalSchema,
   usuarioNuevoSchema,
 } from '@clinica/shared';
 import * as ProveedorService from '../services/proveedor.service.js';
@@ -111,11 +112,14 @@ export async function listarUsuarios(req: Request, res: Response) {
   const rol = req.query.rol ? z.enum(ROLES).parse(req.query.rol) : undefined;
   res.json(await UsuarioService.listar({ q: textoQuery(req.query.q), rol, activo: boolQuery(req.query.activo) }));
 }
-export const crearUsuario = async (req: Request, res: Response) => res.status(201).json(await UsuarioService.crear(usuarioNuevoSchema.parse(req.body)));
+export const crearUsuario = async (req: Request, res: Response) => res.status(201).json(await UsuarioService.crear(usuarioNuevoSchema.parse(req.body), usuarioActual(req), req.ip));
 export const modificarUsuario = async (req: Request, res: Response) =>
-  res.json(await UsuarioService.modificar(idParam(req), usuarioModificarSchema.parse(req.body), usuarioActual(req)));
-export const desactivarUsuario = async (req: Request, res: Response) => res.json(await UsuarioService.cambiarEstado(idParam(req), false, usuarioActual(req)));
-export const activarUsuario = async (req: Request, res: Response) => res.json(await UsuarioService.cambiarEstado(idParam(req), true, usuarioActual(req)));
+  res.json(await UsuarioService.modificar(idParam(req), usuarioModificarSchema.parse(req.body), usuarioActual(req), req.ip));
+export const desactivarUsuario = async (req: Request, res: Response) => res.json(await UsuarioService.cambiarEstado(idParam(req), false, usuarioActual(req), req.ip));
+export const activarUsuario = async (req: Request, res: Response) => res.json(await UsuarioService.cambiarEstado(idParam(req), true, usuarioActual(req), req.ip));
+/** CU-59 Traspasar el papel de administrador principal (RN-23) */
+export const traspasarPrincipal = async (req: Request, res: Response) =>
+  res.json(await UsuarioService.traspasarPrincipal(idParam(req), traspasoPrincipalSchema.parse(req.body).password, usuarioActual(req), req.ip));
 /** Desbloquear una cuenta bloqueada por intentos fallidos */
 export const desbloquearUsuario = async (req: Request, res: Response) => res.json(await AuthService.desbloquear(idParam(req), usuarioActual(req), req.ip));
 

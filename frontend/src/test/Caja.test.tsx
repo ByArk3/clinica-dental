@@ -58,6 +58,18 @@ describe('CU-13 Caja', () => {
     expect(llamadas.some((l) => l.metodo === 'POST')).toBe(false);
   });
 
+  it('efectivo: no deja escribir letras y avisa si pasa del total + S/ 200', async () => {
+    const llamadas = simularApi(base);
+    const u = await abrirCobro();
+    await u.click(screen.getByRole('radio', { name: 'Efectivo' }));
+    expect(screen.getByText('Entre S/ 200.00 y S/ 400.00')).toBeInTheDocument();
+    await u.type(screen.getByLabelText('Monto recibido (S/)'), 'abc450');
+    expect(screen.getByLabelText('Monto recibido (S/)')).toHaveValue('450');
+    await u.click(screen.getByRole('button', { name: /Emitir comprobante/ }));
+    expect(screen.getByText(MENSAJES.montoFueraDeRango('200.00', '400.00'))).toBeInTheDocument();
+    expect(llamadas.some((l) => l.metodo === 'POST')).toBe(false);
+  });
+
   it('sin tipo de pago no emite', async () => {
     simularApi(base);
     const u = await abrirCobro();
@@ -65,11 +77,12 @@ describe('CU-13 Caja', () => {
     expect(screen.getByText('Elija un tipo de pago')).toBeInTheDocument();
   });
 
-  it('tarjeta: no pide monto y envía sin montoRecibido', async () => {
+  it('tarjeta: el monto es el total exacto y no se edita; envía sin montoRecibido', async () => {
     const llamadas = simularApi({ ...base, 'POST /caja/citas/7/comprobante': { status: 201, body: { ...comprobante, tipoPago: 'Tarjeta', vuelto: '0.00' } } });
     const u = await abrirCobro();
     await u.click(screen.getByRole('radio', { name: 'Tarjeta' }));
-    expect(screen.queryByLabelText('Monto recibido (S/)')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Monto recibido (S/)')).toHaveValue('200.00');
+    expect(screen.getByLabelText('Monto recibido (S/)')).toBeDisabled();
     await u.click(screen.getByRole('button', { name: /Emitir comprobante/ }));
     await screen.findByText('Comprobante C-000001 emitido');
     expect(llamadas.find((l) => l.metodo === 'POST')?.body).toEqual({ tipoPagoId: 2 });

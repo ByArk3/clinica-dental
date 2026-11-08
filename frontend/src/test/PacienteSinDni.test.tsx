@@ -1,5 +1,5 @@
 // Búsqueda por nombre, registro sin DNI («DNI pendiente») y CU-58 Editar datos (precargados)
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import NuevaCita from '../pages/NuevaCita';
@@ -103,22 +103,26 @@ describe('CU-58 Editar datos', () => {
   });
 
   it('cambiar un dato de identidad pide el motivo y lo envía', async () => {
+    const cerrar = vi.fn();
     const llamadas = simularApi({
       'GET /pacientes/1': { body: maria },
       'PATCH /pacientes/1': { body: { paciente: { ...maria, apellidos: 'Quispe Ramos' }, cambios: ['Apellidos'] } },
     });
-    renderizar(<ModalEditarDatos pacienteId={1} onCerrar={() => {}} />);
+    renderizar(<ModalEditarDatos pacienteId={1} onCerrar={cerrar} />);
     const u = userEvent.setup();
     const ap = await screen.findByDisplayValue('Quispe Rojas');
     await u.clear(ap);
     await u.type(ap, 'Quispe Ramos');
     await u.type(screen.getByLabelText(/Motivo de la corrección/), 'Se escribió mal el apellido');
     await u.click(screen.getByRole('button', { name: 'Guardar cambios (1)' }));
-    expect(await screen.findByText(/Se guardó: Apellidos/)).toBeInTheDocument();
+    // la ventana se cierra y queda el aviso flotante
+    expect(await screen.findByRole('status')).toHaveTextContent('Datos de María Quispe Ramos guardados: Apellidos');
+    await waitFor(() => expect(cerrar).toHaveBeenCalled());
     expect(llamadas.find((l) => l.metodo === 'PATCH')?.body).toMatchObject({ apellidos: 'Quispe Ramos', motivo: 'Se escribió mal el apellido', telefono: '949123456' });
   });
 
   it('DNI pendiente: la recepcionista lo completa; si RENIEC no coincide, avisa y deja confirmar', async () => {
+    const cerrar = vi.fn();
     const llamadas = simularApi({
       'GET /pacientes/9': { body: { ...maria, id: 9, dni: null } },
       'PUT /pacientes/9/dni': [
@@ -126,7 +130,7 @@ describe('CU-58 Editar datos', () => {
         { body: { ...maria, id: 9, dni: '45123987' } },
       ],
     });
-    renderizar(<ModalEditarDatos pacienteId={9} onCerrar={() => {}} />);
+    renderizar(<ModalEditarDatos pacienteId={9} onCerrar={cerrar} />);
     const u = userEvent.setup();
     const seccion = await screen.findByTestId('seccion-dni');
     expect(within(seccion).getByText('DNI pendiente')).toBeInTheDocument();
@@ -135,18 +139,20 @@ describe('CU-58 Editar datos', () => {
     await u.click(within(seccion).getByRole('button', { name: 'Guardar DNI' }));
     expect(await within(seccion).findByText('Pedro López')).toBeInTheDocument();
     await u.click(within(seccion).getByRole('button', { name: 'Es correcto: guardar de todos modos' }));
-    await waitFor(() => expect(within(seccion).getByText('DNI 45123987')).toBeInTheDocument());
+    expect(await screen.findByText(/DNI registrado: 45123987/)).toBeInTheDocument();
+    await waitFor(() => expect(cerrar).toHaveBeenCalled());
     expect(llamadas.filter((l) => l.metodo === 'PUT').map((l) => (l.body as { confirmar: boolean }).confirmar)).toEqual([false, true]);
   });
 
   it('pestaña de la cita: con el adelanto pagado el tratamiento está bloqueado; el motivo sí se edita', async () => {
+    const cerrar = vi.fn();
     const cita = { id: 5, pacienteId: 1, odontologoId: 1, odontologo: 'Dr. Luis Paredes', fecha: '2030-01-07', hora: '10:00', motivo: 'Revisión', canal: 'presencial', estado: 'confirmada', tratamientoPrevisto: 'Consulta', tratamientoPrevistoId: 1, montoAdelanto: '20.00', adelantoVenceEn: null, adelantoPagado: '20.00', pagoReportado: null, pagoRechazoMotivo: null } as const;
     const llamadas = simularApi({
       'GET /pacientes/1': { body: maria },
       'GET /tarifario': { body: [{ id: 1, nombre: 'Consulta', precio: '40.00' }, { id: 2, nombre: 'Profilaxis', precio: '80.00' }] },
       'PATCH /citas/5/datos': { body: { ...cita, motivo: 'Dolor al masticar' } },
     });
-    renderizar(<ModalEditarDatos pacienteId={1} cita={cita} onCerrar={() => {}} />);
+    renderizar(<ModalEditarDatos pacienteId={1} cita={cita} onCerrar={cerrar} />);
     const u = userEvent.setup();
     await u.click(await screen.findByRole('button', { name: 'Datos de la cita' }));
     expect(screen.getByLabelText('Tratamiento previsto')).toBeDisabled();
@@ -155,7 +161,8 @@ describe('CU-58 Editar datos', () => {
     await u.clear(motivo);
     await u.type(motivo, 'Dolor al masticar');
     await u.click(screen.getByRole('button', { name: 'Guardar datos de la cita' }));
-    expect(await screen.findByText(/Se guardaron los datos de la cita/)).toBeInTheDocument();
+    expect(await screen.findByText(/Cita del 07\/01\/2030 10:00 actualizada: Motivo/)).toBeInTheDocument();
+    await waitFor(() => expect(cerrar).toHaveBeenCalled());
     expect(llamadas.find((l) => l.metodo === 'PATCH')?.body).toEqual({ motivo: 'Dolor al masticar' });
   });
 });

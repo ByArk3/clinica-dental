@@ -213,3 +213,15 @@ body { background: var(--fondo); }
 .btn-regresar { border-radius: 999px; padding-inline: 0.9rem; font-weight: 500; }
 .btn-regresar span { display: inline-block; transition: transform 0.15s ease; }
 .btn-regresar:hover span { transform: translateX(-3px); }
+
+/* Insumos: pestañas de «Modificar» y vista previa del stock */
+.pestanas-insumo { background: var(--bs-tertiary-bg); border-radius: 999px; padding: 4px; gap: 4px; }
+.pestanas-insumo .nav-link { border-radius: 999px; color: var(--bs-body-color); padding: 0.4rem 0.75rem; }
+.pestanas-insumo .nav-link.active { background: var(--acento); color: #fff; box-shadow: 0 1px 3px var(--sombra); }
+.pestanas-insumo .nav-link:disabled { opacity: 0.5; }
+.vista-stock { border: 1px dashed var(--bs-border-color); border-radius: 10px; padding: 0.6rem 0.9rem; background: var(--bs-tertiary-bg); }
+
+/* RN-23 Administrador principal */
+.insignia-principal { display: inline-block; padding: 0.1rem 0.55rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; color: #6b4e00; background: linear-gradient(135deg, #ffe08a, #f5b82e); box-shadow: 0 1px 2px var(--sombra); white-space: nowrap; }
+.aviso-principal { display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.9rem; border-radius: 10px; background: var(--bs-tertiary-bg); border: 1px solid var(--bs-border-color); font-size: 0.9rem; }
+.traspaso { padding: 0.8rem 1rem; border-radius: 10px; border: 1px dashed var(--bs-border-color); background: var(--bs-tertiary-bg); }

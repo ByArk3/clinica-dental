@@ -113,6 +113,8 @@ export const MENSAJES = {
   CITA_SIN_COBRO: 'La cita no tiene cobros pendientes',
   TRATAMIENTO_SIN_PRECIO: 'Hay un tratamiento sin precio; no se puede cobrar',
   MONTO_INSUFICIENTE: 'El monto recibido es menor que el total',
+  /** En efectivo se acepta del total hasta total + S/ 200 (el billete más grande, para el vuelto). */
+  montoFueraDeRango: (total: string, maximo: string) => `El monto debe estar entre S/ ${total} y S/ ${maximo}`,
   DESCUENTO_NO_VALIDO: 'El descuento no está disponible',
   TIPO_PAGO_NO_VALIDO: 'Elija un tipo de pago válido',
   COMPROBANTE_NO_ENCONTRADO: 'Comprobante no encontrado',
@@ -139,6 +141,14 @@ export const MENSAJES = {
   USUARIO_NO_ENCONTRADO: 'Usuario no encontrado',
   NO_DESACTIVARSE: 'No puede desactivar su propia cuenta',
   NO_QUITARSE_ADMIN: 'No puede quitarse el rol de Administrador',
+  // RN-23 Administrador principal
+  PRINCIPAL_PROTEGIDO: 'El administrador principal no puede ser modificado ni desactivado por otro administrador',
+  SOLO_PRINCIPAL_ADMINS: 'Solo el administrador principal puede crear, modificar o desactivar a otros administradores',
+  NO_CONTRASENA_ADMIN: 'No se puede cambiar la contraseña de otro administrador: debe usar «¿Olvidó su contraseña?»',
+  ULTIMO_ADMIN: 'Debe quedar al menos un administrador activo',
+  SOLO_PRINCIPAL_TRASPASA: 'Solo el administrador principal puede traspasar su papel',
+  TRASPASO_DESTINO: 'Elija a otro administrador activo',
+  CONTRASENA_INCORRECTA: 'La contraseña no es correcta',
   CAMBIO_ROL_ODONTOLOGO: 'El rol de odontólogo no se puede asignar ni quitar a una cuenta existente; registre un usuario nuevo',
 } as const;
 
@@ -227,7 +237,7 @@ export const loginSchema = z.object({
 export const MAX_INTENTOS_LOGIN = 3;
 export const MINUTOS_BLOQUEO_LOGIN = 15;
 
-export const ACCIONES_AUDITORIA = ['ver_historial', 'editar_atencion', 'anular_comprobante', 'bloqueo_login', 'desbloqueo_login', 'reabrir_alerta', 'corregir_paciente', 'cambiar_dni', 'editar_cita'] as const;
+export const ACCIONES_AUDITORIA = ['ver_historial', 'editar_atencion', 'anular_comprobante', 'bloqueo_login', 'desbloqueo_login', 'reabrir_alerta', 'corregir_paciente', 'cambiar_dni', 'editar_cita', 'crear_usuario', 'modificar_usuario', 'desactivar_usuario', 'activar_usuario', 'traspasar_principal'] as const;
 export type AccionAuditoria = (typeof ACCIONES_AUDITORIA)[number];
 export const ETIQUETA_AUDITORIA: Record<AccionAuditoria, string> = {
   ver_historial: 'Vio el historial clínico',
@@ -239,6 +249,11 @@ export const ETIQUETA_AUDITORIA: Record<AccionAuditoria, string> = {
   corregir_paciente: 'Corrigió datos del paciente',
   cambiar_dni: 'Registró o cambió un DNI',
   editar_cita: 'Editó datos de una cita',
+  crear_usuario: 'Creó un usuario',
+  modificar_usuario: 'Modificó un usuario',
+  desactivar_usuario: 'Desactivó un usuario',
+  activar_usuario: 'Activó un usuario',
+  traspasar_principal: 'Traspasó el papel de administrador principal',
 };
 
 /** Campos numéricos: solo dígitos y largo máximo (la interfaz no deja escribir otra cosa; la API también lo valida). */
@@ -501,12 +516,23 @@ export type EditarAtencionDTO = z.infer<typeof editarAtencionSchema>;
 
 // ---------- Caja (CU-13) ----------
 export type TipoCobro = 'servicio' | 'adelanto';
+/** Efectivo: el monto recibido va del total a total + S/ 200 (el billete más grande); hasta 5 dígitos enteros y 2 decimales. */
+export const VUELTO_MAXIMO = 200;
+export const DIGITOS_MONTO = 5;
+/** Deja solo números y un separador decimal (punto o coma), con hasta 5 dígitos enteros y 2 decimales. */
+export function limpiarMonto(texto: string) {
+  const t = texto.replace(',', '.').replace(/[^\d.]/g, '');
+  const [entero = '', ...resto] = t.split('.');
+  const decimales = resto.join('').slice(0, 2);
+  return entero.slice(0, DIGITOS_MONTO) + (t.includes('.') ? `.${decimales}` : '');
+}
 export const comprobanteSchema = z.object({
   tipoPagoId: z.coerce.number({ invalid_type_error: 'Elija un tipo de pago' }).int().positive('Elija un tipo de pago'),
   // Solo se usa en efectivo; con tarjeta o Yape/Plin se cobra el total exacto
   montoRecibido: z.coerce
     .number({ invalid_type_error: 'Ingrese el monto recibido' })
     .min(0, 'No puede ser negativo')
+    .max(99_999.99, `Máximo ${DIGITOS_MONTO} dígitos`)
     .refine((n) => Math.abs(n * 100 - Math.round(n * 100)) < 1e-6, 'Máximo 2 decimales')
     .optional(),
 });
@@ -579,6 +605,8 @@ export const ajusteSchema = z.object({
 export type AjusteDTO = z.infer<typeof ajusteSchema>;
 
 // ---------- Usuarios (CU-34..37) ----------
+/** CU-59 Traspasar el papel de administrador principal: se confirma con la propia contraseña. */
+export const traspasoPrincipalSchema = z.object({ password: z.string().min(1, 'Ingrese su contraseña') });
 export const ROLES_PERSONAL = ['recepcionista', 'odontologo', 'administrador'] as const;
 export const usuarioSchema = z.object({
   nombres: z.string().trim().min(3, 'Ingrese los nombres').max(120),

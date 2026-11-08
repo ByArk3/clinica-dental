@@ -30,3 +30,13 @@ describe('Formulario de registro del paciente', () => {
     expect(screen.getByText(/Es menor de edad/)).toBeInTheDocument();
   });
 });
+
+describe('Caja: monto recibido en efectivo', () => {
+  it('solo números con hasta 5 dígitos y 2 decimales', async () => {
+    const { limpiarMonto } = await import('@clinica/shared');
+    expect(limpiarMonto('sdsd125')).toBe('125');
+    expect(limpiarMonto('1234567')).toBe('12345');
+    expect(limpiarMonto('150,509')).toBe('150.50');
+    expect(limpiarMonto('1.2.3')).toBe('1.23');
+  });
+});

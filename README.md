@@ -141,7 +141,7 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | Descuentos (P3) y monto del adelanto (P6) gestionados por el Administrador | `admin.test.ts` |
 | CU-38 Panel de control · CU-39 Reporte de ingresos · CU-40 Reporte de inventario (rango de fechas, exportación CSV para Excel) | `reporte.test.ts`, `Iteracion4.test.tsx` |
 
-Total: **315 pruebas de API + 110 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y el CU-58 están implementados.
+Total: **322 pruebas de API + 115 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y los CU-58 y CU-59 están implementados.
 
 **Tareas programadas** (`backend/src/jobs`, node-cron, hora de Lima; se activan con `JOBS_ENABLED=true`):
 - **Cada 5 min:** libera las reservas cuyo adelanto no se pagó ni reportó en 1 hora (RN-04; también las citas antiguas
@@ -254,6 +254,7 @@ Respeta «reducir movimiento» del sistema operativo.
 | RN-20 | Solo el odontólogo que registró una atención puede corregirla, con motivo y guardando la versión anterior; si ya está cobrada, solo diagnóstico y observaciones |
 | RN-21 | 3 intentos fallidos de inicio de sesión → bloqueo de 15 minutos |
 | RN-22 | Los accesos al historial, las correcciones, las anulaciones y los bloqueos quedan en la auditoría |
+| RN-23 | Hay un **administrador principal** (Carlos Vega en la demo): nadie lo modifica ni desactiva, solo él gestiona a otros administradores, nadie cambia la contraseña de otro administrador y siempre queda al menos uno activo. La gestión de usuarios queda en la auditoría |
 
 **Casos de uso nuevos**
 
@@ -276,6 +277,7 @@ Respeta «reducir movimiento» del sistema operativo.
 | CU-55 | Configurar datos de pago | Administrador | — | `GET/PUT /admin/pago`, `PUT/DELETE /admin/pago/qr` |
 | CU-56 | Consultar saldo a favor | Paciente | — | «Mis datos» (`GET /pacientes/me`) |
 | CU-57 | Consultar datos en RENIEC o SUNAT | Recepcionista, Administrador + actor externo | «extend» de CU-03 y de CU-26 | `GET /reniec/:dni`, `GET /sunat/:ruc` |
+| CU-59 | Traspasar administrador principal | Administrador principal | «extend» de CU-35 | `POST /usuarios/:id/principal` (confirma con su contraseña) |
 | CU-58 | Corregir datos del paciente y de la cita | Recepcionista (DNI ya registrado: solo Administrador) | «extend» de CU-04 | `PATCH /pacientes/:id`, `PUT /pacientes/:id/dni`, `PATCH /citas/:id/datos` |
 
 Los «include» del diagrama son solo tres: **CU-05** (desde CU-06 y CU-07), **CU-12** (desde CU-11, CU-25 y CU-33) y
@@ -301,6 +303,11 @@ Cobrar adelanto, Editar datos y WhatsApp, y las anteriores solo para consultar; 
 apoderado obligatorio** (en todos los formularios). Los obligatorios se marcan con *. Contraseña del paciente: mínimo 8,
 con letras y números, máximo 64, sin su DNI ni su nombre o apellido (la ayuda en pantalla dice solo «Mínimo 8 caracteres»).
 En «Editar datos», si el paciente tiene cuenta web el correo es obligatorio y se cambia también en su cuenta.
+
+**Otras mejoras de uso.** «Editar datos» se cierra al guardar y deja un aviso flotante. En Caja, el monto recibido en
+efectivo solo acepta números (hasta 5 dígitos y 2 decimales) entre el total y el total + S/ 200 (el billete más grande);
+con tarjeta o billetera es el total exacto. En Insumos hay un solo botón **Modificar** con dos pestañas: «Datos del insumo»
+(CU-21) y «Corregir stock» (CU-25: conteo físico —se escribe lo contado— o merma, con motivo y registro en el kárdex).
 
 **Reglas de validación añadidas.** Número de operación: **Yape** solo números, máximo 8; **Plin** letras y números, de 12 a
 20 (en mayúsculas). Fechas con sentido: nacimiento de hoy hacia atrás (máx. 120 años), citas de hoy hasta **un año**

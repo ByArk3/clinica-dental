@@ -377,6 +377,8 @@ export interface Usuario {
   especialidad: string | null;
   dni: string | null;
   bloqueadoHasta: string | null;
+  /** RN-23: administrador principal (protegido) */
+  principal: boolean;
 }
 export interface Descuento {
   id: number;
@@ -444,6 +446,7 @@ export const usuariosApi = {
   modificar: (id: number, d: UsuarioModificarDTO) => api<Usuario>(`/usuarios/${id}`, { method: 'PATCH', body: d }),
   cambiarEstado: (id: number, activo: boolean) => api<Usuario>(`/usuarios/${id}/${activo ? 'activar' : 'desactivar'}`, { method: 'PATCH' }),
   desbloquear: (id: number) => api<{ bloqueadoHasta: null }>(`/usuarios/${id}/desbloquear`, { method: 'PATCH' }),
+  traspasarPrincipal: (id: number, password: string) => api<Usuario>(`/usuarios/${id}/principal`, { method: 'POST', body: { password } }),
 };
 
 export interface EventoAuditoria {

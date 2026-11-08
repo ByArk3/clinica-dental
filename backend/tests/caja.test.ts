@@ -112,6 +112,17 @@ describe('CU-13 Emitir comprobante', () => {
     expect((await prisma.cita.findUniqueOrThrow({ where: { id } })).estado).toBe('atendida');
   });
 
+  it('efectivo: hasta el total + S/ 200 (el billete más grande); más que eso es un error de tipeo', async () => {
+    const id = await citaAtendida(['Profilaxis']); // total S/ 80.00
+    const recep = await sesion('recepcionista');
+    const r = await recep.post(`/api/caja/citas/${id}/comprobante`).send({ tipoPagoId: await tipoPago('Efectivo'), montoRecibido: 280.01 });
+    expect(r.status).toBe(422);
+    expect(r.body.campos.montoRecibido).toBe(MENSAJES.montoFueraDeRango('80.00', '280.00'));
+    expect((await recep.post(`/api/caja/citas/${id}/comprobante`).send({ tipoPagoId: await tipoPago('Efectivo'), montoRecibido: 100000 })).status).toBe(422);
+    const ok = await recep.post(`/api/caja/citas/${id}/comprobante`).send({ tipoPagoId: await tipoPago('Efectivo'), montoRecibido: 280 });
+    expect(ok.body).toMatchObject({ total: '80.00', vuelto: '200.00' });
+  });
+
   it('con campaña vigente el día de la cita: el comprobante guarda el descuento por línea', async () => {
     const id = await citaAtendida(['Curación con resina', 'Profilaxis']);
     const hoy = ahoraLima().fecha;

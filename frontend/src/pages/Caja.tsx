@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ETIQUETA_BILLETERA, MENSAJES, rechazarPagoSchema } from '@clinica/shared';
+import { ETIQUETA_BILLETERA, MENSAJES, rechazarPagoSchema, VUELTO_MAXIMO, limpiarMonto } from '@clinica/shared';
 import { cajaApi, type Comprobante, type ComprobanteDelDia, type PendienteCaja } from '../api/recursos';
 import { ModalAnular } from '../components/ModalAnular';
 import { ModalConfirmar } from '../components/ModalConfirmar';
@@ -168,7 +168,8 @@ function Cobro({
   const efectivo = tipos.data?.find((t) => t.id === tipoPagoId)?.nombre.toLowerCase() === 'efectivo';
   const total = Number(importe.data?.total ?? 0);
   const recibido = Number(monto.replace(',', '.'));
-  const vuelto = efectivo && monto !== '' && recibido >= total ? recibido - total : null;
+  const maximo = total + VUELTO_MAXIMO; // efectivo: hasta un billete de S/ 200 por encima del total
+  const vuelto = efectivo && monto !== '' && recibido >= total && recibido <= total + VUELTO_MAXIMO ? recibido - total : null; // fuera de rango: «—»
   const listo = (c: Comprobante) => {
     qc.invalidateQueries({ queryKey: ['caja-pendientes'] });
     qc.invalidateQueries({ queryKey: ['caja-comprobantes'] });
@@ -199,6 +200,7 @@ function Cobro({
     if (!tipoPagoId) c.tipoPagoId = 'Elija un tipo de pago';
     if (efectivo && (monto === '' || Number.isNaN(recibido))) c.montoRecibido = 'Ingrese el monto recibido';
     else if (efectivo && recibido < total) c.montoRecibido = MENSAJES.MONTO_INSUFICIENTE; // 6.1
+    else if (efectivo && recibido > maximo) c.montoRecibido = MENSAJES.montoFueraDeRango(total.toFixed(2), maximo.toFixed(2));
     setErrores(c);
     if (Object.keys(c).length === 0) emitir.mutate();
   }
@@ -374,6 +376,15 @@ function Cobro({
             ))}
           </div>
           {errores.tipoPagoId && <div className="text-danger small">{errores.tipoPagoId}</div>}
+          {tipoPagoId && !efectivo && (
+            <div className="row g-2 mt-2">
+              <div className="col-6">
+                <label htmlFor="monto-fijo" className="form-label">Monto recibido (S/)</label>
+                <input id="monto-fijo" className="form-control" value={total.toFixed(2)} readOnly disabled />
+                <div className="form-text">Con tarjeta o billetera se cobra el total exacto.</div>
+              </div>
+            </div>
+          )}
           {efectivo && (
             <div className="row g-2 mt-2 align-items-end">
               <div className="col-6">
@@ -383,11 +394,14 @@ function Cobro({
                 <input
                   id="monto"
                   inputMode="decimal"
+                  placeholder={total.toFixed(2)}
                   className={`form-control ${errores.montoRecibido ? 'is-invalid' : ''}`}
                   value={monto}
-                  onChange={(e) => setMonto(e.target.value)}
+                  onChange={(e) => setMonto(limpiarMonto(e.target.value))}
+                  aria-describedby="monto-ayuda"
                 />
                 <div className="invalid-feedback">{errores.montoRecibido}</div>
+                {!errores.montoRecibido && <div id="monto-ayuda" className="form-text">Entre {solesPE(total)} y {solesPE(maximo)}</div>}
               </div>
               <div className="col-6">
                 <span className="form-label d-block">Vuelto</span>

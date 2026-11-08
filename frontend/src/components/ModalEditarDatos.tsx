@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ETIQUETA_SEXO, LARGO_NUMERICO, SEXOS, dniSchema, editarPacienteSchema, esMenorDeEdad, soloLetras, type Sexo } from '@clinica/shared';
@@ -6,7 +6,7 @@ import { citasApi, pacientesApi, type Cita, type Paciente } from '../api/recurso
 import { ApiError } from '../api/cliente';
 import { useUsuarioOpcional } from '../auth';
 import { fechaPE, mensajeError, solesPE } from '../formato';
-import { BotonAccion, CampoDigitos } from './Interaccion';
+import { AvisoFlotante, BotonAccion, CampoDigitos } from './Interaccion';
 import { DniPaciente } from './DniPaciente';
 import { fechaMinimaNacimiento, hoyEnLima } from '@clinica/shared';
 
@@ -46,7 +46,9 @@ export function ModalEditarDatos({ pacienteId, cita, onCerrar }: Props) {
   const [v, setV] = useState<Valores | null>(null);
   const [motivo, setMotivo] = useState('');
   const [errores, setErrores] = useState<Record<string, string>>({});
-  const [aviso, setAviso] = useState<string | null>(null);
+  // Al guardar bien, la ventana se cierra y queda un aviso flotante (fuera de la ventana) por unos segundos
+  const [hecho, setHecho] = useState<string | null>(null);
+  const quitarHecho = useCallback(() => setHecho(null), []);
 
   const original = useMemo(() => (paciente.data ? valoresDe(paciente.data) : null), [paciente.data]);
   useEffect(() => {
@@ -56,11 +58,16 @@ export function ModalEditarDatos({ pacienteId, cita, onCerrar }: Props) {
   const cambiados = v && original ? (Object.keys(v) as Campo[]).filter((k) => v[k].trim() !== original[k]) : [];
   const cambiaIdentidad = cambiados.some((k) => IDENTIDAD.includes(k));
 
+  /** Guardado correcto: cierra la ventana y muestra el aviso flotante. */
+  function terminar(mensaje: string) {
+    setHecho(mensaje);
+    cerrar();
+  }
+
   function cerrar() {
     setV(null);
     setMotivo('');
     setErrores({});
-    setAviso(null);
     setPestana('paciente');
     guardar.reset();
     onCerrar();
@@ -80,9 +87,9 @@ export function ModalEditarDatos({ pacienteId, cita, onCerrar }: Props) {
     onSuccess: (r) => {
       setErrores({});
       setMotivo('');
-      setAviso(`Se guardó: ${r.cambios.join(', ')}.`);
       qc.setQueryData(['paciente', pacienteId], r.paciente);
       qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== 'paciente' });
+      terminar(`Datos de ${r.paciente.nombres} ${r.paciente.apellidos} guardados: ${r.cambios.join(', ')}`);
     },
     onError: (e) => {
       if (e instanceof ApiError) setErrores(e.datos.campos ?? {});
@@ -137,6 +144,12 @@ export function ModalEditarDatos({ pacienteId, cita, onCerrar }: Props) {
 
   const p = paciente.data;
   return (
+    <>
+    {hecho && (
+      <AvisoFlotante icono="✓" duracion={4500} onCerrar={quitarHecho}>
+        {hecho}
+      </AvisoFlotante>
+    )}
     <Modal show={!!pacienteId} onHide={cerrar} size="lg" centered scrollable>
       <Modal.Header closeButton>
         <Modal.Title className="h5">Editar datos{p ? ` · ${p.nombres} ${p.apellidos}` : ''}</Modal.Title>
@@ -144,8 +157,8 @@ export function ModalEditarDatos({ pacienteId, cita, onCerrar }: Props) {
       <Modal.Body>
         {cita && (
           <ul className="nav nav-tabs mb-3">
-            <li className="nav-item"><button type="button" className={`nav-link ${pestana === 'paciente' ? 'active' : ''}`} onClick={() => { setPestana('paciente'); setAviso(null); }}>Datos del paciente</button></li>
-            <li className="nav-item"><button type="button" className={`nav-link ${pestana === 'cita' ? 'active' : ''}`} onClick={() => { setPestana('cita'); setAviso(null); }}>Datos de la cita</button></li>
+            <li className="nav-item"><button type="button" className={`nav-link ${pestana === 'paciente' ? 'active' : ''}`} onClick={() => setPestana('paciente')}>Datos del paciente</button></li>
+            <li className="nav-item"><button type="button" className={`nav-link ${pestana === 'cita' ? 'active' : ''}`} onClick={() => setPestana('cita')}>Datos de la cita</button></li>
           </ul>
         )}
         {paciente.isLoading && <p className="text-muted">Cargando…</p>}
@@ -174,28 +187,28 @@ export function ModalEditarDatos({ pacienteId, cita, onCerrar }: Props) {
                 </div>
               )}
             </div>
-            <SeccionDni paciente={p} esAdmin={esAdmin} />
+            <SeccionDni paciente={p} esAdmin={esAdmin} onGuardado={terminar} />
             <p className="small text-muted mt-3 mb-0">Alergias y antecedentes los corrige el odontólogo (datos clínicos, RN-07).</p>
           </>
         )}
-        {pestana === 'cita' && cita && <SeccionCita cita={cita} onGuardado={() => setAviso('Se guardaron los datos de la cita.')} />}
-        {aviso && <div className="alert alert-success mt-3 mb-0" role="status">✓ {aviso}</div>}
+        {pestana === 'cita' && cita && <SeccionCita cita={cita} onGuardado={terminar} />}
         {guardar.isError && !(guardar.error instanceof ApiError && guardar.error.datos.campos) && <div className="alert alert-danger mt-3 mb-0" role="alert">{mensajeError(guardar.error)}</div>}
       </Modal.Body>
       <Modal.Footer>
         <button type="button" className="btn btn-outline-secondary" onClick={cerrar}>Cerrar</button>
         {pestana === 'paciente' && (
-          <BotonAccion type="button" mutacion={guardar} disabled={cambiados.length === 0} onClick={() => { setAviso(null); guardar.mutate(); }} title={cambiados.length === 0 ? 'No hay cambios' : undefined}>
+          <BotonAccion type="button" mutacion={guardar} disabled={cambiados.length === 0} onClick={() => guardar.mutate()} title={cambiados.length === 0 ? 'No hay cambios' : undefined}>
             Guardar cambios{cambiados.length > 0 ? ` (${cambiados.length})` : ''}
           </BotonAccion>
         )}
       </Modal.Footer>
     </Modal>
+    </>
   );
 }
 
 /** DNI: completar si está pendiente (recepcionista) o cambiar (solo Administrador, con motivo). Avisa si RENIEC no coincide. */
-function SeccionDni({ paciente, esAdmin }: { paciente: Paciente; esAdmin: boolean }) {
+function SeccionDni({ paciente, esAdmin, onGuardado }: { paciente: Paciente; esAdmin: boolean; onGuardado: (mensaje: string) => void }) {
   const qc = useQueryClient();
   const [abierto, setAbierto] = useState(false);
   const [dni, setDni] = useState('');
@@ -213,6 +226,7 @@ function SeccionDni({ paciente, esAdmin }: { paciente: Paciente; esAdmin: boolea
       setMotivo('');
       setReniec(null);
       setError(null);
+      onGuardado(`${paciente.dni ? 'DNI cambiado' : 'DNI registrado'}: ${p.dni} · ${p.nombres} ${p.apellidos}`);
     },
     onError: (e) => {
       if (e instanceof ApiError && e.datos.codigo === 'DNI_RENIEC_NO_COINCIDE') setReniec(e.datos.campos?.reniec ?? '');
@@ -268,7 +282,7 @@ function SeccionDni({ paciente, esAdmin }: { paciente: Paciente; esAdmin: boolea
 }
 
 /** Datos de la cita: motivo y, si el adelanto no se pagó, el tratamiento previsto (el adelanto se recalcula). */
-function SeccionCita({ cita, onGuardado }: { cita: Cita; onGuardado: () => void }) {
+function SeccionCita({ cita, onGuardado }: { cita: Cita; onGuardado: (mensaje: string) => void }) {
   const qc = useQueryClient();
   const tarifario = useQuery({ queryKey: ['tarifario-publico'], queryFn: citasApi.tarifario, staleTime: 5 * 60_000 });
   const [motivo, setMotivo] = useState(cita.motivo);
@@ -281,7 +295,7 @@ function SeccionCita({ cita, onGuardado }: { cita: Cita; onGuardado: () => void 
     mutationFn: () => citasApi.editarDatos(cita.id, { motivo: motivo.trim(), ...(cambioTratamiento ? { tratamientoPrevistoId: Number(tratamientoId) } : {}) }),
     onSuccess: () => {
       qc.invalidateQueries();
-      onGuardado();
+      onGuardado(`Cita del ${fechaPE(cita.fecha)} ${cita.hora} actualizada: ${[cambioMotivo && 'Motivo', cambioTratamiento && 'Tratamiento previsto'].filter(Boolean).join(', ')}`);
     },
   });
   const nombreOriginal = tarifario.data?.find((t) => t.id === cita.tratamientoPrevistoId)?.nombre ?? cita.tratamientoPrevisto;
