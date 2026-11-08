@@ -69,3 +69,27 @@ describe('Confirmar contraseña', () => {
     expect(screen.getByText('Las contraseñas no coinciden')).toBeInTheDocument();
   });
 });
+
+describe('Reglas de escritura en pantalla', () => {
+  it('Tarifario: títulos «Insumo / Cantidad», unidad al lado y solo números en precio y cantidad', async () => {
+    const { default: Tarifario } = await import('../pages/Tarifario');
+    const { simularApi } = await import('./utils');
+    simularApi({
+      'GET /tratamientos': { body: [{ id: 1, nombre: 'Aplicación de flúor', precio: '40.00', activo: true, insumos: [{ insumoId: 8, insumo: 'Barniz de flúor', unidad: 'dosis', cantidad: '1.00' }] }] },
+      'GET /insumos': { body: [{ id: 8, nombre: 'Barniz de flúor', unidad: 'dosis', stockActual: '30', stockMinimo: '10', activo: true }] },
+    });
+    renderizar(<Tarifario />);
+    const u = userEvent.setup();
+    await u.click(await screen.findByRole('button', { name: 'Modificar' }));
+    const precio = await screen.findByLabelText('Precio (S/)');
+    await u.clear(precio);
+    await u.type(precio, '40 sdsd');
+    expect(precio).toHaveValue('40');
+    expect(screen.getByText('Insumo')).toBeInTheDocument();
+    expect(screen.getByText('Cantidad')).toBeInTheDocument();
+    expect(screen.getByText('dosis')).toBeInTheDocument();
+    const cant = screen.getByLabelText('Cantidad 1');
+    await u.type(cant, 'abc');
+    expect(cant).not.toHaveValue(expect.stringMatching(/[a-z]/));
+  });
+});

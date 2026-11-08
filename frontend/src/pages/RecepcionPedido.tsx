@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { MENSAJES } from '@clinica/shared';
+import { LIMITE_TEXTO, MENSAJES, limpiarDecimal } from '@clinica/shared';
 import { pedidosApi, type Pedido } from '../api/recursos';
 import { ChipPedido } from '../components/ChipPedido';
-import { BotonAccion } from '../components/Interaccion';
+import { BotonAccion, Contador } from '../components/Interaccion';
 import { camposApi, fechaHoraPE, mensajeError, numPE } from '../formato';
 
 /** CU-33 (i_recepcion): ingresar lo recibido, verificar contra el pedido (RN-15) y sumar al stock. */
@@ -88,7 +88,7 @@ export default function RecepcionPedido() {
                       <td>{d.insumo}<div className="small text-muted">stock actual {numPE(d.stockActual)} {d.unidad}</div></td>
                       <td className="text-end">{numPE(d.cantidadPedida)}</td>
                       <td>
-                        <input aria-label={`Recibido de ${d.insumo}`} inputMode="decimal" className={`form-control ${errores[`item.${d.id}`] ? 'is-invalid' : ''}`} value={recibido[d.id] ?? ''} onChange={(e) => setRecibido({ ...recibido, [d.id]: e.target.value })} />
+                        <input aria-label={`Recibido de ${d.insumo}`} inputMode="decimal" className={`form-control ${errores[`item.${d.id}`] ? 'is-invalid' : ''}`} value={recibido[d.id] ?? ''} onChange={(e) => setRecibido({ ...recibido, [d.id]: limpiarDecimal(e.target.value) })} />
                       </td>
                     </tr>
                   );
@@ -99,7 +99,8 @@ export default function RecepcionPedido() {
           {diferencias.length > 0 && <div className="alert alert-warning small py-2">Hay {diferencias.length} diferencia(s) con lo pedido: el pedido quedará «Recibido con diferencias» y solo se sumará lo recibido.</div>}
           <div className="mb-3">
             <label htmlFor="observacion" className="form-label">Observación {diferencias.length > 0 ? '*' : '(opcional)'}</label>
-            <textarea id="observacion" rows={2} className={`form-control ${errores.observacion ? 'is-invalid' : ''}`} value={observacion} onChange={(e) => setObservacion(e.target.value)} />
+            <textarea id="observacion" rows={2} className={`form-control ${errores.observacion ? 'is-invalid' : ''}`} value={observacion} maxLength={LIMITE_TEXTO.observacion} onChange={(e) => setObservacion(e.target.value)} />
+            <Contador valor={observacion} max={LIMITE_TEXTO.observacion} />
             <div className="invalid-feedback">{errores.observacion}</div>
           </div>
           <div className="form-check mb-3">

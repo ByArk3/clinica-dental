@@ -1,7 +1,7 @@
 import { useCallback, useState, type FormEvent } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { usuarioModificarSchema, usuarioNuevoSchema, type Rol, type UsuarioModificarDTO, type UsuarioNuevoDTO, LARGO_NUMERICO, soloDigitos } from '@clinica/shared';
+import { usuarioModificarSchema, usuarioNuevoSchema, type Rol, type UsuarioModificarDTO, type UsuarioNuevoDTO, LARGO_NUMERICO, soloDigitos, soloLetrasPersonal, soloLetrasSimples } from '@clinica/shared';
 import { usuariosApi, type Usuario } from '../api/recursos';
 import { ModalConfirmar } from '../components/ModalConfirmar';
 import { CampoPassword, ConfirmarPassword, NO_COINCIDEN } from '../components/CampoPassword';
@@ -169,7 +169,11 @@ function FormUsuario({ usuario, esYo, soyPrincipal, onCerrar, onHecho }: { usuar
             maxLength={k === 'cmp' ? LARGO_NUMERICO.cmp : undefined}
             className={`form-control ${errores[k] ? 'is-invalid' : ''}`}
             value={v[k]}
-            onChange={(e) => setV({ ...v, [k]: k === 'cmp' ? soloDigitos(e.target.value, LARGO_NUMERICO.cmp) : e.target.value })}
+            onChange={(e) => {
+              const t = e.target.value;
+              // CMP: solo números · nombres: solo letras (y el punto de «Dr.») · especialidad: solo letras
+              setV({ ...v, [k]: k === 'cmp' ? soloDigitos(t, LARGO_NUMERICO.cmp) : k === 'nombres' ? soloLetrasPersonal(t) : k === 'especialidad' ? soloLetrasSimples(t) : t });
+            }}
           />
           <div className="invalid-feedback">{errores[k]}</div>
         </>

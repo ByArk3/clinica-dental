@@ -1,12 +1,12 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { atencionSchema } from '@clinica/shared';
+import { atencionSchema, LIMITE_TEXTO } from '@clinica/shared';
 import { atencionApi, historialApi, tarifarioApi, type ResultadoAtencion } from '../api/recursos';
 import { PiezaDental } from '../components/PiezaDental';
 import { TablaInsumos, calcularConsumo } from '../components/TablaInsumos';
 import { VistaHistorial } from '../components/VistaHistorial';
-import { BotonAccion } from '../components/Interaccion';
+import { BotonAccion, Contador } from '../components/Interaccion';
 import { hoyLima, mensajeError, solesPE } from '../formato';
 
 interface Linea {
@@ -116,7 +116,8 @@ export default function RegistrarAtencion() {
           <form className="tarjeta" onSubmit={enviar} noValidate>
             <div className="mb-3">
               <label htmlFor="diagnostico" className="form-label">Diagnóstico *</label>
-              <textarea id="diagnostico" rows={2} className={`form-control ${errores.diagnostico ? 'is-invalid' : ''}`} value={diagnostico} onChange={(e) => setDiagnostico(e.target.value)} />
+              <textarea id="diagnostico" rows={2} className={`form-control ${errores.diagnostico ? 'is-invalid' : ''}`} value={diagnostico} maxLength={LIMITE_TEXTO.diagnostico} onChange={(e) => setDiagnostico(e.target.value)} />
+            <Contador valor={diagnostico} max={LIMITE_TEXTO.diagnostico} />
               <div className="invalid-feedback">{errores.diagnostico}</div>
             </div>
 
@@ -151,7 +152,8 @@ export default function RegistrarAtencion() {
 
             <div className="mb-3">
               <label htmlFor="observaciones" className="form-label">Observaciones</label>
-              <textarea id="observaciones" rows={2} className="form-control" value={observaciones} onChange={(e) => setObservaciones(e.target.value)} />
+              <textarea id="observaciones" rows={2} className="form-control" value={observaciones} maxLength={LIMITE_TEXTO.observaciones} onChange={(e) => setObservaciones(e.target.value)} />
+            <Contador valor={observaciones} max={LIMITE_TEXTO.observaciones} />
             </div>
 
             <h2 className="h6">Insumos que se descontarán</h2>

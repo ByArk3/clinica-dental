@@ -202,7 +202,7 @@ export default function NuevaCita() {
                 {paciente.restringido && ' — requiere adelanto'}
               </span>
             )}
-            <button className="btn btn-sm btn-link" onClick={() => setEditando(true)}>{paciente.dni ? 'Editar datos' : 'Editar datos / completar DNI'}</button>
+            <button className="btn btn-sm btn-link" onClick={() => setEditando(true)}>{paciente.dni ? 'Editar datos del paciente' : 'Editar datos del paciente / completar DNI'}</button>
           </div>
           <ModalEditarDatos
             pacienteId={editando ? paciente.id : null}

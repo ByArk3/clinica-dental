@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { motivoSchema } from '@clinica/shared';
+import { motivoSchema, LIMITE_TEXTO } from '@clinica/shared';
 import { cajaApi, type Comprobante } from '../api/recursos';
 import { ModalConfirmar } from './ModalConfirmar';
 import { mensajeError, solesPE } from '../formato';
+import { Contador } from './Interaccion';
 
 interface Props {
   comprobante: { id: number; numero: string; tipo: 'servicio' | 'adelanto'; total: string; paciente: string } | null;
@@ -69,9 +70,11 @@ export function ModalAnular({ comprobante, onCerrar, onAnulado }: Props) {
             className={`form-control ${error ? 'is-invalid' : ''}`}
             placeholder="p. ej. Se cobró el tratamiento equivocado"
             value={motivo}
+            maxLength={LIMITE_TEXTO.motivo}
             onChange={(e) => setMotivo(e.target.value)}
           />
           <div className="invalid-feedback">{error}</div>
+          <Contador valor={motivo} max={LIMITE_TEXTO.motivo} />
         </>
       )}
     </ModalConfirmar>

@@ -159,3 +159,12 @@ export const IconoPapelera = ({ tam = 15 }: { tam?: number }) => (
     <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" />
   </svg>
 );
+
+/** Contador de caracteres para textos largos («120/500»); se pone en rojo al llegar al límite. */
+export function Contador({ valor, max }: { valor: string; max: number }) {
+  return (
+    <div className={`form-text text-end ${valor.length >= max ? 'text-danger' : ''}`} aria-live="polite">
+      {valor.length}/{max}
+    </div>
+  );
+}

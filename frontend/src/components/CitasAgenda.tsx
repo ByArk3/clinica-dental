@@ -19,7 +19,8 @@ export function CitasAgenda({ citas, conFecha, mostrarPaciente = true, vacio }: 
   const [inasistencia, setInasistencia] = useState<CitaDelDia | null>(null);
   const [cancelar, setCancelar] = useState<CitaDelDia | null>(null);
   const [reprogramar, setReprogramar] = useState<CitaDelDia | null>(null);
-  const [editar, setEditar] = useState<CitaDelDia | null>(null);
+  // «Editar cita» abre la pestaña de la cita; «Completar DNI», la del paciente
+  const [editar, setEditar] = useState<{ cita: CitaDelDia; pestana: 'paciente' | 'cita' } | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [porClinica, setPorClinica] = useState(false);
 
@@ -76,14 +77,17 @@ export function CitasAgenda({ citas, conFecha, mostrarPaciente = true, vacio }: 
               </div>
               <div className="d-flex flex-wrap gap-2 mt-2">
                 {c.estado === 'confirmada' && (
-                  <button
-                    className="btn btn-sm btn-outline-danger"
-                    disabled={!c.puedeRegistrarInasistencia}
-                    title={c.puedeRegistrarInasistencia ? undefined : 'La hora de la cita aún no pasó'}
-                    onClick={() => setInasistencia(c)}
-                  >
-                    Registrar inasistencia
-                  </button>
+                  // desactivado hasta la hora de la cita; el aviso explica cuándo se activa (en un span: un botón desactivado no muestra el título)
+                  <span className="d-inline-block" tabIndex={c.puedeRegistrarInasistencia ? undefined : 0} title={c.puedeRegistrarInasistencia ? undefined : `Se activa a las ${c.hora} del ${fechaPE(c.fecha)}, si el paciente no llega`}>
+                    <button
+                      className="btn btn-sm btn-outline-danger"
+                      disabled={!c.puedeRegistrarInasistencia}
+                      style={c.puedeRegistrarInasistencia ? undefined : { pointerEvents: 'none' }}
+                      onClick={() => setInasistencia(c)}
+                    >
+                      Registrar inasistencia
+                    </button>
+                  </span>
                 )}
                 {modificable && (
                   <>
@@ -101,16 +105,17 @@ export function CitasAgenda({ citas, conFecha, mostrarPaciente = true, vacio }: 
                     Recordar por WhatsApp
                   </a>
                 )}
-                <button className={`btn btn-sm ${c.paciente.dni ? 'btn-outline-primary' : 'btn-outline-warning'}`} onClick={() => setEditar(c)}>
-                  {c.paciente.dni ? 'Editar datos' : 'Editar datos · completar DNI'}
-                </button>
+                <button className="btn btn-sm btn-outline-primary" onClick={() => setEditar({ cita: c, pestana: 'cita' })}>Editar cita</button>
+                {!c.paciente.dni && (
+                  <button className="btn btn-sm btn-outline-warning" onClick={() => setEditar({ cita: c, pestana: 'paciente' })}>Completar DNI</button>
+                )}
               </div>
             </div>
           );
         })}
       </div>
 
-      <ModalEditarDatos pacienteId={editar?.paciente.id ?? null} cita={editar} onCerrar={() => setEditar(null)} />
+      <ModalEditarDatos pacienteId={editar?.cita.paciente.id ?? null} cita={editar?.cita} pestanaInicial={editar?.pestana} onCerrar={() => setEditar(null)} />
 
       <ModalConfirmar
         abierto={!!inasistencia}
@@ -127,9 +132,12 @@ export function CitasAgenda({ citas, conFecha, mostrarPaciente = true, vacio }: 
             <p>
               {inasistencia.paciente.nombres} {inasistencia.paciente.apellidos} no asistió a su cita de las {inasistencia.hora}.
             </p>
-            <p className="small text-muted mb-0">
+            <p className="small text-muted">
               Inasistencias actuales: {inasistencia.paciente.inasistencias}. Con 3, deberá pagar un adelanto para reservar.
             </p>
+            <div className="alert alert-info small mb-0 py-2">
+              Si el paciente <strong>avisó antes de la cita</strong> que no vendría, use <strong>Cancelar</strong>, no inasistencia.
+            </div>
           </>
         )}
       </ModalConfirmar>

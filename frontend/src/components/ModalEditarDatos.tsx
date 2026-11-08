@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ETIQUETA_SEXO, LARGO_NUMERICO, SEXOS, dniSchema, editarPacienteSchema, esMenorDeEdad, soloLetras, type Sexo } from '@clinica/shared';
+import { ETIQUETA_SEXO, LARGO_NUMERICO, SEXOS, dniSchema, editarPacienteSchema, esMenorDeEdad, soloLetras, type Sexo, LIMITE_TEXTO } from '@clinica/shared';
 import { citasApi, pacientesApi, type Cita, type Paciente } from '../api/recursos';
 import { ApiError } from '../api/cliente';
 import { useUsuarioOpcional } from '../auth';
@@ -29,6 +29,8 @@ interface Props {
   pacienteId: number | null;
   /** Si se abre desde una cita, muestra también la pestaña «Datos de la cita» */
   cita?: Cita | null;
+  /** Pestaña con la que se abre («Editar cita» abre la de la cita) */
+  pestanaInicial?: 'paciente' | 'cita';
   onCerrar: () => void;
 }
 
@@ -37,11 +39,14 @@ interface Props {
  * se cambia solo lo que está mal. Lo cambiado se marca con su valor anterior y se puede deshacer.
  * Identidad → pide motivo y queda en la auditoría. DNI: se completa si está pendiente; cambiarlo, solo el Administrador.
  */
-export function ModalEditarDatos({ pacienteId, cita, onCerrar }: Props) {
+export function ModalEditarDatos({ pacienteId, cita, pestanaInicial, onCerrar }: Props) {
   const qc = useQueryClient();
   const usuario = useUsuarioOpcional();
   const esAdmin = usuario?.rol === 'administrador';
   const [pestana, setPestana] = useState<'paciente' | 'cita'>('paciente');
+  useEffect(() => {
+    if (pacienteId) setPestana(pestanaInicial === 'cita' && cita ? 'cita' : 'paciente');
+  }, [pacienteId, pestanaInicial, cita]);
   const paciente = useQuery({ queryKey: ['paciente', pacienteId], queryFn: () => pacientesApi.ver(pacienteId!), enabled: !!pacienteId });
   const [v, setV] = useState<Valores | null>(null);
   const [motivo, setMotivo] = useState('');
@@ -121,6 +126,7 @@ export function ModalEditarDatos({ pacienteId, cita, onCerrar }: Props) {
             id={`e-${k}`}
             type={opciones.tipo ?? 'text'}
             {...(k === 'fechaNacimiento' ? { min: fechaMinimaNacimiento(), max: hoyEnLima() } : {})}
+            maxLength={k === 'direccion' ? LIMITE_TEXTO.direccion : k === 'apoderado' ? LIMITE_TEXTO.apoderado : k === 'nombres' || k === 'apellidos' ? 60 : undefined}
             className={`form-control ${errores[k] ? 'is-invalid' : ''} ${cambio ? 'campo-cambiado' : ''}`}
             value={v[k]}
             onChange={(e) => setV({ ...v, [k]: k === 'nombres' || k === 'apellidos' ? soloLetras(e.target.value) : e.target.value })}
@@ -181,7 +187,7 @@ export function ModalEditarDatos({ pacienteId, cita, onCerrar }: Props) {
               {cambiaIdentidad && (
                 <div className="col-12">
                   <label htmlFor="e-motivo" className="form-label">Motivo de la corrección <span className="text-danger">*</span></label>
-                  <input id="e-motivo" className={`form-control ${errores.motivo ? 'is-invalid' : ''}`} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej.: se escribió mal el apellido al registrarlo" />
+                  <input id="e-motivo" maxLength={LIMITE_TEXTO.motivo} className={`form-control ${errores.motivo ? 'is-invalid' : ''}`} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej.: se escribió mal el apellido al registrarlo" />
                   <div className="invalid-feedback">{errores.motivo}</div>
                   <div className="form-text">Obligatorio porque cambió un dato de identidad.</div>
                 </div>
@@ -266,7 +272,7 @@ function SeccionDni({ paciente, esAdmin, onGuardado }: { paciente: Paciente; esA
             <button type="button" className="btn btn-link" onClick={() => { setAbierto(false); setReniec(null); setError(null); }}>Cancelar</button>
           </div>
           {paciente.dni && (
-            <input className="form-control mt-2" placeholder="Motivo del cambio (obligatorio)" aria-label="Motivo del cambio de DNI" value={motivo} onChange={(e) => setMotivo(e.target.value)} />
+            <input className="form-control mt-2" maxLength={LIMITE_TEXTO.motivo} placeholder="Motivo del cambio (obligatorio)" aria-label="Motivo del cambio de DNI" value={motivo} onChange={(e) => setMotivo(e.target.value)} />
           )}
           {reniec !== null && (
             <div className="alert alert-warning mt-2 mb-0">
@@ -309,7 +315,7 @@ function SeccionCita({ cita, onGuardado }: { cita: Cita; onGuardado: (mensaje: s
       {!editable && <div className="alert alert-secondary">Esta cita ya no se puede editar.</div>}
       <div className="mb-3">
         <label htmlFor="e-motivo-cita" className="form-label">Motivo</label>
-        <input id="e-motivo-cita" className={`form-control ${cambioMotivo ? 'campo-cambiado' : ''}`} value={motivo} disabled={!editable} onChange={(e) => setMotivo(e.target.value)} />
+        <input id="e-motivo-cita" maxLength={LIMITE_TEXTO.motivoCita} className={`form-control ${cambioMotivo ? 'campo-cambiado' : ''}`} value={motivo} disabled={!editable} onChange={(e) => setMotivo(e.target.value)} />
         {cambioMotivo && (
           <div className="form-text text-warning-emphasis">
             Antes: «{cita.motivo}» <button type="button" className="btn btn-link btn-sm p-0 align-baseline" onClick={() => setMotivo(cita.motivo)}>Deshacer</button>

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { LARGO_NUMERICO, proveedorSchema, soloDigitos } from '@clinica/shared';
+import { LARGO_NUMERICO, LIMITE_TEXTO, proveedorSchema, soloDigitos, soloLetrasSimples } from '@clinica/shared';
 import { proveedoresApi, type Proveedor } from '../api/recursos';
 import { FiltroLista } from '../components/FiltroLista';
 import { ModalConfirmar } from '../components/ModalConfirmar';
@@ -172,7 +172,7 @@ export function FormProveedor({
   };
   const cambiar = (k: keyof typeof v, valor: string) => {
     const max = largo[k];
-    const limpio = max ? soloDigitos(valor, max) : valor;
+    const limpio = max ? soloDigitos(valor, max) : k === 'contacto' ? soloLetrasSimples(valor, LIMITE_TEXTO.contacto) : k === 'razonSocial' ? valor.slice(0, LIMITE_TEXTO.razonSocial) : valor;
     setV({ ...v, [k]: limpio });
     if (k === 'ruc' && !proveedor && limpio.length === LARGO_NUMERICO.ruc && limpio !== v.ruc)
       void consultarRuc(limpio);

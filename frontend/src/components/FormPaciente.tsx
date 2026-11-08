@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { ETIQUETA_SEXO, LARGO_NUMERICO, SEXOS, esMenorDeEdad, pacienteSchema, pacienteSinDniSchema, registroPacienteSchema, soloLetras } from '@clinica/shared';
+import { ETIQUETA_SEXO, LARGO_NUMERICO, SEXOS, esMenorDeEdad, pacienteSchema, pacienteSinDniSchema, registroPacienteSchema, soloLetras, LIMITE_TEXTO } from '@clinica/shared';
 import { ApiError } from '../api/cliente';
 import { CampoDigitos } from './Interaccion';
 import { CampoPassword, ConfirmarPassword, NO_COINCIDEN } from './CampoPassword';
@@ -121,6 +121,7 @@ export function FormPaciente({ conCuenta, sinDni, dniInicial = '', inicial, text
                 id={`p-${c.nombre}`}
                 type={c.tipo ?? 'text'}
                 {...(c.nombre === 'fechaNacimiento' ? { min: fechaMinimaNacimiento(), max: hoyEnLima() } : {})}
+                maxLength={c.nombre === 'direccion' ? LIMITE_TEXTO.direccion : c.nombre === 'apoderado' ? LIMITE_TEXTO.apoderado : c.nombre === 'alergias' || c.nombre === 'antecedentes' ? LIMITE_TEXTO.motivo : undefined}
                 className={`form-control ${errores[c.nombre] ? 'is-invalid' : ''}`}
                 value={v[c.nombre] ?? ''}
                 onChange={(e) => setV({ ...v, [c.nombre]: c.nombre === 'nombres' || c.nombre === 'apellidos' ? soloLetras(e.target.value) : e.target.value })}

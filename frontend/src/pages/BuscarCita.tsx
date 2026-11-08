@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { buscarNombreSchema, dniSchema, ETIQUETA_ESTADO_CITA, LARGO_NUMERICO } from '@clinica/shared';
+import { buscarNombreSchema, dniSchema, ETIQUETA_ESTADO_CITA, LARGO_NUMERICO, soloLetras } from '@clinica/shared';
 import { citasApi, pacientesApi, type PacienteEncontrado } from '../api/recursos';
 import { ApiError } from '../api/cliente';
 import { CampoDigitos } from '../components/Interaccion';
@@ -98,11 +98,11 @@ export default function BuscarCita() {
               <div className="row g-2 align-items-end">
                 <div className="col-sm-4">
                   <label htmlFor="bc-apellidos" className="form-label">Apellidos</label>
-                  <input id="bc-apellidos" className="form-control" value={nombre.apellidos} onChange={(e) => setNombre({ ...nombre, apellidos: e.target.value })} />
+                  <input id="bc-apellidos" className="form-control" value={nombre.apellidos} onChange={(e) => setNombre({ ...nombre, apellidos: soloLetras(e.target.value) })} />
                 </div>
                 <div className="col-sm-4">
                   <label htmlFor="bc-nombres" className="form-label">Nombres <small className="text-muted">(opcional)</small></label>
-                  <input id="bc-nombres" className="form-control" value={nombre.nombres} onChange={(e) => setNombre({ ...nombre, nombres: e.target.value })} />
+                  <input id="bc-nombres" className="form-control" value={nombre.nombres} onChange={(e) => setNombre({ ...nombre, nombres: soloLetras(e.target.value) })} />
                 </div>
                 <div className="col-sm-auto"><button className="btn btn-acento">Buscar</button></div>
               </div>
@@ -153,7 +153,7 @@ export default function BuscarCita() {
               {Number(d.paciente.saldoFavor) > 0 && <span className="ms-2 badge text-bg-success">Saldo a favor S/ {d.paciente.saldoFavor}</span>}
             </span>
             <span className="d-flex gap-2">
-              <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => setEditar(true)}>Editar datos</button>
+              <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => setEditar(true)}>Editar datos del paciente</button>
               <Link className="btn btn-sm btn-acento" to={`/citas/nueva?paciente=${d.paciente.id}`}>+ Sacar otra cita</Link>
             </span>
           </div>

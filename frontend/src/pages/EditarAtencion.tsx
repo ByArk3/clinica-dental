@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { editarAtencionSchema, MENSAJES } from '@clinica/shared';
+import { editarAtencionSchema, MENSAJES, LIMITE_TEXTO } from '@clinica/shared';
 import { atencionApi, tarifarioApi, type ResultadoEdicion } from '../api/recursos';
 import { PiezaDental } from '../components/PiezaDental';
-import { BotonAccion } from '../components/Interaccion';
+import { BotonAccion, Contador } from '../components/Interaccion';
 import { fechaPE, mensajeError, solesPE } from '../formato';
 
 interface Linea {
@@ -116,7 +116,8 @@ export default function EditarAtencion() {
       <form className="tarjeta" onSubmit={enviar} noValidate style={{ maxWidth: 720 }}>
         <div className="mb-3">
           <label htmlFor="diagnostico" className="form-label">Diagnóstico *</label>
-          <textarea id="diagnostico" rows={2} className={`form-control ${errores.diagnostico ? 'is-invalid' : ''}`} value={diagnostico} onChange={(e) => setDiagnostico(e.target.value)} />
+          <textarea id="diagnostico" rows={2} className={`form-control ${errores.diagnostico ? 'is-invalid' : ''}`} value={diagnostico} maxLength={LIMITE_TEXTO.diagnostico} onChange={(e) => setDiagnostico(e.target.value)} />
+            <Contador valor={diagnostico} max={LIMITE_TEXTO.diagnostico} />
           <div className="invalid-feedback">{errores.diagnostico}</div>
         </div>
 
@@ -151,11 +152,12 @@ export default function EditarAtencion() {
 
         <div className="mb-3">
           <label htmlFor="observaciones" className="form-label">Observaciones</label>
-          <textarea id="observaciones" rows={2} className="form-control" value={observaciones} onChange={(e) => setObservaciones(e.target.value)} />
+          <textarea id="observaciones" rows={2} className="form-control" value={observaciones} maxLength={LIMITE_TEXTO.observaciones} onChange={(e) => setObservaciones(e.target.value)} />
+            <Contador valor={observaciones} max={LIMITE_TEXTO.observaciones} />
         </div>
         <div className="mb-3">
           <label htmlFor="motivo" className="form-label">Motivo de la corrección *</label>
-          <input id="motivo" className={`form-control ${errores.motivo ? 'is-invalid' : ''}`} placeholder="p. ej. Me equivoqué de pieza" value={motivo} onChange={(e) => setMotivo(e.target.value)} />
+          <input id="motivo" maxLength={LIMITE_TEXTO.motivo} className={`form-control ${errores.motivo ? 'is-invalid' : ''}`} placeholder="p. ej. Me equivoqué de pieza" value={motivo} onChange={(e) => setMotivo(e.target.value)} />
           <div className="invalid-feedback">{errores.motivo}</div>
         </div>
         {guardar.isError && <div className="alert alert-danger" role="alert">{mensajeError(guardar.error)}</div>}

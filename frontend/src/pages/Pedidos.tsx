@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { anularPedidoSchema, ESTADOS_PEDIDO, ETIQUETA_ESTADO_PEDIDO } from '@clinica/shared';
+import { anularPedidoSchema, ESTADOS_PEDIDO, ETIQUETA_ESTADO_PEDIDO, LIMITE_TEXTO } from '@clinica/shared';
 import { pedidosApi, type Pedido } from '../api/recursos';
 import { ChipPedido } from '../components/ChipPedido';
 import { ModalConfirmar } from '../components/ModalConfirmar';
@@ -98,7 +98,7 @@ export default function Pedidos() {
         onCerrar={cerrarAnular}
       >
         <label htmlFor="motivo-anulacion" className="form-label">Motivo de la anulación</label>
-        <input id="motivo-anulacion" className="form-control" value={motivo} onChange={(e) => setMotivo(e.target.value)} />
+        <input id="motivo-anulacion" maxLength={LIMITE_TEXTO.motivo} className="form-control" value={motivo} onChange={(e) => setMotivo(e.target.value)} />
       </ModalConfirmar>
     </>
   );

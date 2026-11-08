@@ -193,6 +193,36 @@ export function problemaContrasenaPaciente(password: string, p: { dni?: string |
 export const LETRAS_NOMBRE = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' -]+$/;
 /** Quita lo que no puede ir en un nombre (números, símbolos) mientras se escribe. */
 export const soloLetras = (texto: string) => texto.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ' -]/g, '').replace(/ {2,}/g, ' ').slice(0, 60);
+/** Largo máximo de los textos libres (el campo no deja pasar de aquí; la API valida lo mismo). */
+export const LIMITE_TEXTO = {
+  motivoCita: 200,
+  motivo: 300,
+  diagnostico: 2000,
+  observaciones: 2000,
+  observacion: 500,
+  nombre: 120,
+  razonSocial: 150,
+  nombreCorto: 80,
+  direccion: 150,
+  apoderado: 150,
+  contacto: 100,
+} as const;
+
+/** Unidades, especialidades y contactos: solo letras y espacios. */
+export const LETRAS_SIMPLES = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+$/;
+export const soloLetrasSimples = (t: string, max = 80) => t.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]/g, '').replace(/ {2,}/g, ' ').slice(0, max);
+/** Nombres del personal: letras, espacios, apóstrofo, guion y punto («Dr.», «Dra.», «Mg.», «C.D.»). */
+export const LETRAS_PERSONAL = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' .-]+$/;
+export const soloLetrasPersonal = (t: string) => t.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ' .-]/g, '').replace(/ {2,}/g, ' ').slice(0, 120);
+/** Titular de Yape/Plin (puede ser una empresa): letras, números, espacios y «. & - ( )». */
+export const TEXTO_TITULAR = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9 .&()-]+$/;
+export const limpiarTitular = (t: string) => t.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9 .&()-]/g, '').replace(/ {2,}/g, ' ').slice(0, 80);
+/** Cantidades y precios: solo números y un separador decimal (punto o coma), con hasta `enteros` dígitos y `decimales` decimales. */
+export function limpiarDecimal(texto: string, enteros = 5, decimales = 2) {
+  const t = texto.replace(',', '.').replace(/[^\d.]/g, '');
+  const [entero = '', ...resto] = t.split('.');
+  return entero.slice(0, enteros) + (t.includes('.') && decimales > 0 ? `.${resto.join('').slice(0, decimales)}` : '');
+}
 const nombreSchema = (vacio: string) =>
   z
     .string()
@@ -290,8 +320,8 @@ const pacienteBase = z.object({
   fechaNacimiento: fechaNacimientoSchema,
   telefono: telefonoSchema,
   email: z.string().email('Correo inválido').optional().or(z.literal('').transform(() => undefined)),
-  direccion: z.string().trim().optional(),
-  apoderado: z.string().trim().optional(), // P14
+  direccion: z.string().trim().max(150, 'Máximo 150 caracteres').optional(),
+  apoderado: z.string().trim().max(150, 'Máximo 150 caracteres').optional(), // P14
   alergias: z.string().trim().optional(),
   antecedentes: z.string().trim().optional(),
   sexo: sexoObligatorio,
@@ -309,8 +339,8 @@ export type PacienteSinDniDTO = z.infer<typeof pacienteSinDniSchema>;
 
 /** Búsqueda por nombre (recepcionista): apellidos obligatorios, nombres opcionales. */
 export const buscarNombreSchema = z.object({
-  apellidos: z.string().trim().min(2, 'Escriba al menos 2 letras del apellido'),
-  nombres: z.string().trim().optional(),
+  apellidos: z.string().trim().min(2, 'Escriba al menos 2 letras del apellido').regex(LETRAS_NOMBRE, 'Solo letras'),
+  nombres: z.string().trim().regex(LETRAS_NOMBRE, 'Solo letras').optional().or(z.literal('')),
   fechaNacimiento: fechaSchema.optional(),
 });
 
@@ -318,8 +348,8 @@ export const buscarNombreSchema = z.object({
 export const editarPacienteSchema = z.object({
   telefono: telefonoSchema,
   email: z.string().email('Correo inválido').optional().or(z.literal('').transform(() => undefined)),
-  direccion: z.string().trim().optional(),
-  apoderado: z.string().trim().optional(),
+  direccion: z.string().trim().max(150, 'Máximo 150 caracteres').optional(),
+  apoderado: z.string().trim().max(150, 'Máximo 150 caracteres').optional(),
   nombres: nombreSchema('Ingrese los nombres'),
   apellidos: nombreSchema('Ingrese los apellidos'),
   fechaNacimiento: fechaNacimientoSchema,
@@ -435,8 +465,8 @@ export const cancelarCitaSchema = z.object({ porClinica: z.boolean().optional() 
 export const contactoSchema = z.object({
   telefono: telefonoSchema,
   email: z.string().email('Correo inválido').optional().or(z.literal('').transform(() => undefined)),
-  direccion: z.string().trim().optional(),
-  apoderado: z.string().trim().optional(),
+  direccion: z.string().trim().max(150, 'Máximo 150 caracteres').optional(),
+  apoderado: z.string().trim().max(150, 'Máximo 150 caracteres').optional(),
 });
 export type ContactoDTO = z.infer<typeof contactoSchema>;
 
@@ -465,10 +495,19 @@ export interface CitaConfirmacion {
 const dinero = z.coerce
   .number({ invalid_type_error: 'Ingrese un monto' })
   .positive('El precio debe ser mayor que 0')
-  .max(99_999_999, 'Monto demasiado alto')
+  .max(99_999.99, 'Máximo 5 dígitos')
   .refine((n) => Math.abs(n * 100 - Math.round(n * 100)) < 1e-6, 'Máximo 2 decimales');
-const cantidad = z.coerce.number({ invalid_type_error: 'Ingrese una cantidad' }).positive('La cantidad debe ser mayor que 0');
-const noNegativo = z.coerce.number({ invalid_type_error: 'Ingrese un número' }).min(0, 'No puede ser negativo');
+const dosDecimales = (n: number) => Math.abs(n * 100 - Math.round(n * 100)) < 1e-6;
+const cantidad = z.coerce
+  .number({ invalid_type_error: 'Ingrese una cantidad' })
+  .positive('La cantidad debe ser mayor que 0')
+  .max(99_999.99, 'Máximo 5 dígitos')
+  .refine(dosDecimales, 'Máximo 2 decimales');
+const noNegativo = z.coerce
+  .number({ invalid_type_error: 'Ingrese un número' })
+  .min(0, 'No puede ser negativo')
+  .max(99_999.99, 'Máximo 5 dígitos')
+  .refine(dosDecimales, 'Máximo 2 decimales');
 
 export const tratamientoSchema = z.object({
   nombre: z.string().trim().min(2, 'Ingrese el nombre').max(120),
@@ -482,7 +521,7 @@ export type TratamientoDTO = z.infer<typeof tratamientoSchema>;
 // ---------- Insumos (CU-18..21) ----------
 export const insumoSchema = z.object({
   nombre: z.string().trim().min(2, 'Ingrese el nombre').max(120),
-  unidad: z.string().trim().min(1, 'Ingrese la unidad (p. ej. unidad, caja, jeringa)').max(30),
+  unidad: z.string().trim().min(1, 'Ingrese la unidad (p. ej. unidad, caja, jeringa)').max(30).regex(LETRAS_SIMPLES, 'La unidad lleva solo letras'),
   stockMinimo: noNegativo,
 });
 /** Al registrar se indica el stock inicial; después solo cambia por recepción o ajuste. */
@@ -520,12 +559,7 @@ export type TipoCobro = 'servicio' | 'adelanto';
 export const VUELTO_MAXIMO = 200;
 export const DIGITOS_MONTO = 5;
 /** Deja solo números y un separador decimal (punto o coma), con hasta 5 dígitos enteros y 2 decimales. */
-export function limpiarMonto(texto: string) {
-  const t = texto.replace(',', '.').replace(/[^\d.]/g, '');
-  const [entero = '', ...resto] = t.split('.');
-  const decimales = resto.join('').slice(0, 2);
-  return entero.slice(0, DIGITOS_MONTO) + (t.includes('.') ? `.${decimales}` : '');
-}
+export const limpiarMonto = (texto: string) => limpiarDecimal(texto, DIGITOS_MONTO, 2);
 export const comprobanteSchema = z.object({
   tipoPagoId: z.coerce.number({ invalid_type_error: 'Elija un tipo de pago' }).int().positive('Elija un tipo de pago'),
   // Solo se usa en efectivo; con tarjeta o Yape/Plin se cobra el total exacto
@@ -564,7 +598,7 @@ const vacioAUndef = z.literal('').transform(() => undefined);
 export const proveedorSchema = z.object({
   ruc: z.string().regex(/^\d{11}$/, 'El RUC debe tener 11 dígitos'),
   razonSocial: z.string().trim().min(3, 'Ingrese la razón social').max(150),
-  contacto: z.string().trim().max(100).optional().or(vacioAUndef),
+  contacto: z.string().trim().max(100).regex(LETRAS_SIMPLES, 'El contacto lleva solo letras').optional().or(vacioAUndef),
   telefono: z.string().regex(/^\d{6,9}$/, 'Teléfono inválido (6 a 9 dígitos)').optional().or(vacioAUndef),
   email: z.string().email('Correo inválido').optional().or(vacioAUndef),
 });
@@ -609,11 +643,11 @@ export type AjusteDTO = z.infer<typeof ajusteSchema>;
 export const traspasoPrincipalSchema = z.object({ password: z.string().min(1, 'Ingrese su contraseña') });
 export const ROLES_PERSONAL = ['recepcionista', 'odontologo', 'administrador'] as const;
 export const usuarioSchema = z.object({
-  nombres: z.string().trim().min(3, 'Ingrese los nombres').max(120),
+  nombres: z.string().trim().min(3, 'Ingrese los nombres').max(120).regex(LETRAS_PERSONAL, 'Solo letras (se permite el punto de «Dr.», «Dra.», «Mg.»)'),
   email: z.string().email('Correo inválido'),
   rol: z.enum(ROLES_PERSONAL, { errorMap: () => ({ message: 'Elija un rol' }) }),
   cmp: z.string().trim().regex(/^\d{1,6}$/, 'El CMP tiene hasta 6 dígitos').optional().or(vacioAUndef),
-  especialidad: z.string().trim().max(80).optional().or(vacioAUndef),
+  especialidad: z.string().trim().max(80).regex(LETRAS_SIMPLES, 'La especialidad lleva solo letras').optional().or(vacioAUndef),
 });
 export const usuarioNuevoSchema = usuarioSchema.extend({ password: passwordSchema });
 /** Modificar: la contraseña es opcional (vacía = no cambia). */
@@ -661,7 +695,7 @@ export const ETIQUETA_BILLETERA: Record<Billetera, string> = { yape: 'Yape', pli
 export const nombreBilleteras = (b: readonly Billetera[]) => BILLETERAS.filter((x) => b.includes(x)).map((x) => ETIQUETA_BILLETERA[x]).join('/');
 export const configPagoSchema = z.object({
   numero: z.string().regex(/^9\d{8}$/, 'Celular de 9 dígitos que empiece con 9'),
-  titular: z.string().trim().min(3, 'Ingrese el titular').max(80),
+  titular: z.string().trim().min(3, 'Ingrese el titular').max(80).regex(TEXTO_TITULAR, 'Solo letras, números y «. & - ( )»'),
   billeteras: z.array(z.enum(BILLETERAS)).min(1, 'Marque al menos una billetera').default(['yape']),
   saldoVigenciaMeses: z.coerce
     .number({ invalid_type_error: 'Ingrese los meses' })

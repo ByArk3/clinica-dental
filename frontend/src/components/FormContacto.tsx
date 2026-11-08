@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { contactoSchema, type ContactoDTO, LARGO_NUMERICO } from '@clinica/shared';
+import { contactoSchema, type ContactoDTO, LARGO_NUMERICO, LIMITE_TEXTO } from '@clinica/shared';
 import type { Paciente } from '../api/recursos';
 import { CampoDigitos } from './Interaccion';
 import { mensajeError } from '../formato';
@@ -40,7 +40,7 @@ export function FormContacto({ paciente, onGuardar, onCancelar }: { paciente: Pa
         <CampoDigitos id={`c-${nombre}`} value={v[nombre]} onChange={(x) => setV({ ...v, [nombre]: x })} largo={LARGO_NUMERICO.celular} error={errores[nombre]} />
       ) : (
         <>
-          <input id={`c-${nombre}`} type={tipo} className={`form-control ${errores[nombre] ? 'is-invalid' : ''}`} value={v[nombre]} onChange={(e) => setV({ ...v, [nombre]: e.target.value })} />
+          <input id={`c-${nombre}`} type={tipo} maxLength={nombre === 'direccion' ? LIMITE_TEXTO.direccion : nombre === 'apoderado' ? LIMITE_TEXTO.apoderado : undefined} className={`form-control ${errores[nombre] ? 'is-invalid' : ''}`} value={v[nombre]} onChange={(e) => setV({ ...v, [nombre]: e.target.value })} />
           <div className="invalid-feedback">{errores[nombre]}</div>
         </>
       )}

@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BILLETERAS, configPagoSchema, LARGO_NUMERICO, soloDigitos, descuentoSchema, ETIQUETA_BILLETERA, feriadoSchema, HORARIO_CLINICA, nombreBilleteras, type Billetera, type DescuentoDTO } from '@clinica/shared';
+import { BILLETERAS, configPagoSchema, LARGO_NUMERICO, LIMITE_TEXTO, limpiarTitular, soloDigitos, descuentoSchema, ETIQUETA_BILLETERA, feriadoSchema, HORARIO_CLINICA, nombreBilleteras, type Billetera, type DescuentoDTO } from '@clinica/shared';
 import { citasApi, configApi, tarifarioApi, type DatosPago, type Descuento } from '../api/recursos';
 import { BotonAccion, CampoDigitos } from '../components/Interaccion';
 import { camposApi, erroresZod, fechaPE, hoyLima, mensajeError } from '../formato';
@@ -118,7 +118,7 @@ function FormCampana({ campana, onCerrar }: { campana: Descuento | null; onCerra
         type={tipo}
         {...(k === 'fechaFin' ? { min: hoyEnLima() } : {})}
         inputMode={NUM[k] ? 'numeric' : undefined}
-        maxLength={NUM[k]}
+        maxLength={NUM[k] ?? (k === 'nombre' ? LIMITE_TEXTO.nombreCorto : undefined)}
         className={`form-control ${errores[k] ? 'is-invalid' : ''}`}
         value={v[k]}
         onChange={(e) => setV({ ...v, [k]: NUM[k] ? soloDigitos(e.target.value, NUM[k]!) : e.target.value })}
@@ -223,7 +223,7 @@ function Feriados() {
           </div>
           <div className="mb-3">
             <label htmlFor="f-nombre" className="form-label small mb-1">Nombre</label>
-            <input id="f-nombre" className={`form-control ${errores.nombre ? 'is-invalid' : ''}`} value={v.nombre} onChange={(e) => setV({ ...v, nombre: e.target.value })} placeholder="Ej.: Aniversario de la clínica" />
+            <input id="f-nombre" maxLength={LIMITE_TEXTO.nombreCorto} className={`form-control ${errores.nombre ? 'is-invalid' : ''}`} value={v.nombre} onChange={(e) => setV({ ...v, nombre: e.target.value })} placeholder="Ej.: Aniversario de la clínica" />
             <div className="invalid-feedback">{errores.nombre}</div>
           </div>
           <BotonAccion className="btn btn-acento w-100" mutacion={crear}>Agregar</BotonAccion>
@@ -419,7 +419,7 @@ function Pagos() {
           </div>
           <div className="mb-3">
             <label htmlFor="p-titular" className="form-label">Titular</label>
-            <input id="p-titular" className={`form-control ${errores.titular ? 'is-invalid' : ''}`} value={v.titular} onChange={(e) => setV({ ...v, titular: e.target.value })} />
+            <input id="p-titular" className={`form-control ${errores.titular ? 'is-invalid' : ''}`} value={v.titular} maxLength={80} onChange={(e) => setV({ ...v, titular: limpiarTitular(e.target.value) })} />
             <div className="invalid-feedback">{errores.titular}</div>
           </div>
           <div className="mb-3">

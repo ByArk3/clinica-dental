@@ -1,7 +1,7 @@
 import { useCallback, useState, type FormEvent } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ajusteSchema, insumoNuevoSchema, insumoSchema, type InsumoDTO, type InsumoNuevoDTO } from '@clinica/shared';
+import { LIMITE_TEXTO, ajusteSchema, insumoNuevoSchema, insumoSchema, limpiarDecimal, soloLetrasSimples, type InsumoDTO, type InsumoNuevoDTO } from '@clinica/shared';
 import { Link } from 'react-router-dom';
 import { insumosApi, type Insumo, type MovimientoKardex } from '../api/recursos';
 import { FiltroLista } from '../components/FiltroLista';
@@ -151,7 +151,14 @@ function DatosInsumo({ insumo, onCancelar, onGuardado }: { insumo: Insumo | null
   const campo = (k: keyof typeof v, etiqueta: string, col: string, decimal = false) => (
     <div className={col}>
       <label htmlFor={`i-${k}`} className="form-label">{etiqueta}</label>
-      <input id={`i-${k}`} inputMode={decimal ? 'decimal' : undefined} className={`form-control ${errores[k] ? 'is-invalid' : ''}`} value={v[k]} onChange={(e) => setV({ ...v, [k]: e.target.value })} />
+      <input
+        id={`i-${k}`}
+        inputMode={decimal ? 'decimal' : undefined}
+        maxLength={k === 'nombre' ? LIMITE_TEXTO.nombre : undefined}
+        className={`form-control ${errores[k] ? 'is-invalid' : ''}`}
+        value={v[k]}
+        onChange={(e) => setV({ ...v, [k]: decimal ? limpiarDecimal(e.target.value) : k === 'unidad' ? soloLetrasSimples(e.target.value, 30) : e.target.value })}
+      />
       <div className="invalid-feedback">{errores[k]}</div>
     </div>
   );
@@ -320,7 +327,7 @@ function CorregirStock({ insumo, onCancelar, onGuardado }: { insumo: Insumo; onC
         <div className="row g-3 align-items-start">
           <div className="col-sm-6">
             <label htmlFor="a-cantidad" className="form-label">{tipo === 'merma' ? `Cantidad a retirar (${insumo.unidad})` : `Cantidad contada (${insumo.unidad})`}</label>
-            <input id="a-cantidad" inputMode="decimal" className={`form-control ${errores.cantidad ? 'is-invalid' : ''}`} value={valor} onChange={(e) => setValor(e.target.value.replace(/[^\d.,]/g, ''))} placeholder={tipo === 'merma' ? 'Ej.: 2' : `Ej.: ${num(String(actual))}`} />
+            <input id="a-cantidad" inputMode="decimal" className={`form-control ${errores.cantidad ? 'is-invalid' : ''}`} value={valor} onChange={(e) => setValor(limpiarDecimal(e.target.value))} placeholder={tipo === 'merma' ? 'Ej.: 2' : `Ej.: ${num(String(actual))}`} />
             <div className="invalid-feedback">{errores.cantidad}</div>
             <div className="form-text">{tipo === 'merma' ? 'Lo que se bota o se devuelve.' : 'Lo que hay físicamente en el almacén.'}</div>
           </div>
@@ -338,7 +345,7 @@ function CorregirStock({ insumo, onCancelar, onGuardado }: { insumo: Insumo; onC
           </div>
           <div className="col-12">
             <label htmlFor="a-motivo" className="form-label">Motivo</label>
-            <input id="a-motivo" className={`form-control ${errores.motivo ? 'is-invalid' : ''}`} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder={tipo === 'merma' ? 'Ej.: jeringas vencidas en octubre' : 'Ej.: conteo físico mensual'} />
+            <input id="a-motivo" maxLength={LIMITE_TEXTO.motivo} className={`form-control ${errores.motivo ? 'is-invalid' : ''}`} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder={tipo === 'merma' ? 'Ej.: jeringas vencidas en octubre' : 'Ej.: conteo físico mensual'} />
             <div className="invalid-feedback">{errores.motivo}</div>
             <div className="form-text">Queda en el kárdex con la fecha y su usuario.</div>
           </div>

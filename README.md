@@ -141,7 +141,7 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | Descuentos (P3) y monto del adelanto (P6) gestionados por el Administrador | `admin.test.ts` |
 | CU-38 Panel de control · CU-39 Reporte de ingresos · CU-40 Reporte de inventario (rango de fechas, exportación CSV para Excel) | `reporte.test.ts`, `Iteracion4.test.tsx` |
 
-Total: **322 pruebas de API + 117 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y los CU-58 y CU-59 están implementados.
+Total: **326 pruebas de API + 118 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y los CU-58 y CU-59 están implementados.
 
 **Tareas programadas** (`backend/src/jobs`, node-cron, hora de Lima; se activan con `JOBS_ENABLED=true`):
 - **Cada 5 min:** libera las reservas cuyo adelanto no se pagó ni reportó en 1 hora (RN-04; también las citas antiguas
@@ -376,6 +376,14 @@ Resumen de todo lo agregado en las últimas 24 horas (commits `a7d987b` a `34bbf
 - **Confirmar contraseña:** segundo recuadro en «Nueva contraseña» (recuperar), registro web y Usuarios; avisa «Las
   contraseñas no coinciden» y se marca en verde cuando coinciden.
 - **Traspaso del principal:** además de la contraseña, la casilla «Entiendo que dejaré de ser el administrador principal».
+- **Botones de la cita:** en cada cita, «Editar cita» abre directo la pestaña de la cita; arriba, «Editar datos del paciente».
+  «Registrar inasistencia» se ve desactivado hasta la hora de la cita, con la ayuda «Se activa a las HH:MM del DD/MM/AAAA, si el
+  paciente no llega»; su confirmación recuerda que si el paciente avisó antes se usa «Cancelar», no inasistencia.
+- **Reglas de escritura en todos los campos:** solo números (hasta 5 enteros y 2 decimales) en precio del tarifario, cantidades
+  de insumos (con títulos «Insumo / Cantidad» y la unidad al lado), stock mínimo e inicial, pedido y recepción; solo letras en
+  nombres del personal (se permite el punto para «Dr.», «Dra.», «Mg.»), especialidad, contacto del proveedor, unidad del insumo y
+  búsqueda por nombre; el titular de Yape/Plin admite letras, números y `. & - ( )`. Los textos libres tienen límite
+  (`LIMITE_TEXTO` en `shared`) y los largos muestran un contador «n/máx».
 
 ### Pendientes
 - No hay pendientes anotados. Descartado por ahora: límite de intentos en el registro web (ver «Riesgos conocidos»).

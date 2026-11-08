@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { citaSchema } from '@clinica/shared';
+import { citaSchema, LIMITE_TEXTO } from '@clinica/shared';
 import { citasApi, type Cita } from '../api/recursos';
 import { ApiError } from '../api/cliente';
 import { SelectorHorarios } from './SelectorHorarios';
@@ -115,7 +115,7 @@ export function FormReserva({ pacienteId, onRegistrada }: Props) {
     <form className="tarjeta" onSubmit={enviar} noValidate>
       <div className="mb-3">
         <label htmlFor="motivo" className="form-label">Motivo</label>
-        <input id="motivo" className={`form-control ${errores.motivo ? 'is-invalid' : ''}`} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej.: dolor de muela, limpieza" />
+        <input id="motivo" maxLength={LIMITE_TEXTO.motivoCita} className={`form-control ${errores.motivo ? 'is-invalid' : ''}`} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej.: dolor de muela, limpieza" />
         <div className="invalid-feedback">{errores.motivo}</div>
       </div>
       <div className="mb-3">

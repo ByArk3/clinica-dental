@@ -350,6 +350,7 @@ function Cobro({
               Motivo (se le enviará al paciente)
             </label>
             <input
+              maxLength={300}
               id="motivo-rechazo"
               className="form-control"
               value={motivo}

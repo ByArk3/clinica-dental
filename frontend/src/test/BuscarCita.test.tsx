@@ -45,6 +45,13 @@ describe('Buscar cita', () => {
     expect(within(anteriores).getByText('Limpieza')).toBeInTheDocument();
     expect(within(anteriores).getByText('Cancelada')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '+ Sacar otra cita' })).toHaveAttribute('href', '/citas/nueva?paciente=47');
+    // «Editar datos del paciente» arriba; «Editar cita» en cada cita, que abre la pestaña de la cita
+    expect(screen.getByRole('button', { name: 'Editar datos del paciente' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Editar cita' })).toHaveLength(2);
+    const u2 = userEvent.setup();
+    simularApi({ 'GET /pacientes/47': { body: { ...paciente, email: null, direccion: null, apoderado: null, sexo: 'femenino' } }, 'GET /tarifario': { body: [] } });
+    await u2.click(screen.getAllByRole('button', { name: 'Editar cita' })[1]);
+    expect(await screen.findByRole('button', { name: 'Datos de la cita' })).toHaveClass('active');
   });
 
   it('por DNI: va directo a sus citas; si no existe, indica registrarlo en Nueva cita', async () => {

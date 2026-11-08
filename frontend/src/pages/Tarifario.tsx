@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { tratamientoSchema } from '@clinica/shared';
+import { LIMITE_TEXTO, limpiarDecimal, tratamientoSchema } from '@clinica/shared';
 import { insumosApi, tarifarioApi, type Tratamiento } from '../api/recursos';
 import { FiltroLista } from '../components/FiltroLista';
 import { ModalConfirmar } from '../components/ModalConfirmar';
@@ -110,25 +110,35 @@ function FormTratamiento({ tratamiento, onCerrar }: { tratamiento: Tratamiento |
           <div className="row g-3 mb-3">
             <div className="col-sm-8">
               <label htmlFor="t-nombre" className="form-label">Nombre</label>
-              <input id="t-nombre" className={`form-control ${errores.nombre ? 'is-invalid' : ''}`} value={nombre} onChange={(e) => setNombre(e.target.value)} />
+              <input id="t-nombre" maxLength={LIMITE_TEXTO.nombre} className={`form-control ${errores.nombre ? 'is-invalid' : ''}`} value={nombre} onChange={(e) => setNombre(e.target.value)} />
               <div className="invalid-feedback">{errores.nombre}</div>
             </div>
             <div className="col-sm-4">
               <label htmlFor="t-precio" className="form-label">Precio (S/)</label>
-              <input id="t-precio" inputMode="decimal" className={`form-control ${errores.precio ? 'is-invalid' : ''}`} value={precio} onChange={(e) => setPrecio(e.target.value)} />
+              <input id="t-precio" inputMode="decimal" placeholder="0.00" className={`form-control ${errores.precio ? 'is-invalid' : ''}`} value={precio} onChange={(e) => setPrecio(limpiarDecimal(e.target.value))} />
               <div className="invalid-feedback">{errores.precio}</div>
             </div>
           </div>
           {tratamiento && <p className="small text-muted">El nuevo precio solo se aplica a las atenciones futuras.</p>}
           <span className="form-label d-block">Insumos que consume</span>
           {errores.insumos && <div className="text-danger small mb-2">{errores.insumos}</div>}
+          {lineas.length > 0 && (
+            <div className="d-flex gap-2 mb-1 small text-muted fw-semibold encabezado-insumos" aria-hidden="true">
+              <span className="flex-grow-1">Insumo</span>
+              <span style={{ width: 170 }}>Cantidad</span>
+              <span style={{ width: 42 }} />
+            </div>
+          )}
           {lineas.map((l, n) => (
-            <div className="d-flex gap-2 mb-2" key={n}>
+            <div className="d-flex gap-2 mb-2 align-items-center" key={n}>
               <select aria-label={`Insumo ${n + 1}`} className={`form-select ${errores[`insumos.${n}.insumoId`] ? 'is-invalid' : ''}`} value={l.insumoId} onChange={(e) => cambiar(n, { insumoId: e.target.value ? Number(e.target.value) : '' })}>
                 <option value="">Seleccione…</option>
                 {insumos.data?.map((i) => <option key={i.id} value={i.id}>{i.nombre} ({i.unidad})</option>)}
               </select>
-              <input aria-label={`Cantidad ${n + 1}`} inputMode="decimal" style={{ maxWidth: 110 }} className={`form-control ${errores[`insumos.${n}.cantidad`] ? 'is-invalid' : ''}`} value={l.cantidad} onChange={(e) => cambiar(n, { cantidad: e.target.value })} placeholder="Cant." />
+              <div className="input-group" style={{ width: 170, flex: '0 0 auto' }}>
+                <input aria-label={`Cantidad ${n + 1}`} inputMode="decimal" className={`form-control ${errores[`insumos.${n}.cantidad`] ? 'is-invalid' : ''}`} value={l.cantidad} onChange={(e) => cambiar(n, { cantidad: limpiarDecimal(e.target.value) })} placeholder="1" />
+                <span className="input-group-text small">{insumos.data?.find((i) => i.id === l.insumoId)?.unidad ?? 'unid.'}</span>
+              </div>
               <button type="button" className="btn btn-outline-secondary" aria-label={`Quitar insumo ${n + 1}`} onClick={() => setLineas((ls) => ls.filter((_, i) => i !== n))}>✕</button>
             </div>
           ))}

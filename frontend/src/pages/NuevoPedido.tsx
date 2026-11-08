@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { pedidoSchema } from '@clinica/shared';
+import { limpiarDecimal, pedidoSchema } from '@clinica/shared';
 import { insumosApi, pedidosApi, proveedoresApi, type Insumo, type Pedido } from '../api/recursos';
 import { FormProveedor } from './Proveedores';
 import { AvisoFlotante, BotonAccion, IconoPapelera } from '../components/Interaccion';
@@ -146,7 +146,7 @@ export default function NuevoPedido() {
               {l.desdeAlerta ? <span className="badge text-bg-warning">Desde alerta</span> : <span className="badge text-bg-light border">Agregado</span>}
               <div className="small text-muted">stock {numPE(l.insumo.stockActual)} / mín. {numPE(l.insumo.stockMinimo)} {l.insumo.unidad}</div>
             </div>
-            <input aria-label={`Cantidad de ${l.insumo.nombre}`} inputMode="decimal" style={{ maxWidth: 100 }} className={`form-control ${errores[`insumos.${n}.cantidad`] ? 'is-invalid' : ''}`} value={l.cantidad} onChange={(e) => setLineas(lineas.map((x, i) => (i === n ? { ...x, cantidad: e.target.value } : x)))} />
+            <input aria-label={`Cantidad de ${l.insumo.nombre}`} inputMode="decimal" style={{ maxWidth: 100 }} className={`form-control ${errores[`insumos.${n}.cantidad`] ? 'is-invalid' : ''}`} value={l.cantidad} onChange={(e) => setLineas(lineas.map((x, i) => (i === n ? { ...x, cantidad: limpiarDecimal(e.target.value) } : x)))} />
             <button type="button" className="btn btn-outline-secondary" aria-label={`Quitar ${l.insumo.nombre}`} onClick={() => setLineas(lineas.filter((_, i) => i !== n))}>✕</button>
           </div>
         ))}
