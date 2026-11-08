@@ -247,6 +247,10 @@ export function moverFecha(fecha: string, { dias = 0, anios = 0 }: { dias?: numb
 }
 /** Las citas se reservan desde hoy hasta un año adelante. */
 export const fechaMaximaCita = (hoy = hoyEnLima()) => moverFecha(hoy, { anios: 1 });
+/** Tope para toda fecha futura del sistema (citas, campañas, feriados, agenda): un año desde hoy. */
+export const fechaMaximaFutura = fechaMaximaCita;
+export const mensajeHastaUnAnio = (hoy = hoyEnLima()) => `Máximo un año desde hoy (hasta ${fechaMaximaFutura(hoy).split('-').reverse().join('/')})`;
+const hastaUnAnio = (f: string) => f <= fechaMaximaFutura();
 /** Nacimiento: de hoy hacia atrás, como máximo 120 años. */
 export const EDAD_MAXIMA = 120;
 export const fechaMinimaNacimiento = (hoy = hoyEnLima()) => moverFecha(hoy, { anios: -EDAD_MAXIMA });
@@ -668,12 +672,14 @@ export const descuentoSchema = z
   })
   .refine((d) => d.fechaInicio <= d.fechaFin, { message: 'La fecha de inicio debe ser anterior al fin', path: ['fechaFin'] })
   .refine((d) => d.fechaFin >= hoyEnLima(), { message: 'La campaña debe terminar hoy o después', path: ['fechaFin'] })
+  .refine((d) => hastaUnAnio(d.fechaInicio), () => ({ message: mensajeHastaUnAnio(), path: ['fechaInicio'] }))
+  .refine((d) => hastaUnAnio(d.fechaFin), () => ({ message: mensajeHastaUnAnio(), path: ['fechaFin'] }))
   .refine((d) => d.tipo === 'tres_por_dos' || (d.porcentaje ?? 0) > 0, { message: 'Ingrese un porcentaje', path: ['porcentaje'] });
 export type DescuentoDTO = z.infer<typeof descuentoSchema>;
 
 // ---------- Feriados y horarios ----------
 export const feriadoSchema = z.object({
-  fecha: fechaSchema.refine((f) => f >= hoyEnLima(), 'El feriado debe ser de hoy en adelante'),
+  fecha: fechaSchema.refine((f) => f >= hoyEnLima(), 'El feriado debe ser de hoy en adelante').refine(hastaUnAnio, () => ({ message: mensajeHastaUnAnio() })),
   nombre: z.string().trim().min(3, 'Ingrese el nombre').max(80),
 });
 export const horarioSchema = z.object({

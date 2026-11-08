@@ -93,3 +93,20 @@ describe('Reglas de escritura en pantalla', () => {
     expect(cant).not.toHaveValue(expect.stringMatching(/[a-z]/));
   });
 });
+
+describe('Fechas: como máximo un año desde hoy', () => {
+  it('Agenda: el calendario no pasa de un año y no acepta años de 5 dígitos', async () => {
+    const { default: CitasDelDia } = await import('../pages/CitasDelDia');
+    const { simularApi } = await import('./utils');
+    const { fechaMaximaFutura, fireEvent } = { ...(await import('@clinica/shared')), ...(await import('@testing-library/react')) };
+    simularApi({ 'GET /citas/del-dia': { body: [] } });
+    renderizar(<CitasDelDia />);
+    const fecha = screen.getByLabelText('Fecha');
+    expect(fecha).toHaveAttribute('max', fechaMaximaFutura());
+    const antes = (fecha as HTMLInputElement).value;
+    fireEvent.change(fecha, { target: { value: moverFecha(fechaMaximaFutura(), { dias: 1 }) } });
+    expect(fecha).toHaveValue(antes);
+    fireEvent.change(fecha, { target: { value: '20266-01-01' } });
+    expect(fecha).toHaveValue(antes);
+  });
+});

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { atencionApi } from '../api/recursos';
 import { ChipEstado } from '../components/ChipEstado';
 import { fechaPE, hoyLima } from '../formato';
+import { fechaMaximaFutura } from '@clinica/shared';
 import { DniPaciente } from '../components/DniPaciente';
 
 /** CU-11 paso 1: «Mis citas del día» del odontólogo. */
@@ -17,7 +18,7 @@ export default function MisCitasOdontologo() {
         <h1 className="h4 mb-0">Mis citas del día</h1>
         <div>
           <label htmlFor="fecha-od" className="form-label small mb-1">Fecha</label>
-          <input id="fecha-od" type="date" className="form-control" value={fecha} onChange={(e) => e.target.value && setFecha(e.target.value)} />
+          <input id="fecha-od" type="date" max={fechaMaximaFutura()} className="form-control" value={fecha} onChange={(e) => /^\d{4}-\d{2}-\d{2}$/.test(e.target.value) && e.target.value <= fechaMaximaFutura() && setFecha(e.target.value)} />
         </div>
       </div>
       {citas.isLoading && <p className="text-muted">Cargando…</p>}

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { citasApi } from '../api/recursos';
 import { CitasAgenda } from '../components/CitasAgenda';
 import { fechaPE, hoyLima } from '../formato';
+import { fechaMaximaFutura } from '@clinica/shared';
 
 /** CU-09 (i_citasDelDia): Agenda — las citas de una fecha (por defecto hoy), con inasistencias y acciones de CU-07. */
 export default function CitasDelDia() {
@@ -14,7 +15,7 @@ export default function CitasDelDia() {
         <h1 className="h4 mb-0">Agenda</h1>
         <div>
           <label htmlFor="fecha-dia" className="form-label small mb-1">Fecha</label>
-          <input id="fecha-dia" type="date" className="form-control" value={fecha} onChange={(e) => e.target.value && setFecha(e.target.value)} />
+          <input id="fecha-dia" type="date" max={fechaMaximaFutura()} className="form-control" value={fecha} onChange={(e) => /^\d{4}-\d{2}-\d{2}$/.test(e.target.value) && e.target.value <= fechaMaximaFutura() && setFecha(e.target.value)} />
         </div>
       </div>
       {citas.isLoading && <p className="text-muted">Cargando…</p>}

@@ -1,6 +1,6 @@
 // Fechas con sentido: nacimiento hacia atrás, citas hasta un año adelante, feriados y campañas hacia adelante, filtros hasta hoy
 import { beforeEach, describe, expect, it } from 'vitest';
-import { MENSAJES, moverFecha } from '@clinica/shared';
+import { MENSAJES, mensajeHastaUnAnio, moverFecha } from '@clinica/shared';
 import { idOdontologo, prisma, reiniciarBD, sesion } from './helpers.js';
 import { ahoraLima, diaSemana, sumarDias } from '../src/lib/fechas.js';
 
@@ -49,6 +49,19 @@ describe('Feriados, campañas y filtros', () => {
     expect(pasada.body.campos.fechaFin).toBe('La campaña debe terminar hoy o después');
     // una campaña que ya empezó se puede seguir editando (su inicio puede estar en el pasado)
     expect((await admin.post('/api/admin/descuentos').send({ nombre: 'En curso', porcentaje: 10, fechaInicio: sumarDias(hoy(), -5), fechaFin: sumarDias(hoy(), 5), tratamientos: [consulta] })).status).toBe(201);
+  });
+
+  it('feriados y campañas: como máximo un año desde hoy (también rechaza años de 5 dígitos)', async () => {
+    const admin = await sesion('administrador');
+    const tope = moverFecha(hoy(), { anios: 1 });
+    const pasado = sumarDias(tope, 1);
+    expect((await admin.post('/api/admin/feriados').send({ fecha: pasado, nombre: 'Muy lejos' })).body.campos.fecha).toBe(mensajeHastaUnAnio());
+    expect((await admin.post('/api/admin/feriados').send({ fecha: tope, nombre: 'Al límite' })).status).toBe(201);
+    expect((await admin.post('/api/admin/feriados').send({ fecha: '20266-01-01', nombre: 'Año raro' })).status).toBe(422);
+    const consulta = (await prisma.tratamiento.findUniqueOrThrow({ where: { nombre: 'Consulta' } })).id;
+    const larga = await admin.post('/api/admin/descuentos').send({ nombre: 'Muy larga', porcentaje: 10, fechaInicio: hoy(), fechaFin: pasado, tratamientos: [consulta] });
+    expect(larga.body.campos.fechaFin).toBe(mensajeHastaUnAnio());
+    expect((await admin.post('/api/admin/descuentos').send({ nombre: 'Un año', porcentaje: 10, fechaInicio: hoy(), fechaFin: tope, tratamientos: [consulta] })).status).toBe(201);
   });
 
   it('reportes, kárdex y auditoría: «hasta» no pasa de hoy ni es anterior a «desde»', async () => {

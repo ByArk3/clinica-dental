@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { MENSAJES } from '@clinica/shared';
 import { app, PASSWORD, prisma, reiniciarBD, sesion, USUARIOS } from './helpers.js';
-import { ahoraLima } from '../src/lib/fechas.js';
+import { ahoraLima, sumarDias } from '../src/lib/fechas.js';
 
 beforeEach(reiniciarBD);
 
@@ -151,7 +151,7 @@ describe('Campañas de descuento y datos de pago (Administrador)', () => {
     const r = await admin.post('/api/admin/descuentos').send({ nombre: 'Consulta a mitad', porcentaje: 50, fechaInicio: hoy, fechaFin: hoy, tratamientos: [consulta] });
     expect(r.status).toBe(201);
     expect(r.body).toMatchObject({ nombre: 'Consulta a mitad', tipo: 'porcentaje', porcentaje: '50.00', fechaInicio: hoy, tratamientos: [{ nombre: 'Consulta' }] });
-    const futura = await admin.post('/api/admin/descuentos').send({ nombre: 'Futura', porcentaje: 10, fechaInicio: '2099-01-01', fechaFin: '2099-01-31', tratamientos: [consulta] });
+    const futura = await admin.post('/api/admin/descuentos').send({ nombre: 'Futura', porcentaje: 10, fechaInicio: sumarDias(hoy, 30), fechaFin: sumarDias(hoy, 60), tratamientos: [consulta] });
     expect(futura.status).toBe(201);
     const caja = await (await sesion('recepcionista')).get('/api/caja/campanas');
     expect(caja.body.map((c: { nombre: string }) => c.nombre)).toEqual(['Consulta a mitad']);
@@ -165,7 +165,7 @@ describe('Campañas de descuento y datos de pago (Administrador)', () => {
     expect(r.status).toBe(422);
     expect(r.body.campos).toMatchObject({ porcentaje: 'Máximo 100 %', tratamientos: 'Elija al menos un tratamiento' });
     const resina = (await prisma.tratamiento.findUniqueOrThrow({ where: { nombre: 'Curación con resina' } })).id;
-    const tres = await admin.post('/api/admin/descuentos').send({ nombre: 'Resinas 3x2', tipo: 'tres_por_dos', fechaInicio: '2099-07-01', fechaFin: '2099-07-31', tratamientos: [resina] });
+    const tres = await admin.post('/api/admin/descuentos').send({ nombre: 'Resinas 3x2', tipo: 'tres_por_dos', fechaInicio: sumarDias(ahoraLima().fecha, 30), fechaFin: sumarDias(ahoraLima().fecha, 60), tratamientos: [resina] });
     expect(tres.body).toMatchObject({ tipo: 'tres_por_dos', porcentaje: null });
   });
 

@@ -141,7 +141,7 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | Descuentos (P3) y monto del adelanto (P6) gestionados por el Administrador | `admin.test.ts` |
 | CU-38 Panel de control · CU-39 Reporte de ingresos · CU-40 Reporte de inventario (rango de fechas, exportación CSV para Excel) | `reporte.test.ts`, `Iteracion4.test.tsx` |
 
-Total: **326 pruebas de API + 118 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y los CU-58 y CU-59 están implementados.
+Total: **327 pruebas de API + 119 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y los CU-58 y CU-59 están implementados.
 
 **Tareas programadas** (`backend/src/jobs`, node-cron, hora de Lima; se activan con `JOBS_ENABLED=true`):
 - **Cada 5 min:** libera las reservas cuyo adelanto no se pagó ni reportó en 1 hora (RN-04; también las citas antiguas
@@ -350,7 +350,9 @@ Resumen de todo lo agregado en las últimas 24 horas (commits `a7d987b` a `34bbf
 - **Datos del paciente:** nombres y apellidos solo letras; sexo obligatorio; correo obligatorio en la web; apoderado obligatorio
   para menores de 18; obligatorios marcados con *; contraseña del paciente 8–64, con letras y números, sin su DNI ni su nombre.
 - **Fechas con sentido:** nacimiento de hoy hacia atrás (máx. 120 años); citas de hoy hasta un año adelante; feriados de hoy en
-  adelante; campañas que terminen hoy o después; filtros «hasta» no mayor que hoy.
+  adelante; campañas que terminen hoy o después; filtros «hasta» no mayor que hoy. **Ninguna fecha futura pasa de un año desde
+  hoy** (`fechaMaximaFutura` en `shared`): citas, inicio y fin de campañas, feriados, Agenda y «Mis citas» del odontólogo;
+  mensaje «Máximo un año desde hoy (hasta DD/MM/AAAA)». Tampoco se aceptan años de 5 dígitos.
 - **Pagos:** número de operación de Yape solo números (máx. 8); de Plin letras y números (12 a 20). En Caja, efectivo entre el
   total y el total + S/ 200 (hasta 5 dígitos); tarjeta o billetera, el total exacto.
 - **Usuarios (RN-23, CU-59):** insignia «★ Principal», botones según permisos, traspaso con contraseña, auditoría de la gestión
