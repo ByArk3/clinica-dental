@@ -15,7 +15,7 @@ esac
 echo "[api] aplicando migraciones…"
 npx prisma migrate deploy
 if [ "$SEED" = "true" ]; then
-  echo "[api] cargando datos de ejemplo (idempotente)…"
+  echo "[api] cargando datos de ejemplo (la primera vez genera 3 meses de historia: puede tardar unos minutos)…"
   npx tsx prisma/seed.ts
 fi
 exec "$@"

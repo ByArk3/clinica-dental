@@ -248,7 +248,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const prisma = new PrismaClient();
   sembrar(prisma)
     // Datos de demostración: 3 meses de historia y próximas citas (solo en una base sin citas)
-    .then(async () => (await import('./demo.js')).sembrarDemo(prisma))
+    // Todo o nada (una transacción): si se interrumpe, no quedan datos a medias y se reintenta en el próximo arranque
+    .then(async () => {
+      const { sembrarDemo } = await import('./demo.js');
+      await prisma.$transaction((tx) => sembrarDemo(tx as unknown as PrismaClient), { timeout: 15 * 60_000, maxWait: 30_000 });
+    })
     .catch((e) => {
       console.error(e);
       process.exit(1);

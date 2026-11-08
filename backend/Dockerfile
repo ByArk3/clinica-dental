@@ -19,7 +19,8 @@ COPY backend backend
 ENV NODE_ENV=production TZ=America/Lima PORT=3000
 WORKDIR /app/backend
 EXPOSE 3000
-HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=5 \
+# start-period largo: el primer arranque con SEED=true genera los datos de demostración antes de abrir la API
+HEALTHCHECK --interval=10s --timeout=3s --start-period=600s --retries=5 \
   CMD node -e "fetch('http://localhost:3000/api/salud').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 COPY backend/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 # sed: quita CRLF por si el archivo se editó en Windows
