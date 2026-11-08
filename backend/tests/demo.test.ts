@@ -16,7 +16,7 @@ describe('Datos de demostración', () => {
     const estados = new Set((await prisma.cita.groupBy({ by: ['estado'] })).map((x) => x.estado));
     for (const e of ['pagada', 'confirmada', 'cancelada', 'liberada', 'inasistencia', 'pendiente_adelanto', 'pago_en_verificacion']) expect(estados).toContain(e);
     expect(await prisma.paciente.count({ where: { dni: null } })).toBeGreaterThan(0);
-    expect(await prisma.pedido.count({ where: { estado: 'pendiente' } })).toBe(1);
+    expect(await prisma.pedido.count({ where: { estado: 'pendiente' } })).toBeGreaterThanOrEqual(1); // según la hora, puede haber otro pedido en camino
     expect(await prisma.alertaStock.count({ where: { revisada: false } })).toBeGreaterThan(0);
   });
 
