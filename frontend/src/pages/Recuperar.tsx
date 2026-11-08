@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { passwordSchema } from '@clinica/shared';
 import { authApi } from '../api/recursos';
 import { ApiError } from '../api/cliente';
-import { CampoPassword } from '../components/CampoPassword';
+import { CampoPassword, ConfirmarPassword, NO_COINCIDEN } from '../components/CampoPassword';
 
 /** CU-02 Recuperar contraseña: paso 1, pedir el enlace por correo. */
 export function Recuperar() {
@@ -36,12 +36,14 @@ export function Recuperar() {
 export function Restablecer() {
   const [params] = useSearchParams();
   const [password, setPassword] = useState('');
+  const [confirmar, setConfirmar] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [listo, setListo] = useState<string | null>(null);
   async function enviar(e: FormEvent) {
     e.preventDefault();
     const v = passwordSchema.safeParse(password);
     if (!v.success) return setError(v.error.issues[0].message);
+    if (confirmar !== password) return setError(NO_COINCIDEN);
     try {
       setListo((await authApi.restablecer(params.get('token') ?? '', password)).mensaje);
     } catch (err) {
@@ -57,8 +59,11 @@ export function Restablecer() {
         ) : (
           <>
             <label htmlFor="password" className="form-label">Contraseña nueva</label>
-            <CampoPassword id="password" value={password} onChange={setPassword} autoComplete="new-password" />
-            <p className="small text-muted mt-1">Mínimo 8 caracteres, con letras y números.</p>
+            <CampoPassword id="password" value={password} onChange={(x) => { setPassword(x); setError(null); }} autoComplete="new-password" />
+            <p className="small text-muted mt-1">Mínimo 8 caracteres.</p>
+            <label htmlFor="confirmar" className="form-label">Confirmar contraseña</label>
+            <ConfirmarPassword id="confirmar" password={password} value={confirmar} onChange={(x) => { setConfirmar(x); setError(null); }} />
+            <div className="mb-3" />
             {error && <div className="alert alert-danger">{error}</div>}
             <button className="btn btn-acento w-100">Guardar</button>
           </>

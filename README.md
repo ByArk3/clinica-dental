@@ -141,7 +141,7 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | Descuentos (P3) y monto del adelanto (P6) gestionados por el Administrador | `admin.test.ts` |
 | CU-38 Panel de control · CU-39 Reporte de ingresos · CU-40 Reporte de inventario (rango de fechas, exportación CSV para Excel) | `reporte.test.ts`, `Iteracion4.test.tsx` |
 
-Total: **322 pruebas de API + 115 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y los CU-58 y CU-59 están implementados.
+Total: **322 pruebas de API + 117 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y los CU-58 y CU-59 están implementados.
 
 **Tareas programadas** (`backend/src/jobs`, node-cron, hora de Lima; se activan con `JOBS_ENABLED=true`):
 - **Cada 5 min:** libera las reservas cuyo adelanto no se pagó ni reportó en 1 hora (RN-04; también las citas antiguas
@@ -373,10 +373,12 @@ Resumen de todo lo agregado en las últimas 24 horas (commits `a7d987b` a `34bbf
 `GET /pacientes/:id/citas` · `PATCH /citas/:id/datos` · `POST /usuarios/:id/principal`. La disponibilidad devuelve además
 `alternativas` (otros odontólogos con horas libres ese día).
 
-### Pendientes anotados (aún no implementados)
-- **16.** «Confirmar contraseña» (segundo recuadro) en recuperar contraseña, registro web y usuarios.
-- **17.** (Opcional) Casilla «Entiendo que dejaré de ser el administrador principal» en el traspaso.
-- Descartado por ahora: límite de intentos en el registro web.
+- **Confirmar contraseña:** segundo recuadro en «Nueva contraseña» (recuperar), registro web y Usuarios; avisa «Las
+  contraseñas no coinciden» y se marca en verde cuando coinciden.
+- **Traspaso del principal:** además de la contraseña, la casilla «Entiendo que dejaré de ser el administrador principal».
+
+### Pendientes
+- No hay pendientes anotados. Descartado por ahora: límite de intentos en el registro web (ver «Riesgos conocidos»).
 
 ## Guía para quien modifique el código (personas o agentes de IA)
 
@@ -441,6 +443,10 @@ Esta sección resume lo que hay que saber **antes de tocar el código**, para no
 - El primer arranque con `SEED=true` genera la historia de demostración antes de abrir la API; Docker espera hasta 10 minutos.
 
 ## Riesgos conocidos
+
+- **Registro web y correos existentes:** si alguien intenta crear una cuenta con un correo ya registrado, el sistema responde
+  «Ese correo ya está registrado»; así se puede saber si un correo tiene cuenta. Se aceptó por ahora (decisión del equipo); la
+  mejora sería limitar los intentos por IP, como en «Recuperar contraseña», o confirmar el registro por correo.
 
 - **Bloqueo de cuentas (RN-21):** cualquiera que conozca el correo de un usuario puede bloquearlo 15 minutos fallando
   3 veces. Se acepta para el curso; el administrador puede desbloquear desde Usuarios (CU-46). En producción se

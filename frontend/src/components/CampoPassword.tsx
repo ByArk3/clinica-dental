@@ -7,17 +7,19 @@ interface Props {
   autoComplete?: string;
   error?: string;
   required?: boolean;
+  /** Marca el campo en verde (p. ej. la confirmación coincide) */
+  valido?: boolean;
 }
 
 /** Campo de contraseña con botón para mostrarla u ocultarla. */
-export function CampoPassword({ id, value, onChange, autoComplete, error, required }: Props) {
+export function CampoPassword({ id, value, onChange, autoComplete, error, required, valido }: Props) {
   const [visible, setVisible] = useState(false);
   return (
     <div className="input-group has-validation">
       <input
         id={id}
         type={visible ? 'text' : 'password'}
-        className={`form-control ${error ? 'is-invalid' : ''}`}
+        className={`form-control ${error ? 'is-invalid' : valido ? 'is-valid' : ''}`}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         autoComplete={autoComplete}
@@ -43,4 +45,16 @@ export function CampoPassword({ id, value, onChange, autoComplete, error, requir
       {error && <div className="invalid-feedback">{error}</div>}
     </div>
   );
+}
+
+export const NO_COINCIDEN = 'Las contraseñas no coinciden';
+
+/**
+ * «Confirmar contraseña»: segundo recuadro que debe ser igual al primero. Verde cuando coincide; avisa si no coincide
+ * apenas se terminó de escribir (mismo largo o más) o cuando el formulario lo marca con `error`.
+ */
+export function ConfirmarPassword({ id, password, value, onChange, error }: { id: string; password: string; value: string; onChange: (v: string) => void; error?: string }) {
+  const coincide = value !== '' && value === password;
+  const aviso = error ?? (value !== '' && value.length >= password.length && !coincide ? NO_COINCIDEN : undefined);
+  return <CampoPassword id={id} value={value} onChange={onChange} autoComplete="new-password" error={aviso} valido={coincide} />;
 }

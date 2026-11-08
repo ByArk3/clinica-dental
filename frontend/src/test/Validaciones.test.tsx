@@ -40,3 +40,32 @@ describe('Caja: monto recibido en efectivo', () => {
     expect(limpiarMonto('1.2.3')).toBe('1.23');
   });
 });
+
+describe('Confirmar contraseña', () => {
+  it('nueva contraseña (recuperar): si no coinciden avisa y no envía; si coinciden se marca en verde', async () => {
+    const { Restablecer } = await import('../pages/Recuperar');
+    const { simularApi } = await import('./utils');
+    const llamadas = simularApi({ 'POST /auth/restablecer': { body: { mensaje: 'Contraseña actualizada' } } });
+    renderizar(<Restablecer />, '/restablecer?token=abcdefghijkl');
+    const u = userEvent.setup();
+    expect(screen.getByText('Mínimo 8 caracteres.')).toBeInTheDocument();
+    await u.type(screen.getByLabelText('Contraseña nueva'), 'Dientes2027');
+    await u.type(screen.getByLabelText('Confirmar contraseña'), 'Dientes2028');
+    expect(screen.getByText('Las contraseñas no coinciden')).toBeInTheDocument();
+    await u.click(screen.getByRole('button', { name: 'Guardar' }));
+    expect(llamadas).toHaveLength(0);
+    await u.clear(screen.getByLabelText('Confirmar contraseña'));
+    await u.type(screen.getByLabelText('Confirmar contraseña'), 'Dientes2027');
+    expect(screen.getByLabelText('Confirmar contraseña')).toHaveClass('is-valid');
+    await u.click(screen.getByRole('button', { name: 'Guardar' }));
+    expect(await screen.findByText('Contraseña actualizada')).toBeInTheDocument();
+  });
+
+  it('registro web: pide confirmar la contraseña', async () => {
+    renderizar(<FormPaciente conCuenta textoBoton="Crear cuenta" onEnviar={async () => {}} />);
+    const u = userEvent.setup();
+    await u.type(screen.getByLabelText('Contraseña'), 'Dientes2027');
+    await u.click(screen.getByRole('button', { name: 'Crear cuenta' }));
+    expect(screen.getByText('Las contraseñas no coinciden')).toBeInTheDocument();
+  });
+});

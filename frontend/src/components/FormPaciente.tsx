@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { ETIQUETA_SEXO, LARGO_NUMERICO, SEXOS, esMenorDeEdad, pacienteSchema, pacienteSinDniSchema, registroPacienteSchema, soloLetras } from '@clinica/shared';
 import { ApiError } from '../api/cliente';
 import { CampoDigitos } from './Interaccion';
-import { CampoPassword } from './CampoPassword';
+import { CampoPassword, ConfirmarPassword, NO_COINCIDEN } from './CampoPassword';
 import { fechaMinimaNacimiento, hoyEnLima } from '@clinica/shared';
 
 type Valores = Record<string, string>;
@@ -52,6 +52,7 @@ export function FormPaciente({ conCuenta, sinDni, dniInicial = '', inicial, text
     ? [
         ...CAMPOS.map((c) => (c.nombre === 'email' ? { ...c, opcional: false } : c)),
         { nombre: 'password', etiqueta: 'Contraseña', tipo: 'password', col: 'col-sm-6' },
+        { nombre: 'confirmar', etiqueta: 'Confirmar contraseña', tipo: 'password', col: 'col-sm-6' },
       ]
     : sinDni
       ? CAMPOS.filter((c) => c.nombre !== 'dni')
@@ -64,9 +65,11 @@ export function FormPaciente({ conCuenta, sinDni, dniInicial = '', inicial, text
     e.preventDefault();
     setError(null);
     const r = (conCuenta ? registroPacienteSchema : sinDni ? pacienteSinDniSchema : pacienteSchema).safeParse({ ...v, sexo: v.sexo || undefined });
-    if (!r.success) {
+    const noCoinciden = conCuenta && (v.confirmar ?? '') !== (v.password ?? '');
+    if (!r.success || noCoinciden) {
       const c: Valores = {};
-      for (const i of r.error.issues) c[i.path.join('.')] ??= i.message;
+      if (!r.success) for (const i of r.error.issues) c[i.path.join('.')] ??= i.message;
+      if (noCoinciden) c.confirmar = NO_COINCIDEN;
       setErrores(c);
       return;
     }
@@ -93,7 +96,9 @@ export function FormPaciente({ conCuenta, sinDni, dniInicial = '', inicial, text
             <label htmlFor={`p-${c.nombre}`} className={`form-label ${opcional(c) ? '' : 'obligatorio'}`}>
               {c.etiqueta} {opcional(c) && <small className="text-muted">(opcional)</small>}
             </label>
-            {c.nombre === 'password' ? (
+            {c.nombre === 'confirmar' ? (
+              <ConfirmarPassword id="p-confirmar" password={v.password ?? ''} value={v.confirmar ?? ''} onChange={(x) => setV({ ...v, confirmar: x })} error={errores.confirmar} />
+            ) : c.nombre === 'password' ? (
               <CampoPassword
                 id="p-password"
                 value={v.password ?? ''}
@@ -124,7 +129,7 @@ export function FormPaciente({ conCuenta, sinDni, dniInicial = '', inicial, text
             )}
             {c.nombre === 'apoderado' && menor && <div className="form-text">Es menor de edad: nombre, DNI y celular del padre, madre o tutor.</div>}
             {c.nombre === 'sexo' && errores.sexo && <div className="text-danger small mt-1">{errores.sexo}</div>}
-            {c.nombre !== 'password' && c.nombre !== 'sexo' && !NUMERICOS[c.nombre] && <div className="invalid-feedback">{errores[c.nombre]}</div>}
+            {c.nombre !== 'password' && c.nombre !== 'confirmar' && c.nombre !== 'sexo' && !NUMERICOS[c.nombre] && <div className="invalid-feedback">{errores[c.nombre]}</div>}
           </div>
         ))}
       </div>

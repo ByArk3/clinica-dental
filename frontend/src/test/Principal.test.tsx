@@ -40,6 +40,8 @@ describe('Usuarios: administrador principal', () => {
     await u.click(within(fProbando).getByRole('button', { name: /Hacer principal/ }));
     const modal = await screen.findByRole('dialog');
     await u.type(within(modal).getByLabelText('Confirme con su contraseña'), 'Clinica2026');
+    expect(within(modal).getByRole('button', { name: 'Traspasar' })).toBeDisabled(); // falta marcar la casilla
+    await u.click(within(modal).getByLabelText('Entiendo que dejaré de ser el administrador principal'));
     await u.click(within(modal).getByRole('button', { name: 'Traspasar' }));
     await waitFor(() => expect(llamadas.find((l) => l.metodo === 'POST')?.body).toEqual({ password: 'Clinica2026' }));
     expect(await screen.findByRole('status')).toHaveTextContent('Probando Admin es ahora el administrador principal');

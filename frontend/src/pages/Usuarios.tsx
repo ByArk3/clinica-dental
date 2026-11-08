@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usuarioModificarSchema, usuarioNuevoSchema, type Rol, type UsuarioModificarDTO, type UsuarioNuevoDTO, LARGO_NUMERICO, soloDigitos } from '@clinica/shared';
 import { usuariosApi, type Usuario } from '../api/recursos';
 import { ModalConfirmar } from '../components/ModalConfirmar';
-import { CampoPassword } from '../components/CampoPassword';
+import { CampoPassword, ConfirmarPassword, NO_COINCIDEN } from '../components/CampoPassword';
 import { useAuth } from '../auth';
 import { AvisoFlotante, BotonAccion } from '../components/Interaccion';
 import { camposApi, erroresZod, mensajeError } from '../formato';
@@ -136,6 +136,7 @@ function FormUsuario({ usuario, esYo, soyPrincipal, onCerrar, onHecho }: { usuar
     email: usuario?.email ?? '',
     rol: (usuario?.rol ?? 'recepcionista') as 'recepcionista' | 'odontologo' | 'administrador',
     password: '',
+    confirmar: '',
     cmp: usuario?.cmp ?? '',
     especialidad: usuario?.especialidad ?? '',
   });
@@ -149,7 +150,8 @@ function FormUsuario({ usuario, esYo, soyPrincipal, onCerrar, onHecho }: { usuar
   function enviar(e: FormEvent) {
     e.preventDefault();
     const r = (usuario ? usuarioModificarSchema : usuarioNuevoSchema).safeParse(v);
-    if (!r.success) return setErrores(erroresZod(r.error.issues));
+    const noCoinciden = v.password !== '' && v.confirmar !== v.password;
+    if (!r.success || noCoinciden) return setErrores({ ...(r.success ? {} : erroresZod(r.error.issues)), ...(noCoinciden ? { confirmar: NO_COINCIDEN } : {}) });
     setErrores({});
     guardar.mutate(r.data);
   }
@@ -207,7 +209,15 @@ function FormUsuario({ usuario, esYo, soyPrincipal, onCerrar, onHecho }: { usuar
                 </div>
               </div>
             ) : (
-              campo('password', usuario ? 'Nueva contraseña (dejar vacío para no cambiarla)' : 'Contraseña', 'col-12', 'password')
+              <>
+                {campo('password', usuario ? 'Nueva contraseña (dejar vacío para no cambiarla)' : 'Contraseña', 'col-12', 'password')}
+                {(!usuario || v.password !== '') && (
+                  <div className="col-12">
+                    <label htmlFor="u-confirmar" className="form-label">Confirmar contraseña</label>
+                    <ConfirmarPassword id="u-confirmar" password={v.password} value={v.confirmar} onChange={(x) => setV({ ...v, confirmar: x })} error={errores.confirmar} />
+                  </div>
+                )}
+              </>
             )}
           </div>
           <p className="small text-muted mt-2 mb-0">{!otroAdmin && 'Mínimo 8 caracteres, con letras y números. '}{usuario && 'Si cambia la contraseña, el correo o el rol, se cerrarán las sesiones abiertas del usuario.'}</p>
@@ -226,6 +236,7 @@ function FormUsuario({ usuario, esYo, soyPrincipal, onCerrar, onHecho }: { usuar
 function ModalTraspaso({ destino, onCerrar, onHecho }: { destino: Usuario; onCerrar: () => void; onHecho: (m: string) => void }) {
   const qc = useQueryClient();
   const [password, setPassword] = useState('');
+  const [entiendo, setEntiendo] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const traspasar = useMutation({
     mutationFn: () => usuariosApi.traspasarPrincipal(destino.id, password),
@@ -254,10 +265,14 @@ function ModalTraspaso({ destino, onCerrar, onHecho }: { destino: Usuario; onCer
           </ul>
           <label htmlFor="t-password" className="form-label">Confirme con su contraseña</label>
           <CampoPassword id="t-password" value={password} onChange={(x) => { setPassword(x); setError(null); }} autoComplete="current-password" error={error ?? undefined} />
+          <div className="form-check mt-3">
+            <input id="t-entiendo" type="checkbox" className="form-check-input" checked={entiendo} onChange={(e) => setEntiendo(e.target.checked)} />
+            <label htmlFor="t-entiendo" className="form-check-label">Entiendo que dejaré de ser el administrador principal</label>
+          </div>
         </Modal.Body>
         <Modal.Footer>
           <button type="button" className="btn btn-outline-secondary" onClick={onCerrar}>Cancelar</button>
-          <BotonAccion mutacion={traspasar} className="btn btn-warning">Traspasar</BotonAccion>
+          <BotonAccion mutacion={traspasar} className="btn btn-warning" disabled={!entiendo} title={entiendo ? undefined : 'Marque la casilla para confirmar'}>Traspasar</BotonAccion>
         </Modal.Footer>
       </form>
     </Modal>
