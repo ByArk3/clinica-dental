@@ -320,6 +320,126 @@ apellidos, nacimiento y sexo piden **motivo** y quedan en la auditoría con el a
 lo cambia el Administrador (con motivo). En la cita se edita el motivo y, si el adelanto aún no se pagó, el tratamiento
 previsto (el adelanto se recalcula); fecha, hora y odontólogo siguen por «Reprogramar».
 
+## Cambios recientes (7 y 8 de noviembre de 2026)
+
+Resumen de todo lo agregado en las últimas 24 horas (commits `a7d987b` a `34bbf38`), para quien continúe el código o el informe.
+
+### Para el informe (casos de uso, reglas y nombres nuevos)
+| Qué | Detalle |
+|---|---|
+| **CU-58 Corregir datos del paciente y de la cita** | «extend» de CU-04. Identidad con motivo y auditoría; DNI ya registrado solo lo cambia el Administrador |
+| **CU-59 Traspasar administrador principal** | «extend» de CU-35. Confirma con la contraseña del principal |
+| **RN-23 Administrador principal** | Protegido; solo él gestiona a otros administradores; nadie cambia la contraseña de otro administrador; siempre queda al menos uno activo |
+| **Paciente con «DNI pendiente»** | Registro presencial sin DNI a la mano; el DNI se completa después (RENIEC verifica los nombres) |
+| Menú de la recepcionista | Nueva cita · **Buscar cita** (nueva) · **Agenda** (antes «Citas del día») · Caja |
+| Nueva cita | Pestañas **«Registrar por DNI»** y **«Registrar sin DNI»** |
+| Insumos | Un solo botón **«Modificar»** con pestañas «Datos del insumo» (CU-21) y «Corregir stock» (CU-25) |
+
+### Cambios por tema
+- **CU-05 Disponibilidad:** si el odontólogo no atiende ese día, el mensaje lo nombra («Dr. X no atiende los sábados») y ofrece a
+  los demás odontólogos con horas libres ese día (sirve para cualquier cantidad de odontólogos). «La clínica no atiende» queda
+  para domingos y feriados.
+- **Paciente sin DNI y búsqueda por nombre:** registro sin DNI (nombres, apellidos, nacimiento, sexo, celular), aviso de
+  pacientes parecidos antes de crearlo, etiqueta «DNI pendiente» en Agenda, Caja, Historial y conteo en el Panel; búsqueda por
+  nombre tolerante a tildes y errores (solo en «Buscar cita»), sin datos clínicos.
+- **Editar datos (CU-58):** formulario con los datos actuales cargados, lo cambiado se marca con su valor anterior y se puede
+  deshacer; al guardar se cierra con un aviso flotante. En la pestaña de la cita: motivo y, sin adelanto pagado, tratamiento
+  previsto (recalcula el adelanto).
+- **Buscar cita:** por DNI o nombre; citas próximas con sus acciones y anteriores solo para consultar; «Sacar otra cita» abre
+  Nueva cita con el paciente cargado en la pestaña que le corresponde; botón «← Regresar».
+- **Datos del paciente:** nombres y apellidos solo letras; sexo obligatorio; correo obligatorio en la web; apoderado obligatorio
+  para menores de 18; obligatorios marcados con *; contraseña del paciente 8–64, con letras y números, sin su DNI ni su nombre.
+- **Fechas con sentido:** nacimiento de hoy hacia atrás (máx. 120 años); citas de hoy hasta un año adelante; feriados de hoy en
+  adelante; campañas que terminen hoy o después; filtros «hasta» no mayor que hoy.
+- **Pagos:** número de operación de Yape solo números (máx. 8); de Plin letras y números (12 a 20). En Caja, efectivo entre el
+  total y el total + S/ 200 (hasta 5 dígitos); tarjeta o billetera, el total exacto.
+- **Usuarios (RN-23, CU-59):** insignia «★ Principal», botones según permisos, traspaso con contraseña, auditoría de la gestión
+  de usuarios.
+- **Datos de demostración:** `SEED=true` carga además ~3 meses de historia ficticia coherente (66 pacientes, ~390 citas, ~620
+  comprobantes, pedidos, kárdex, alertas y auditoría) y las citas de las próximas 2 semanas; solo en una base sin citas, en una
+  sola transacción. Usuarios extra: `sofia.mendoza@clinica.local` y `andres.chavez@clinica.local`.
+- **Correos:** las direcciones `.local` (de prueba) no se envían aunque haya SMTP.
+- **Docker:** la API tiene hasta 10 minutos para el primer arranque; guía para Windows en «Prende el proyecto usando docker.txt».
+- **Pruebas:** siempre usan la base `…_test` y se niegan a vaciar otra.
+
+### Migraciones nuevas (se aplican solas al arrancar)
+| Migración | Qué hace |
+|---|---|
+| `20261109000000_paciente_sin_dni_y_correcciones` | DNI opcional, columna `sexo`, acciones de auditoría `corregir_paciente`, `cambiar_dni`, `editar_cita` |
+| `20261110000000_administrador_principal` | Columna `principal` (uno solo, índice único y `CHECK`), marca al administrador más antiguo, acciones de auditoría de usuarios |
+
+### Rutas nuevas de la API
+`GET /pacientes/por-nombre` · `POST/GET /pacientes/sin-dni` · `GET/PATCH /pacientes/:id` · `PUT /pacientes/:id/dni` ·
+`GET /pacientes/:id/citas` · `PATCH /citas/:id/datos` · `POST /usuarios/:id/principal`. La disponibilidad devuelve además
+`alternativas` (otros odontólogos con horas libres ese día).
+
+### Pendientes anotados (aún no implementados)
+- **16.** «Confirmar contraseña» (segundo recuadro) en recuperar contraseña, registro web y usuarios.
+- **17.** (Opcional) Casilla «Entiendo que dejaré de ser el administrador principal» en el traspaso.
+- Descartado por ahora: límite de intentos en el registro web.
+
+## Guía para quien modifique el código (personas o agentes de IA)
+
+Esta sección resume lo que hay que saber **antes de tocar el código**, para no romper reglas ya acordadas.
+
+### Forma de trabajo del equipo
+- Primero se **anota** el cambio como pendiente (con la lógica y las opciones); si hace falta, se hace un **prototipo** sobre
+  la app real (capturas) y solo se implementa cuando el equipo lo aprueba.
+- Se trabaja directo en `main`, **un commit por bloque de cambios**, con mensajes en español que digan qué y por qué.
+- Todo en **español (Perú)**: textos de pantalla, mensajes de error, comentarios, nombres de funciones y de pruebas.
+- Antes de subir: `npm test` (backend y frontend), `npx tsc --noEmit` en `backend/` y `frontend/`, `npm run build -w frontend`,
+  y revisar la pantalla en el navegador en **modo claro y oscuro** (y a 360 px si es del paciente).
+
+### Dónde va cada cosa
+| Qué | Dónde |
+|---|---|
+| Esquemas Zod, `MENSAJES`, constantes y reglas compartidas (p. ej. `limpiarOperacion`, `esMenorDeEdad`) | `shared/src/index.ts` — **la pantalla y la API validan con el mismo esquema** |
+| Rutas (con su CU y RN en comentario) → controladores → servicios (reglas de negocio) | `backend/src/routes/index.ts` → `controllers/` → `services/` |
+| Modelo de datos y migraciones | `backend/prisma/schema.prisma` y `backend/prisma/migrations/` |
+| Semilla (usuarios de prueba) y datos de demostración (3 meses) | `backend/prisma/seed.ts` y `backend/prisma/demo.ts` |
+| Pantallas y componentes | `frontend/src/pages/` y `frontend/src/components/` |
+| Capturas y diagramas para el informe | `docs/interfaces/` y `docs/diagramas/` |
+
+### Base de datos
+- **Nunca editar una migración ya subida.** Para un cambio: editar `schema.prisma`, generar el SQL con
+  `npx prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url <base_shadow> --script`
+  en una carpeta nueva `prisma/migrations/AAAAMMDDhhmmss_nombre/migration.sql`, y agregar a mano lo que Prisma no genera
+  (índices parciales, `CHECK`, datos). Docker las aplica solo al arrancar (`prisma migrate deploy`).
+- Fechas: la clínica opera en **America/Lima**; `fecha` es `DATE`, `hora` es `TIME` y los instantes se guardan en UTC. Use las
+  utilidades de `backend/src/lib/fechas.ts` (`ahoraLima`, `sumarDias`…) y `hoyEnLima()` de `shared`.
+
+### Pruebas
+- Use **`npm test`** (o `npx vitest` dentro de `backend/`): las pruebas cargan `.env.test` y usan la base **`…_test`**. Se niegan a
+  vaciar cualquier otra base, así que no hay riesgo de borrar la de desarrollo.
+- Cada regla nueva lleva su prueba (API en `backend/tests/`, interfaz en `frontend/src/test/`).
+- `backend/tests/demo.test.ts` verifica que los datos de demostración cuadren (stock, kárdex, numeración, saldo a favor).
+
+### Reglas que no se deben romper
+- **Stock:** solo cambia con movimientos (recepción de pedido, atención, ajuste o merma con motivo); siempre cuadra con el kárdex.
+- **Comprobantes:** numeración `C-000001…` sin huecos (bloqueo consultivo + conteo); un comprobante no se borra, se **anula** con motivo.
+- **Adelanto y saldo:** adelanto del 50 % (100 % con 3+ inasistencias); el saldo a favor se usa primero; el cobro descuenta el adelanto.
+- **RN-07:** la recepcionista nunca ve datos clínicos (diagnósticos, tratamientos realizados, alergias); el historial es del odontólogo y del administrador.
+- **RN-22:** accesos al historial, correcciones, anulaciones, bloqueos, cambios de DNI y gestión de usuarios quedan en la **auditoría**.
+- **RN-23:** el administrador principal está protegido; solo él gestiona a otros administradores.
+- **Datos del paciente:** nombres y apellidos solo letras; menor de 18 → apoderado obligatorio; fechas con sentido (nacimiento
+  hacia atrás, citas hasta un año adelante).
+
+### Seguridad y datos
+- **Nunca** poner secretos en el repositorio (contraseña de Gmail, token de RENIEC, `SESSION_SECRET`): van solo en `.env`, que no se sube.
+- Todos los datos de ejemplo son **ficticios** (el número de Yape de la semilla es 987654321). Los correos `…@….local` no se envían
+  aunque haya SMTP configurado (solo se registran en el log).
+- Los textos que llegan del usuario y van en un correo HTML se escapan con `escaparHtml`.
+
+### Interfaz
+- Los colores salen de variables CSS (`frontend/src/estilos.css`) para que el modo oscuro funcione; no usar colores fijos.
+- Avisos de «guardado» con `AvisoFlotante`; botones que guardan con `BotonAccion`; campos numéricos con `CampoDigitos`.
+- Campos obligatorios: clase `obligatorio` en la etiqueta (asterisco rojo); opcionales con «(opcional)».
+- **No usar emojis nuevos** (Unicode 12 en adelante, p. ej. 🪪): en Windows 10 se ven como un cuadrito.
+
+### Docker en Windows
+- Si `docker compose up --build` falla con «bake», construir las dos imágenes por separado (ver «Opción rápida: Docker»).
+- El primer arranque con `SEED=true` genera la historia de demostración antes de abrir la API; Docker espera hasta 10 minutos.
+
 ## Riesgos conocidos
 
 - **Bloqueo de cuentas (RN-21):** cualquiera que conozca el correo de un usuario puede bloquearlo 15 minutos fallando
