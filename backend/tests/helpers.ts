@@ -17,6 +17,9 @@ export const USUARIOS = {
 
 /** Vacía todas las tablas (menos las migraciones) y vuelve a cargar la semilla. */
 export async function reiniciarBD() {
+  // Seguro: solo se vacía una base de pruebas (su nombre termina en _test)
+  const base = new URL(process.env.DATABASE_URL ?? '').pathname.slice(1);
+  if (!base.endsWith('_test')) throw new Error(`Las pruebas solo corren sobre una base «…_test» (configurada: «${base}»). Use npm test.`);
   reiniciarLimites();
   const tablas = await prisma.$queryRaw<{ tablename: string }[]>`
     SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`;

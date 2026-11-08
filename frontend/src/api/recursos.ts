@@ -14,6 +14,8 @@ export interface Paciente {
   direccion?: string | null;
   apoderado?: string | null;
   sexo?: Sexo | null;
+  /** Tiene cuenta web (inicia sesión con su correo) */
+  tieneCuenta?: boolean;
   inasistencias: number;
   restringido: boolean;
 }

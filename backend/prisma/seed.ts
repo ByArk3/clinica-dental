@@ -96,12 +96,12 @@ export async function sembrar(prisma: PrismaClient<any>, { silencioso = false, h
 
   // --- Pacientes (ficticios). María Quispe tiene cuenta web. ---
   const pacientes = [
-    { dni: '72458190', nombres: 'María', apellidos: 'Quispe Rojas', nac: '1990-04-12', tel: '949123456', email: 'maria.quispe@correo.local', cuenta: true, alergias: 'Penicilina' },
-    { dni: '70112233', nombres: 'Lucía', apellidos: 'Torres Vega', nac: '1985-09-30', tel: '948222333' },
-    { dni: '71223344', nombres: 'Jorge', apellidos: 'Salas', nac: '1978-01-15', tel: '947333444' },
-    { dni: '72334455', nombres: 'Rosa', apellidos: 'Huamán', nac: '1995-06-21', tel: '946444555' },
-    { dni: '73445566', nombres: 'Pedro', apellidos: 'Castillo', nac: '1982-11-02', tel: '945555666', inasistencias: 2 },
-    { dni: '74556677', nombres: 'Diego', apellidos: 'Rojas', nac: '2001-03-08', tel: '944666777' },
+    { sexo: 'femenino' as const, dni: '72458190', nombres: 'María', apellidos: 'Quispe Rojas', nac: '1990-04-12', tel: '949123456', email: 'maria.quispe@correo.local', cuenta: true, alergias: 'Penicilina' },
+    { sexo: 'femenino' as const, dni: '70112233', nombres: 'Lucía', apellidos: 'Torres Vega', nac: '1985-09-30', tel: '948222333' },
+    { sexo: 'masculino' as const, dni: '71223344', nombres: 'Jorge', apellidos: 'Salas', nac: '1978-01-15', tel: '947333444' },
+    { sexo: 'femenino' as const, dni: '72334455', nombres: 'Rosa', apellidos: 'Huamán', nac: '1995-06-21', tel: '946444555' },
+    { sexo: 'masculino' as const, dni: '73445566', nombres: 'Pedro', apellidos: 'Castillo', nac: '1982-11-02', tel: '945555666', inasistencias: 2 },
+    { sexo: 'masculino' as const, dni: '74556677', nombres: 'Diego', apellidos: 'Rojas', nac: '2001-03-08', tel: '944666777' },
   ];
   for (const p of pacientes) {
     const cuenta = p.cuenta ? await usuario(prisma, `${p.nombres} ${p.apellidos}`, p.email!, 'paciente', hash) : null;
@@ -114,6 +114,7 @@ export async function sembrar(prisma: PrismaClient<any>, { silencioso = false, h
         apellidos: p.apellidos,
         fechaNacimiento: d(p.nac),
         telefono: p.tel,
+        sexo: p.sexo,
         email: p.email,
         inasistencias: p.inasistencias ?? 0,
         usuarioId: cuenta?.id,

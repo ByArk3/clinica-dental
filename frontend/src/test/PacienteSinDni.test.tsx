@@ -9,47 +9,35 @@ import { renderizar, simularApi } from './utils';
 const maria = { id: 1, dni: '72458190', nombres: 'María', apellidos: 'Quispe Rojas', fechaNacimiento: '1990-04-12', telefono: '949123456', email: null, direccion: null, apoderado: null, sexo: 'femenino', inasistencias: 0, restringido: false };
 const encontrada = { id: 1, dni: '72458190', nombres: 'María', apellidos: 'Quispe Rojas', fechaNacimiento: '1990-04-12', edad: 36, celular: '***-***-456' };
 
-describe('Nueva cita: buscar por nombre', () => {
-  it('pestaña aparte: lista con edad, celular parcial y DNI; al elegir continúa con la cita', async () => {
-    const llamadas = simularApi({
-      'GET /pacientes/por-nombre': { body: [encontrada, { ...encontrada, id: 2, dni: null, nombres: 'María Elena', edad: 52, celular: '***-***-881' }] },
-      'GET /pacientes/1': { body: maria },
-      'GET /odontologos': { body: [] },
-    });
+describe('Nueva cita: pestañas «Registrar por DNI» y «Registrar sin DNI»', () => {
+  it('ya no busca por nombre (eso está en «Buscar cita»)', () => {
+    simularApi({});
     renderizar(<NuevaCita />);
-    const u = userEvent.setup();
-    await u.click(screen.getByRole('button', { name: 'Registrar por nombre' }));
-    await u.type(screen.getByLabelText('Apellidos'), 'quispe');
-    await u.type(screen.getByLabelText(/Nombres/), 'maria');
-    await u.click(screen.getByRole('button', { name: 'Buscar' }));
-    expect(await screen.findByText(/36 años · Cel\. \*\*\*-\*\*\*-456/)).toBeInTheDocument();
-    expect(screen.getByText('DNI pendiente')).toBeInTheDocument();
-    expect(llamadas[0].url).toContain('apellidos=quispe&nombres=maria');
-    await u.click(screen.getAllByRole('button', { name: /Elegir/ })[0]);
-    expect(await screen.findByText('María Quispe Rojas')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Registrar por nombre' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Buscar cita' })).toHaveAttribute('href', '/citas/buscar');
+  });
+
+  it('«Sacar otra cita» con un paciente sin DNI abre la pestaña «Registrar sin DNI» con el paciente cargado', async () => {
+    simularApi({ 'GET /pacientes/9': { body: { ...maria, id: 9, dni: null, nombres: 'José', apellidos: 'Pérez' } }, 'GET /odontologos': { body: [] } });
+    renderizar(<NuevaCita />, '/citas/nueva?paciente=9');
+    expect(await screen.findByText('José Pérez')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Registrar sin DNI' })).toHaveClass('active');
+    expect(screen.queryByRole('heading', { name: 'Registrar paciente sin DNI' })).toBeNull(); // no muestra el formulario vacío
     expect(screen.getByLabelText('Motivo')).toBeInTheDocument();
   });
 
-  it('sin resultados lleva a «Registrar por DNI», donde está también el registro sin DNI', async () => {
-    simularApi({ 'GET /pacientes/por-nombre': { body: [] } });
-    renderizar(<NuevaCita />);
-    const u = userEvent.setup();
-    await u.click(screen.getByRole('button', { name: 'Registrar por nombre' }));
-    await u.type(screen.getByLabelText('Apellidos'), 'rosales');
-    await u.click(screen.getByRole('button', { name: 'Buscar' }));
-    expect(await screen.findByText('No se encontró ningún paciente con «rosales».')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /sin DNI/ })).toBeNull(); // el registro sin DNI no está en esta pestaña
-    await u.click(screen.getByRole('button', { name: 'Registrar paciente nuevo →' }));
+  it('«Sacar otra cita» con un paciente con DNI abre «Registrar por DNI» con su DNI escrito', async () => {
+    simularApi({ 'GET /pacientes/1': { body: maria }, 'GET /odontologos': { body: [] } });
+    renderizar(<NuevaCita />, '/citas/nueva?paciente=1');
+    expect(await screen.findByText('María Quispe Rojas')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Registrar por DNI' })).toHaveClass('active');
-    await u.click(screen.getByRole('button', { name: /no tiene DNI a la mano → Registrar sin DNI/ }));
-    expect(screen.getByRole('heading', { name: 'Registrar paciente sin DNI' })).toBeInTheDocument();
-    expect(screen.queryByLabelText('DNI')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('DNI del paciente')).toHaveValue('72458190');
   });
 });
 
 describe('Registro sin DNI', () => {
   async function llenar(u: ReturnType<typeof userEvent.setup>) {
-    await u.click(screen.getByRole('button', { name: /no tiene DNI a la mano → Registrar sin DNI/ }));
+    await u.click(screen.getAllByRole('button', { name: 'Registrar sin DNI' })[0]);
     await u.type(screen.getByLabelText('Nombres'), 'Juana');
     await u.type(screen.getByLabelText('Apellidos'), 'Rosales Mendoza');
     await u.type(screen.getByLabelText('Fecha de nacimiento'), '1988-03-14');
@@ -73,7 +61,7 @@ describe('Registro sin DNI', () => {
     expect(llamadas.some((l) => l.metodo === 'POST')).toBe(false);
     await u.click(screen.getByRole('button', { name: 'No es ninguno: registrar sin DNI' }));
     expect(await screen.findByText('Juana Rosales Mendoza')).toBeInTheDocument();
-    expect(screen.getByText('DNI pendiente')).toBeInTheDocument();
+    expect(screen.getByText('Juana Rosales Mendoza').parentElement).toHaveTextContent('DNI pendiente');
     expect(llamadas.find((l) => l.metodo === 'POST')?.body).toMatchObject({ nombres: 'Juana', apellidos: 'Rosales Mendoza', sexo: 'femenino', telefono: '951234567' });
   });
 });
@@ -83,7 +71,7 @@ describe('Fecha de nacimiento', () => {
     const llamadas = simularApi({});
     renderizar(<NuevaCita />);
     const u = userEvent.setup();
-    await u.click(screen.getByRole('button', { name: /no tiene DNI a la mano → Registrar sin DNI/ }));
+    await u.click(screen.getAllByRole('button', { name: 'Registrar sin DNI' })[0]);
     await u.type(screen.getByLabelText('Nombres'), 'Juana');
     await u.type(screen.getByLabelText('Apellidos'), 'Rosales');
     await u.type(screen.getByLabelText('Fecha de nacimiento'), '2099-01-09');

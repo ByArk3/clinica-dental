@@ -19,13 +19,18 @@ const CONTACTO = {
   direccion: true,
   apoderado: true,
   sexo: true,
+  usuarioId: true,
   inasistencias: true,
   restringido: true,
   saldoFavor: true,
 } as const;
 
-type Contacto = { fechaNacimiento: Date; saldoFavor: { toFixed: (n: number) => string } } & Record<string, unknown>;
-const formatear = <T extends Contacto>(p: T) => ({ ...p, fechaNacimiento: dateAFecha(p.fechaNacimiento), saldoFavor: p.saldoFavor.toFixed(2) });
+type Contacto = { fechaNacimiento: Date; saldoFavor: { toFixed: (n: number) => string }; usuarioId?: number | null } & Record<string, unknown>;
+// tieneCuenta: el paciente inicia sesión en la web con su correo (en «Editar datos» el correo es obligatorio)
+const formatear = <T extends Contacto>(p: T) => {
+  const { usuarioId, ...resto } = p;
+  return { ...resto, tieneCuenta: !!usuarioId, fechaNacimiento: dateAFecha(p.fechaNacimiento), saldoFavor: p.saldoFavor.toFixed(2) };
+};
 
 async function crearConFicha(tx: Tx, dto: Omit<PacienteDTO, 'dni'> & { dni?: string }, usuarioId?: number) {
   // RN-05: todo paciente tiene ficha antes de su primera atención → se crea junto con el paciente
@@ -185,6 +190,13 @@ export async function editarPaciente(id: number, dto: EditarPacienteDTO, usuario
     };
     const cambios = Object.keys(despues).filter((k) => (antes[k] ?? null) !== (despues[k] ?? null));
     if (cambios.length === 0) throw new ErrorNegocio(422, 'SIN_CAMBIOS', MENSAJES.SIN_CAMBIOS);
+    // Con cuenta web el correo es su usuario: es obligatorio y se cambia también en la cuenta (sin repetir el de otra)
+    if (actual.usuarioId && !despues.email) {
+      throw new ErrorNegocio(422, 'VALIDACION', 'El paciente tiene cuenta web: el correo es obligatorio', { email: 'El paciente tiene cuenta web: el correo es obligatorio' });
+    }
+    if (actual.usuarioId && cambios.includes('email') && (await tx.usuario.findFirst({ where: { email: despues.email!, id: { not: actual.usuarioId } } }))) {
+      throw new ErrorNegocio(409, 'EMAIL_DUPLICADO', MENSAJES.EMAIL_DUPLICADO, { email: MENSAJES.EMAIL_DUPLICADO });
+    }
     const identidad = cambios.filter((k) => (IDENTIDAD as readonly string[]).includes(k));
     if (identidad.length > 0 && (dto.motivo ?? '').trim().length < 5) {
       throw new ErrorNegocio(422, 'MOTIVO_REQUERIDO', MENSAJES.MOTIVO_CORRECCION, { motivo: MENSAJES.MOTIVO_CORRECCION });
@@ -197,6 +209,7 @@ export async function editarPaciente(id: number, dto: EditarPacienteDTO, usuario
       },
       select: CONTACTO,
     });
+    if (actual.usuarioId && cambios.includes('email')) await tx.usuario.update({ where: { id: actual.usuarioId }, data: { email: despues.email! } });
     if (identidad.length > 0) {
       const detalle = identidad.map((k) => `${ETIQUETA[k]}: «${antes[k] ?? '—'}» → «${despues[k] ?? '—'}»`).join('; ');
       await auditar(tx, { usuarioId, accion: 'corregir_paciente', pacienteId: id, detalle: `${detalle}. Motivo: ${dto.motivo!.trim()}`, ip });

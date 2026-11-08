@@ -10,6 +10,7 @@ const nuevo = {
   nombres: 'Elena',
   apellidos: 'Mendoza Ruiz',
   fechaNacimiento: '1992-07-19',
+  sexo: 'femenino',
   telefono: '987654321',
   alergias: 'Látex',
 };

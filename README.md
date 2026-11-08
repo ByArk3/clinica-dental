@@ -141,7 +141,7 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | Descuentos (P3) y monto del adelanto (P6) gestionados por el Administrador | `admin.test.ts` |
 | CU-38 Panel de control · CU-39 Reporte de ingresos · CU-40 Reporte de inventario (rango de fechas, exportación CSV para Excel) | `reporte.test.ts`, `Iteracion4.test.tsx` |
 
-Total: **307 pruebas de API + 107 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y el CU-58 están implementados.
+Total: **315 pruebas de API + 110 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y el CU-58 están implementados.
 
 **Tareas programadas** (`backend/src/jobs`, node-cron, hora de Lima; se activan con `JOBS_ENABLED=true`):
 - **Cada 5 min:** libera las reservas cuyo adelanto no se pagó ni reportó en 1 hora (RN-04; también las citas antiguas
@@ -283,17 +283,24 @@ Los «include» del diagrama son solo tres: **CU-05** (desde CU-06 y CU-07), **C
 CU-57 es «extend» porque es opcional: sin token, sin consultas, sin respuesta en 5 s o sin datos, el registro sigue a mano
 (hay pruebas con el proveedor caído).
 
-**Paciente sin DNI a la mano (presencial).** En «Nueva cita» la recepcionista usa **«Registrar por DNI»** (ahí está también
-el botón «Registrar sin DNI») o **«Registrar por nombre»** (apellidos y nombres, sin importar tildes ni pequeños errores; muestra edad, celular parcial y DNI para
-distinguir homónimos, nada clínico). Si el paciente es nuevo y no trae su DNI, se registra con nombres, apellidos, fecha de
+**Paciente sin DNI a la mano (presencial).** «Nueva cita» tiene dos pestañas: **«Registrar por DNI»** y **«Registrar sin
+DNI»**. Si el paciente no recuerda su DNI, se lo busca por nombre en **«Buscar cita»** y «Sacar otra cita» vuelve con el
+paciente cargado en la pestaña que le corresponde. La búsqueda por nombre de «Buscar cita» no distingue tildes y tolera pequeños errores; muestra edad, celular parcial y DNI para
+distinguir homónimos, nada clínico. Si el paciente es nuevo y no trae su DNI, se registra con nombres, apellidos, fecha de
 nacimiento, sexo y celular: queda **«DNI pendiente»** y se le puede sacar cita, atender y cobrar. Antes de crearlo se avisa
 si ya hay pacientes parecidos. El DNI se completa después (Agenda, Buscar cita, Nueva cita o Panel); RENIEC verifica los nombres
 y no se acepta el DNI de otro paciente. El registro web sigue pidiendo DNI.
 
-**Menú de la recepcionista:** Nueva cita (el paciente quiere una cita, nuevo o que ya vino) · **Buscar cita** (el paciente
+**Menú de la recepcionista:** Nueva cita (pestañas «Registrar por DNI» y «Registrar sin DNI») · **Buscar cita** (el paciente
 que ya tiene una cita y no sabe la fecha: se busca por DNI o nombre y se ven sus citas próximas, con Reprogramar, Cancelar,
 Cobrar adelanto, Editar datos y WhatsApp, y las anteriores solo para consultar; sin datos clínicos) · **Agenda** (antes
 «Citas del día»: las citas de una fecha) · Caja.
+
+**Datos del paciente.** Nombres y apellidos: solo letras (tildes, ñ, espacios, apóstrofo o guion). Obligatorios: DNI
+(salvo «sin DNI»), nombres, apellidos, fecha de nacimiento, sexo y celular; en la web también el correo. **Menor de 18:
+apoderado obligatorio** (en todos los formularios). Los obligatorios se marcan con *. Contraseña del paciente: mínimo 8,
+con letras y números, máximo 64, sin su DNI ni su nombre o apellido (la ayuda en pantalla dice solo «Mínimo 8 caracteres»).
+En «Editar datos», si el paciente tiene cuenta web el correo es obligatorio y se cambia también en su cuenta.
 
 **Reglas de validación añadidas.** Número de operación: **Yape** solo números, máximo 8; **Plin** letras y números, de 12 a
 20 (en mayúsculas). Fechas con sentido: nacimiento de hoy hacia atrás (máx. 120 años), citas de hoy hasta **un año**

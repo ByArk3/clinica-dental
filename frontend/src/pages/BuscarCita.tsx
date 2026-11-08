@@ -69,9 +69,14 @@ export default function BuscarCita() {
 
   return (
     <>
-      <div className="d-flex justify-content-between align-items-center mb-3">
+      <div className="d-flex align-items-center gap-3 mb-3">
+        {pacienteId && (
+          // vuelve a la búsqueda tal como estaba (mismo DNI o la misma lista de pacientes)
+          <button type="button" className="btn btn-outline-secondary btn-sm btn-regresar" onClick={() => setPacienteId(null)}>
+            <span aria-hidden="true">←</span> Regresar
+          </button>
+        )}
         <h1 className="h4 mb-0">Buscar cita</h1>
-        {pacienteId && <button type="button" className="btn btn-link btn-sm" onClick={limpiar}>← Otra búsqueda</button>}
       </div>
 
       {!pacienteId && (

@@ -31,14 +31,16 @@ describe('Correos: los datos del usuario se escapan', () => {
     expect(escaparHtml('<b>Ana</b> & "Co"')).toBe('&lt;b&gt;Ana&lt;/b&gt; &amp; &quot;Co&quot;');
   });
 
-  it('un paciente llamado «<b>Ana</b>» recibe el correo con el nombre como texto, no como HTML', async () => {
+  it('un nombre con HTML ni siquiera se acepta (solo letras); un nombre del personal con símbolos se escapa en el correo', async () => {
     const r = await request(app).post('/api/auth/registro-paciente').send({
-      dni: '45678912', nombres: '<b>Ana</b>', apellidos: 'Prueba', fechaNacimiento: '1990-01-01', telefono: '987654321', email: 'ana.prueba@correo.local', password: 'Clinica2026',
+      dni: '45678912', nombres: '<b>Ana</b>', apellidos: 'Prueba', fechaNacimiento: '1990-01-01', telefono: '987654321', sexo: 'femenino', email: 'ana.prueba@correo.local', password: 'Segura2026',
     });
-    expect(r.status).toBe(201);
-    await solicitarRecuperacion('ana.prueba@correo.local');
-    const correo = bandejaDePrueba.find((c) => c.para === 'ana.prueba@correo.local')!;
-    expect(correo.html).toContain('Hola &lt;b&gt;Ana&lt;/b&gt; Prueba:');
+    expect(r.status).toBe(422);
+    expect(r.body.campos.nombres).toBe('Solo letras (sin números ni símbolos)');
+    await prisma.usuario.update({ where: { email: 'ana.rios@clinica.local' }, data: { nombres: '<b>Ana</b> Ríos' } });
+    await solicitarRecuperacion('ana.rios@clinica.local');
+    const correo = bandejaDePrueba.find((c) => c.para === 'ana.rios@clinica.local')!;
+    expect(correo.html).toContain('Hola &lt;b&gt;Ana&lt;/b&gt; Ríos:');
     expect(correo.html).not.toContain('<b>Ana</b>');
   });
 

@@ -114,7 +114,7 @@ describe('CU-06 Registrar cita — presencial (recepcionista)', () => {
   it('alterno 4.1: DNI no registrado → se registra el paciente (CU-03) y se continúa con la cita', async () => {
     const recep = await sesion('recepcionista');
     expect((await recep.get('/api/pacientes?dni=40404040')).status).toBe(404);
-    const nuevo = await recep.post('/api/pacientes').send({ dni: '40404040', nombres: 'Raúl', apellidos: 'Gómez', fechaNacimiento: '1970-02-02', telefono: '911222333' });
+    const nuevo = await recep.post('/api/pacientes').send({ dni: '40404040', nombres: 'Raúl', apellidos: 'Gómez', fechaNacimiento: '1970-02-02', telefono: '911222333', sexo: 'masculino' });
     expect(nuevo.status).toBe(201);
     const r = await recep.post('/api/citas').send({ pacienteId: nuevo.body.id, odontologoId: await idOdontologo(), fecha: LUNES(), hora: '11:00', motivo: 'Evaluación' });
     expect(r.status).toBe(201);

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { buscarNombreSchema, dniSchema, LARGO_NUMERICO, type PacienteSinDniDTO } from '@clinica/shared';
+import { Link, useSearchParams } from 'react-router-dom';
+import { dniSchema, LARGO_NUMERICO, type PacienteSinDniDTO } from '@clinica/shared';
 import { pacientesApi, type Paciente, type PacienteEncontrado } from '../api/recursos';
 import { ApiError } from '../api/cliente';
 import { FormReserva } from '../components/FormReserva';
@@ -11,8 +11,9 @@ import { ModalEditarDatos } from '../components/ModalEditarDatos';
 import { fechaPE } from '../formato';
 
 /**
- * CU-06 canal presencial (i_cita): la recepcionista busca al paciente por DNI o por nombre y registra la cita.
- * Si es nuevo y no tiene su DNI a la mano, lo registra sin DNI («DNI pendiente») y lo completa después.
+ * CU-06 canal presencial (i_cita): pestaña «Registrar por DNI» (paciente que ya existe o nuevo, con RENIEC) y
+ * pestaña «Registrar sin DNI» (paciente nuevo sin DNI a la mano: queda «DNI pendiente»). Si no recuerda su DNI,
+ * se lo busca por nombre en «Buscar cita» y desde ahí «Sacar otra cita» vuelve aquí con el paciente cargado.
  */
 export default function NuevaCita() {
   const [dni, setDni] = useState('');
@@ -20,17 +21,15 @@ export default function NuevaCita() {
   const [noEncontrado, setNoEncontrado] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editando, setEditando] = useState(false);
-  const [modo, setModo] = useState<'dni' | 'nombre'>('dni');
-  const [nombre, setNombre] = useState({ apellidos: '', nombres: '' });
-  const [encontrados, setEncontrados] = useState<PacienteEncontrado[] | null>(null);
-  const [sinDni, setSinDni] = useState(false);
+  const [modo, setModo] = useState<'dni' | 'sindni'>('dni');
   // Registro sin DNI: si hay pacientes parecidos (mismo nombre o nacimiento), se pregunta antes de crear otro
   const [parecidos, setParecidos] = useState<{ datos: PacienteSinDniDTO; lista: PacienteEncontrado[] } | null>(null);
   // Desde «Buscar cita → Sacar otra cita»: el paciente llega ya elegido
   const [params] = useSearchParams();
   const pacienteInicial = Number(params.get('paciente')) || null;
   useEffect(() => {
-    if (pacienteInicial) pacientesApi.ver(pacienteInicial).then(setPaciente).catch(() => setError('No se encontró el paciente'));
+    if (pacienteInicial) void elegir(pacienteInicial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pacienteInicial]);
   // Autocompletar con RENIEC (si la clínica configuró un proveedor): null = no se consultó o no hubo datos
   const [reniec, setReniec] = useState<{ estado: 'buscando' | 'ok' | 'sin_datos' | 'no_disponible'; nombres?: string; apellidos?: string } | null>(null);
@@ -58,8 +57,6 @@ export default function NuevaCita() {
     setNoEncontrado(false);
     setEditando(false);
     setReniec(null);
-    setSinDni(false);
-    setEncontrados(null);
     const v = dniSchema.safeParse(dni);
     if (!v.success) return setError(v.error.issues[0].message);
     try {
@@ -80,35 +77,20 @@ export default function NuevaCita() {
     setNoEncontrado(false);
     setEditando(false);
     setReniec(null);
-    setEncontrados(null);
-    setSinDni(false);
     setParecidos(null);
   }
 
-  async function buscarNombre(e: FormEvent) {
-    e.preventDefault();
-    limpiar();
-    const v = buscarNombreSchema.safeParse(nombre);
-    if (!v.success) return setError(v.error.issues[0].message);
-    try {
-      setEncontrados(await pacientesApi.porNombre({ apellidos: nombre.apellidos, nombres: nombre.nombres || undefined }));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.datos.mensaje : 'No se pudo conectar con el servidor');
-    }
-  }
-
+  /** Carga un paciente ya registrado y abre la pestaña que le corresponde (con DNI o «DNI pendiente»). */
   async function elegir(id: number) {
     limpiar();
     try {
-      setPaciente(await pacientesApi.ver(id));
+      const p = await pacientesApi.ver(id);
+      setModo(p.dni ? 'dni' : 'sindni');
+      setDni(p.dni ?? '');
+      setPaciente(p);
     } catch (err) {
       setError(err instanceof ApiError ? err.datos.mensaje : 'No se pudo conectar con el servidor');
     }
-  }
-
-  function abrirSinDni() {
-    limpiar();
-    setSinDni(true);
   }
 
   /** Antes de crear un paciente sin DNI, busca parecidos (apellidos + nombres + fecha de nacimiento) para no duplicarlo. */
@@ -121,23 +103,15 @@ export default function NuevaCita() {
       }
     }
     setPaciente(await pacientesApi.registrarSinDni(datos));
-    setSinDni(false);
     setParecidos(null);
   }
 
-  const pestana = (m: 'dni' | 'nombre', texto: string) => (
+  const pestana = (m: 'dni' | 'sindni', texto: string) => (
     <li className="nav-item">
-      <button type="button" className={`nav-link ${modo === m ? 'active' : ''}`} aria-pressed={modo === m} onClick={() => { setModo(m); limpiar(); }}>
+      <button type="button" className={`nav-link ${modo === m ? 'active' : ''}`} aria-pressed={modo === m} onClick={() => { setModo(m); limpiar(); setDni(''); }}>
         {texto}
       </button>
     </li>
-  );
-  // El registro (con DNI o sin DNI) está en la pestaña «Registrar por DNI»
-  const botonesNuevo = (
-    <div className="d-flex flex-wrap gap-2 align-items-center">
-      <span className="small text-muted">¿No es ninguno?</span>
-      <button type="button" className="btn btn-sm btn-acento" onClick={() => { limpiar(); setModo('dni'); }}>Registrar paciente nuevo →</button>
-    </div>
   );
 
   return (
@@ -146,7 +120,7 @@ export default function NuevaCita() {
       <div className="tarjeta mb-3">
         <ul className="nav nav-tabs mb-3">
           {pestana('dni', 'Registrar por DNI')}
-          {pestana('nombre', 'Registrar por nombre')}
+          {pestana('sindni', 'Registrar sin DNI')}
         </ul>
         {modo === 'dni' ? (
           <form onSubmit={buscar}>
@@ -157,62 +131,23 @@ export default function NuevaCita() {
               </div>
               <button className="btn btn-acento">Buscar</button>
             </div>
-            <p className="small text-muted mt-2 mb-2">Si ya es paciente, aparece con sus datos; si es nuevo, se registra aquí. ¿No recuerda su DNI? Use «Registrar por nombre».</p>
-            <button type="button" className="btn btn-sm btn-outline-secondary" onClick={abrirSinDni}>
-              🪪 El paciente no tiene DNI a la mano → Registrar sin DNI
-            </button>
+            <p className="small text-muted mt-2 mb-0">
+              Si ya es paciente, aparece con sus datos; si es nuevo, se registra aquí. ¿No recuerda su DNI? Búsquelo por nombre en{' '}
+              <Link to="/citas/buscar">Buscar cita</Link>.
+            </p>
           </form>
         ) : (
-          <form onSubmit={buscarNombre}>
-            <div className="row g-2 align-items-end">
-              <div className="col-sm-4">
-                <label htmlFor="b-apellidos" className="form-label">Apellidos</label>
-                <input id="b-apellidos" className="form-control" value={nombre.apellidos} onChange={(e) => setNombre({ ...nombre, apellidos: e.target.value })} />
-              </div>
-              <div className="col-sm-4">
-                <label htmlFor="b-nombres" className="form-label">Nombres <small className="text-muted">(opcional)</small></label>
-                <input id="b-nombres" className="form-control" value={nombre.nombres} onChange={(e) => setNombre({ ...nombre, nombres: e.target.value })} />
-              </div>
-              <div className="col-sm-auto"><button className="btn btn-acento">Buscar</button></div>
-            </div>
-            <p className="small text-muted mt-2 mb-0">No importa si escribe con o sin tildes, ni pequeños errores de tipeo.</p>
-          </form>
+          <p className="small text-muted mb-0">
+            Para el paciente <strong>nuevo</strong> que no trae su DNI: quedará con <DniPaciente dni={null} /> y se le puede sacar cita, atender y cobrar; el DNI se completa después.
+            Si ya se registró antes, búsquelo en <Link to="/citas/buscar">Buscar cita</Link>.
+          </p>
         )}
         {error && <div className="text-danger small mt-2">{error}</div>}
       </div>
 
-      {encontrados && (
+      {modo === 'sindni' && !paciente && (
         <div className="tarjeta mb-3">
-          {encontrados.length === 0 ? (
-            <div className="alert alert-info">No se encontró ningún paciente con «{[nombre.apellidos, nombre.nombres].filter(Boolean).join(' ')}».</div>
-          ) : (
-            <>
-              <h2 className="h6 text-uppercase text-muted mb-2">{encontrados.length} paciente(s) — confirme con la edad y el celular</h2>
-              <div className="list-group mb-3">
-                {encontrados.map((x) => (
-                  <button type="button" key={x.id} className="list-group-item list-group-item-action d-flex flex-wrap justify-content-between align-items-center gap-2" onClick={() => elegir(x.id)}>
-                    <span>
-                      <strong>{x.nombres} {x.apellidos}</strong> · {x.edad} años · Cel. {x.celular} · <DniPaciente dni={x.dni} />
-                    </span>
-                    <span className="btn btn-sm btn-acento">Elegir</span>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-          {botonesNuevo}
-        </div>
-      )}
-
-      {sinDni && (
-        <div className="tarjeta mb-3">
-          <div className="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
-            <div>
-              <h2 className="h5 mb-1">Registrar paciente sin DNI</h2>
-              <p className="small text-muted mb-0">Quedará con <DniPaciente dni={null} />. Se le puede sacar cita, atender y cobrar; el DNI se completa después.</p>
-            </div>
-            <button type="button" className="btn btn-link btn-sm" onClick={() => { limpiar(); setModo('dni'); }}>Volver a «Registrar por DNI»</button>
-          </div>
+          <h2 className="h5 mb-3">Registrar paciente sin DNI</h2>
           {parecidos ? (
             <div className="alert alert-warning mb-0">
               <strong>¿Es alguno de estos pacientes?</strong> Ya hay pacientes con un nombre parecido:
@@ -232,13 +167,12 @@ export default function NuevaCita() {
               </div>
             </div>
           ) : (
-            <FormPaciente sinDni textoBoton="Registrar sin DNI" onCancelar={() => setSinDni(false)} onEnviar={(d) => registrarSinDni(d)} />
+            <FormPaciente sinDni textoBoton="Registrar sin DNI" onEnviar={(d) => registrarSinDni(d)} />
           )}
-          <p className="small text-muted mt-2 mb-0">Si es menor de edad, anote los datos del apoderado (nombre, DNI y celular).</p>
         </div>
       )}
 
-      {noEncontrado && (
+      {modo === 'dni' && noEncontrado && (
         <div className="tarjeta mb-3">
           <div className="alert alert-info">Paciente no encontrado. Regístrelo para continuar con la cita.</div>
           {reniec?.estado === 'buscando' && <p className="small text-muted" role="status">Buscando nombres en RENIEC…</p>}

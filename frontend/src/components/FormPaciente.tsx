@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { ETIQUETA_SEXO, LARGO_NUMERICO, SEXOS, pacienteSchema, pacienteSinDniSchema, registroPacienteSchema } from '@clinica/shared';
+import { ETIQUETA_SEXO, LARGO_NUMERICO, SEXOS, esMenorDeEdad, pacienteSchema, pacienteSinDniSchema, registroPacienteSchema, soloLetras } from '@clinica/shared';
 import { ApiError } from '../api/cliente';
 import { CampoDigitos } from './Interaccion';
 import { CampoPassword } from './CampoPassword';
@@ -28,11 +28,11 @@ const CAMPOS: { nombre: string; etiqueta: string; tipo?: string; col: string; op
   { nombre: 'nombres', etiqueta: 'Nombres', col: 'col-sm-4' },
   { nombre: 'apellidos', etiqueta: 'Apellidos', col: 'col-sm-4' },
   { nombre: 'fechaNacimiento', etiqueta: 'Fecha de nacimiento', tipo: 'date', col: 'col-sm-4' },
-  { nombre: 'sexo', etiqueta: 'Sexo', col: 'col-sm-4', opcional: true },
+  { nombre: 'sexo', etiqueta: 'Sexo', col: 'col-sm-4' },
   { nombre: 'telefono', etiqueta: 'Celular', tipo: 'tel', col: 'col-sm-4' },
   { nombre: 'email', etiqueta: 'Correo', tipo: 'email', col: 'col-sm-4', opcional: true },
   { nombre: 'direccion', etiqueta: 'Dirección', col: 'col-sm-8', opcional: true },
-  { nombre: 'apoderado', etiqueta: 'Apoderado (menores)', col: 'col-sm-4', opcional: true },
+  { nombre: 'apoderado', etiqueta: 'Apoderado', col: 'col-sm-4', opcional: true },
   { nombre: 'alergias', etiqueta: 'Alergias', col: 'col-sm-6', opcional: true },
   { nombre: 'antecedentes', etiqueta: 'Antecedentes', col: 'col-sm-6', opcional: true },
 ];
@@ -54,8 +54,11 @@ export function FormPaciente({ conCuenta, sinDni, dniInicial = '', inicial, text
         { nombre: 'password', etiqueta: 'Contraseña', tipo: 'password', col: 'col-sm-6' },
       ]
     : sinDni
-      ? CAMPOS.filter((c) => c.nombre !== 'dni').map((c) => (c.nombre === 'sexo' ? { ...c, opcional: false } : c))
+      ? CAMPOS.filter((c) => c.nombre !== 'dni')
       : CAMPOS;
+  // Menor de 18: el apoderado pasa a ser obligatorio
+  const menor = esMenorDeEdad(v.fechaNacimiento ?? '');
+  const opcional = (c: { nombre: string; opcional?: boolean }) => (c.nombre === 'apoderado' ? !menor : !!c.opcional);
 
   async function enviar(e: FormEvent) {
     e.preventDefault();
@@ -83,11 +86,12 @@ export function FormPaciente({ conCuenta, sinDni, dniInicial = '', inicial, text
 
   return (
     <form onSubmit={enviar} noValidate>
+      <p className="small text-muted mb-2"><span className="text-danger">*</span> Campo obligatorio</p>
       <div className="row g-3">
         {campos.map((c) => (
           <div className={c.col} key={c.nombre}>
-            <label htmlFor={`p-${c.nombre}`} className="form-label">
-              {c.etiqueta} {c.opcional && <small className="text-muted">(opcional)</small>}
+            <label htmlFor={`p-${c.nombre}`} className={`form-label ${opcional(c) ? '' : 'obligatorio'}`}>
+              {c.etiqueta} {opcional(c) && <small className="text-muted">(opcional)</small>}
             </label>
             {c.nombre === 'password' ? (
               <CampoPassword
@@ -114,15 +118,17 @@ export function FormPaciente({ conCuenta, sinDni, dniInicial = '', inicial, text
                 {...(c.nombre === 'fechaNacimiento' ? { min: fechaMinimaNacimiento(), max: hoyEnLima() } : {})}
                 className={`form-control ${errores[c.nombre] ? 'is-invalid' : ''}`}
                 value={v[c.nombre] ?? ''}
-                onChange={(e) => setV({ ...v, [c.nombre]: e.target.value })}
+                onChange={(e) => setV({ ...v, [c.nombre]: c.nombre === 'nombres' || c.nombre === 'apellidos' ? soloLetras(e.target.value) : e.target.value })}
+                aria-required={!opcional(c)}
               />
             )}
+            {c.nombre === 'apoderado' && menor && <div className="form-text">Es menor de edad: nombre, DNI y celular del padre, madre o tutor.</div>}
             {c.nombre === 'sexo' && errores.sexo && <div className="text-danger small mt-1">{errores.sexo}</div>}
             {c.nombre !== 'password' && c.nombre !== 'sexo' && !NUMERICOS[c.nombre] && <div className="invalid-feedback">{errores[c.nombre]}</div>}
           </div>
         ))}
       </div>
-      {conCuenta && <p className="small text-muted mt-2 mb-0">Mínimo 8 caracteres, con letras y números.</p>}
+      {conCuenta && <p className="small text-muted mt-2 mb-0">Mínimo 8 caracteres.</p>}
       {error && (
         <div className="alert alert-danger mt-3" role="alert">
           {error}

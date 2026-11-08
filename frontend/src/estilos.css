@@ -205,3 +205,11 @@ body { background: var(--fondo); }
 
 /* Editar datos (CU-58): campo cambiado respecto del valor guardado */
 .campo-cambiado { border-color: #e0a106 !important; box-shadow: 0 0 0 0.15rem rgba(224, 161, 6, 0.25); }
+
+/* Campo obligatorio: asterisco rojo después de la etiqueta (por CSS, no cambia el texto que leen los lectores de pantalla) */
+.form-label.obligatorio::after { content: ' *'; color: var(--bs-danger); font-weight: 600; }
+
+/* Botón «Regresar» junto al título */
+.btn-regresar { border-radius: 999px; padding-inline: 0.9rem; font-weight: 500; }
+.btn-regresar span { display: inline-block; transition: transform 0.15s ease; }
+.btn-regresar:hover span { transform: translateX(-3px); }

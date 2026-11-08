@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ETIQUETA_SEXO, LARGO_NUMERICO, SEXOS, dniSchema, editarPacienteSchema, type Sexo } from '@clinica/shared';
+import { ETIQUETA_SEXO, LARGO_NUMERICO, SEXOS, dniSchema, editarPacienteSchema, esMenorDeEdad, soloLetras, type Sexo } from '@clinica/shared';
 import { citasApi, pacientesApi, type Cita, type Paciente } from '../api/recursos';
 import { ApiError } from '../api/cliente';
 import { useUsuarioOpcional } from '../auth';
@@ -89,16 +89,23 @@ export function ModalEditarDatos({ pacienteId, cita, onCerrar }: Props) {
     },
   });
 
+  // Obligatorios: identidad y celular; el correo si tiene cuenta web; el apoderado si es menor de 18
+  const obligatorio = (k: Campo) =>
+    ['nombres', 'apellidos', 'fechaNacimiento', 'sexo', 'telefono'].includes(k) ||
+    (k === 'email' && !!paciente.data?.tieneCuenta) ||
+    (k === 'apoderado' && !!v && esMenorDeEdad(v.fechaNacimiento));
   const campo = (k: Campo, opciones: { col: string; tipo?: string }) => {
     if (!v || !original) return null;
     const cambio = v[k].trim() !== original[k];
     return (
       <div className={opciones.col} key={k}>
-        <label htmlFor={`e-${k}`} className="form-label">{ETIQUETAS[k]}</label>
+        <label htmlFor={`e-${k}`} className={`form-label ${obligatorio(k) ? 'obligatorio' : ''}`}>
+          {ETIQUETAS[k]} {!obligatorio(k) && <small className="text-muted">(opcional)</small>}
+        </label>
         {k === 'telefono' ? (
           <CampoDigitos id="e-telefono" value={v.telefono} onChange={(x) => setV({ ...v, telefono: x })} largo={LARGO_NUMERICO.celular} error={errores.telefono} className={cambio ? 'campo-cambiado' : ''} />
         ) : k === 'sexo' ? (
-          <select id="e-sexo" className={`form-select ${cambio ? 'campo-cambiado' : ''}`} value={v.sexo} onChange={(e) => setV({ ...v, sexo: e.target.value })}>
+          <select id="e-sexo" className={`form-select ${errores.sexo ? 'is-invalid' : ''} ${cambio ? 'campo-cambiado' : ''}`} value={v.sexo} onChange={(e) => setV({ ...v, sexo: e.target.value })}>
             <option value="">—</option>
             {SEXOS.map((s) => <option key={s} value={s}>{ETIQUETA_SEXO[s]}</option>)}
           </select>
@@ -109,10 +116,12 @@ export function ModalEditarDatos({ pacienteId, cita, onCerrar }: Props) {
             {...(k === 'fechaNacimiento' ? { min: fechaMinimaNacimiento(), max: hoyEnLima() } : {})}
             className={`form-control ${errores[k] ? 'is-invalid' : ''} ${cambio ? 'campo-cambiado' : ''}`}
             value={v[k]}
-            onChange={(e) => setV({ ...v, [k]: e.target.value })}
+            onChange={(e) => setV({ ...v, [k]: k === 'nombres' || k === 'apellidos' ? soloLetras(e.target.value) : e.target.value })}
           />
         )}
         {k !== 'telefono' && <div className="invalid-feedback">{errores[k]}</div>}
+        {k === 'apoderado' && obligatorio(k) && !errores.apoderado && <div className="form-text">Es menor de edad: nombre, DNI y celular del padre, madre o tutor.</div>}
+        {k === 'email' && obligatorio(k) && !errores.email && <div className="form-text">Inicia sesión en la web con este correo.</div>}
         {k === 'fechaNacimiento' && !cambio && edadDe(v.fechaNacimiento) !== null && <div className="form-text">{edadDe(v.fechaNacimiento)} años</div>}
         {cambio && (
           <div className="form-text text-warning-emphasis">

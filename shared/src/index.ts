@@ -161,8 +161,35 @@ export const dniSchema = z.string().regex(/^\d{8}$/, 'El DNI debe tener 8 dígit
 export const passwordSchema = z
   .string()
   .min(8, 'La contraseña debe tener al menos 8 caracteres')
+  .max(64, 'La contraseña debe tener como máximo 64 caracteres')
   .regex(/[A-Za-z]/, 'La contraseña debe incluir letras')
   .regex(/\d/, 'La contraseña debe incluir números');
+
+const sinTildes = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+/**
+ * Contraseña del paciente: además de las reglas generales, no puede ser su DNI ni contener su nombre o apellido
+ * (palabras de 3 letras o más, sin importar tildes ni mayúsculas). Devuelve el mensaje de error o null.
+ */
+export function problemaContrasenaPaciente(password: string, p: { dni?: string | null; nombres?: string; apellidos?: string }) {
+  const clave = sinTildes(password);
+  if (p.dni && clave.includes(p.dni)) return 'La contraseña no puede ser ni contener su DNI';
+  const palabras = (t?: string) => sinTildes(t ?? '').split(/[\s'-]+/).filter((x) => x.length >= 3);
+  if (palabras(p.nombres).some((x) => clave.includes(x))) return 'La contraseña no puede contener su nombre';
+  if (palabras(p.apellidos).some((x) => clave.includes(x))) return 'La contraseña no puede contener su apellido';
+  return null;
+}
+
+/** Nombres y apellidos: solo letras (con tildes y ñ), espacios, apóstrofo o guion. */
+export const LETRAS_NOMBRE = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' -]+$/;
+/** Quita lo que no puede ir en un nombre (números, símbolos) mientras se escribe. */
+export const soloLetras = (texto: string) => texto.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ' -]/g, '').replace(/ {2,}/g, ' ').slice(0, 60);
+const nombreSchema = (vacio: string) =>
+  z
+    .string()
+    .trim()
+    .min(2, vacio)
+    .max(60, 'Máximo 60 caracteres')
+    .regex(LETRAS_NOMBRE, 'Solo letras (sin números ni símbolos)');
 export const fechaSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida (aaaa-mm-dd)')
@@ -225,10 +252,26 @@ export const recuperarSchema = z.object({ email: z.string().email('Correo invál
 export const restablecerSchema = z.object({ token: z.string().min(10), password: passwordSchema });
 
 // ---------- Paciente (CU-03) ----------
-export const pacienteSchema = z.object({
+/** Menor de edad (según la fecha de nacimiento, hora de Lima): debe tener apoderado. */
+export const MAYORIA_DE_EDAD = 18;
+export function esMenorDeEdad(fechaNacimiento: string, hoy = hoyEnLima()) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(fechaNacimiento) && fechaNacimiento > moverFecha(hoy, { anios: -MAYORIA_DE_EDAD });
+}
+export const MENSAJE_APODERADO = 'Para menores de 18 años, registre los datos del apoderado';
+/** Regla común: menor de 18 → apoderado obligatorio (registro web, presencial, sin DNI y Editar datos). */
+function exigirApoderado(d: { fechaNacimiento: string; apoderado?: string | null; sexo?: string | null }, ctx: z.RefinementCtx) {
+  // el sexo se revisa aquí (y no en el campo) para mostrar todos los faltantes a la vez
+  if (!d.sexo) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['sexo'], message: 'Elija el sexo' });
+  if (esMenorDeEdad(d.fechaNacimiento) && (d.apoderado ?? '').trim().length < 3) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['apoderado'], message: MENSAJE_APODERADO });
+  }
+}
+const sexoObligatorio = z.enum(['femenino', 'masculino'], { errorMap: () => ({ message: 'Elija el sexo' }) }).nullish();
+
+const pacienteBase = z.object({
   dni: dniSchema,
-  nombres: z.string().trim().min(2, 'Ingrese los nombres'),
-  apellidos: z.string().trim().min(2, 'Ingrese los apellidos'),
+  nombres: nombreSchema('Ingrese los nombres'),
+  apellidos: nombreSchema('Ingrese los apellidos'),
   fechaNacimiento: fechaNacimientoSchema,
   telefono: telefonoSchema,
   email: z.string().email('Correo inválido').optional().or(z.literal('').transform(() => undefined)),
@@ -236,17 +279,17 @@ export const pacienteSchema = z.object({
   apoderado: z.string().trim().optional(), // P14
   alergias: z.string().trim().optional(),
   antecedentes: z.string().trim().optional(),
-  sexo: z.enum(['femenino', 'masculino']).optional(),
+  sexo: sexoObligatorio,
 });
+/** Registro presencial con DNI (el correo es opcional). */
+export const pacienteSchema = pacienteBase.superRefine(exigirApoderado);
 export type PacienteDTO = z.infer<typeof pacienteSchema>;
 export const SEXOS = ['femenino', 'masculino'] as const;
 export type Sexo = (typeof SEXOS)[number];
 export const ETIQUETA_SEXO: Record<Sexo, string> = { femenino: 'Femenino', masculino: 'Masculino' };
 
 /** Registro presencial sin DNI a la mano: queda «DNI pendiente»; el sexo y el celular son obligatorios para distinguirlo. */
-export const pacienteSinDniSchema = pacienteSchema.omit({ dni: true }).extend({
-  sexo: z.enum(SEXOS, { errorMap: () => ({ message: 'Elija el sexo' }) }),
-});
+export const pacienteSinDniSchema = pacienteBase.omit({ dni: true }).superRefine(exigirApoderado);
 export type PacienteSinDniDTO = z.infer<typeof pacienteSinDniSchema>;
 
 /** Búsqueda por nombre (recepcionista): apellidos obligatorios, nombres opcionales. */
@@ -262,12 +305,12 @@ export const editarPacienteSchema = z.object({
   email: z.string().email('Correo inválido').optional().or(z.literal('').transform(() => undefined)),
   direccion: z.string().trim().optional(),
   apoderado: z.string().trim().optional(),
-  nombres: z.string().trim().min(2, 'Ingrese los nombres'),
-  apellidos: z.string().trim().min(2, 'Ingrese los apellidos'),
+  nombres: nombreSchema('Ingrese los nombres'),
+  apellidos: nombreSchema('Ingrese los apellidos'),
   fechaNacimiento: fechaNacimientoSchema,
-  sexo: z.enum(SEXOS).nullable().optional(),
+  sexo: sexoObligatorio,
   motivo: z.string().trim().max(300).optional(),
-});
+}).superRefine(exigirApoderado);
 export type EditarPacienteDTO = z.infer<typeof editarPacienteSchema>;
 
 /** Completar DNI (recepcionista, si está pendiente) o cambiarlo (solo Administrador, con motivo). */
@@ -285,11 +328,20 @@ export const editarCitaSchema = z.object({
 });
 
 /** Registro web: el paciente crea su propia cuenta (correo obligatorio). */
-export const registroPacienteSchema = pacienteSchema.extend({
-  email: z.string().email('Correo inválido'),
-  password: passwordSchema,
-});
-export type RegistroPacienteDTO = z.infer<typeof registroPacienteSchema>;
+export const registroPacienteSchema = pacienteBase
+  .extend({
+    // el correo (obligatorio en la web) se revisa junto con las demás reglas, para mostrar todos los faltantes a la vez
+    email: z.string().trim().optional(),
+    password: passwordSchema,
+  })
+  .superRefine(exigirApoderado)
+  .superRefine((d, ctx) => {
+    if (!d.email) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['email'], message: 'Ingrese su correo' });
+    else if (!z.string().email().safeParse(d.email).success) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['email'], message: 'Correo inválido' });
+    const problema = problemaContrasenaPaciente(d.password, d);
+    if (problema) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['password'], message: problema });
+  });
+export type RegistroPacienteDTO = z.infer<typeof registroPacienteSchema> & { email: string };
 
 // ---------- Disponibilidad (CU-05) y cita (CU-06) ----------
 export const disponibilidadQuerySchema = z.object({

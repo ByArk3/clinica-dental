@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { loginSchema, recuperarSchema, registroPacienteSchema, restablecerSchema } from '@clinica/shared';
+import { loginSchema, recuperarSchema, registroPacienteSchema, restablecerSchema, type RegistroPacienteDTO } from '@clinica/shared';
 import * as AuthService from '../services/auth.service.js';
 import { crearLimitador } from '../lib/limite.js';
 import { ErrorNegocio } from '../lib/errores.js';
@@ -54,7 +54,7 @@ export async function restablecer(req: Request, res: Response) {
 
 /** CU-03 (web): el paciente crea su cuenta y queda con la sesión iniciada. */
 export async function registroPaciente(req: Request, res: Response) {
-  const dto = registroPacienteSchema.parse(req.body);
+  const dto = registroPacienteSchema.parse(req.body) as RegistroPacienteDTO; // el esquema ya exige el correo
   const { usuario, paciente } = await PacienteService.registrarCuentaPaciente(dto);
   const sesion = { id: usuario.id, nombres: usuario.nombres, email: usuario.email, rol: usuario.rol, pacienteId: paciente.id, odontologoId: null };
   await iniciarSesion(req, sesion);

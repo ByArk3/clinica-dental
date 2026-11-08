@@ -6,7 +6,7 @@ import { ahoraLima, diaSemana, sumarDias } from '../src/lib/fechas.js';
 
 beforeEach(reiniciarBD);
 const hoy = () => ahoraLima().fecha;
-const paciente = (fechaNacimiento: string) => ({ dni: '45678912', nombres: 'Ana', apellidos: 'Prueba', fechaNacimiento, telefono: '987654321' });
+const paciente = (fechaNacimiento: string) => ({ dni: '45678912', nombres: 'Ana', apellidos: 'Prueba', fechaNacimiento, telefono: '987654321', sexo: 'femenino', apoderado: 'Rosa Prueba (DNI 40000000, cel. 987000000)' });
 
 describe('Fecha de nacimiento', () => {
   it('no puede ser futura ni de hace más de 120 años; hoy sí (recién nacido)', async () => {
@@ -22,7 +22,7 @@ describe('Fecha de nacimiento', () => {
   it('también al corregir los datos del paciente', async () => {
     const recep = await sesion('recepcionista');
     const p = (await recep.get(`/api/pacientes/${(await prisma.paciente.findUniqueOrThrow({ where: { dni: '72458190' } })).id}`)).body;
-    const r = await recep.patch(`/api/pacientes/${p.id}`).send({ telefono: p.telefono, nombres: p.nombres, apellidos: p.apellidos, fechaNacimiento: sumarDias(hoy(), 1), motivo: 'Prueba de fecha' });
+    const r = await recep.patch(`/api/pacientes/${p.id}`).send({ telefono: p.telefono, nombres: p.nombres, apellidos: p.apellidos, fechaNacimiento: sumarDias(hoy(), 1), sexo: p.sexo, motivo: 'Prueba de fecha' });
     expect(r.body.campos.fechaNacimiento).toBe('La fecha de nacimiento no puede ser futura');
   });
 });

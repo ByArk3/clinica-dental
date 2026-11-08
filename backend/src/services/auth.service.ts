@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
-import { MAX_INTENTOS_LOGIN, MENSAJES, MINUTOS_BLOQUEO_LOGIN, type UsuarioSesion } from '@clinica/shared';
+import { MAX_INTENTOS_LOGIN, MENSAJES, MINUTOS_BLOQUEO_LOGIN, problemaContrasenaPaciente, type UsuarioSesion } from '@clinica/shared';
 import { prisma } from '../lib/prisma.js';
 import { ErrorNegocio } from '../lib/errores.js';
 import { enviarCorreo } from '../lib/correo.js';
@@ -126,6 +126,12 @@ export async function restablecerPassword(token: string, password: string) {
   const usuario = await prisma.usuario.findUnique({ where: { resetTokenHash: sha256(token) } });
   if (!usuario || !usuario.resetTokenExpira || usuario.resetTokenExpira < new Date()) {
     throw new ErrorNegocio(422, 'ENLACE_INVALIDO', MENSAJES.ENLACE_INVALIDO);
+  }
+  // Paciente: la contraseña no puede ser su DNI ni contener su nombre o apellido
+  if (usuario.rol === 'paciente') {
+    const p = await prisma.paciente.findUnique({ where: { usuarioId: usuario.id }, select: { dni: true, nombres: true, apellidos: true } });
+    const problema = p && problemaContrasenaPaciente(password, p);
+    if (problema) throw new ErrorNegocio(422, 'VALIDACION', problema, { password: problema });
   }
   await prisma.usuario.update({
     where: { id: usuario.id },
