@@ -524,3 +524,10 @@ citas, pagos ni inventario. La prueba de inicio de sesión creó sesiones tempor
 
 Pendiente: corregir el vínculo de cuentas con fichas existentes, configurar cabeceras de nginx y confirmar que la
 configuración de demo no se use en despliegues accesibles a terceros.
+
+### Continuación de la revisión — 2026-11-08
+
+- **Registro público sin limitador visible:** `/api/auth/registro-paciente` no usa limitador en la ruta/controlador; la creación de cuentas ejecuta bcrypt y escribe en la base. Considerar límite por IP y controles antiabuso para reducir automatización y consumo de recursos. La validación de rol fija `paciente` y no se encontró uso de SQL dinámico en rutas/controladores/servicios.
+- **Enlaces de recuperación en logs de desarrollo:** si SMTP no está configurado, el transporte no envía el correo y `correo.ts` registra el enlace completo; esto incluye el token de restablecimiento. No se activó una recuperación durante la prueba. En despliegues, exigir SMTP y no escribir enlaces/tokens en logs con acceso compartido.
+- **Pruebas adicionales de acceso:** las rutas de odontólogos, disponibilidad, tarifario, pagos, reportes, auditoría, pacientes, citas, comprobantes, pedidos y panel respondieron 401 sin sesión. En el código, paciente solo puede modificar sus citas y el odontólogo solo registrar/editar atenciones de sus propias citas.
+- **Inyección:** no se observó uso de SQL dinámico en código de producción revisado; las consultas raw de servicios usan plantillas parametrizadas. No se enviaron cargas de escritura ni se ejecutaron pruebas destructivas.
