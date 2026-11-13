@@ -6,7 +6,7 @@ import { ahoraLima, diaSemana, sumarDias } from '../src/lib/fechas.js';
 
 beforeEach(reiniciarBD);
 const hoy = () => ahoraLima().fecha;
-const paciente = (fechaNacimiento: string) => ({ dni: '45678912', nombres: 'Ana', apellidos: 'Prueba', fechaNacimiento, telefono: '987654321', sexo: 'femenino', apoderado: 'Rosa Prueba (DNI 40000000, cel. 987000000)' });
+const paciente = (fechaNacimiento: string) => ({ dni: '45678912', nombres: 'Ana', apellidos: 'Prueba', fechaNacimiento, telefono: '987654321', sexo: 'femenino', apoderado: 'Rosa Prueba', apoderadoDni: '40000000', apoderadoTelefono: '987000000' });
 
 describe('Fecha de nacimiento', () => {
   it('no puede ser futura ni de hace más de 120 años; hoy sí (recién nacido)', async () => {

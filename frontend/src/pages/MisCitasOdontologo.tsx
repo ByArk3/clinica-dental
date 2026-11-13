@@ -7,7 +7,7 @@ import { fechaPE, hoyLima } from '../formato';
 import { fechaMaximaFutura } from '@clinica/shared';
 import { DniPaciente } from '../components/DniPaciente';
 
-/** CU-11 paso 1: «Mis citas del día» del odontólogo. */
+/** CU-11 paso 1: «Citas del día» del odontólogo (toda su agenda de una fecha; para atender, «Registrar atención»). */
 export default function MisCitasOdontologo() {
   const [fecha, setFecha] = useState(hoyLima());
   const citas = useQuery({ queryKey: ['mis-citas-od', fecha], queryFn: () => atencionApi.misCitas(fecha), refetchInterval: 60_000 });
@@ -15,7 +15,7 @@ export default function MisCitasOdontologo() {
   return (
     <>
       <div className="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
-        <h1 className="h4 mb-0">Mis citas del día</h1>
+        <h1 className="h4 mb-0">Citas del día</h1>
         <div>
           <label htmlFor="fecha-od" className="form-label small mb-1">Fecha</label>
           <input id="fecha-od" type="date" max={fechaMaximaFutura()} className="form-control" value={fecha} onChange={(e) => /^\d{4}-\d{2}-\d{2}$/.test(e.target.value) && e.target.value <= fechaMaximaFutura() && setFecha(e.target.value)} />
@@ -37,7 +37,7 @@ export default function MisCitasOdontologo() {
             <div className="small text-muted">{c.motivo}</div>
             {c.paciente.alergias && <div className="small text-danger fw-semibold">⚠ Alergias: {c.paciente.alergias}</div>}
             {c.puedeAtender && (
-              <Link className="btn btn-sm btn-acento mt-2" to={`/atencion/${c.id}?fecha=${c.fecha}`}>
+              <Link className="btn btn-sm btn-acento mt-2" to={`/atencion/registrar/${c.id}?fecha=${c.fecha}`}>
                 Registrar atención
               </Link>
             )}

@@ -20,14 +20,19 @@ describe('Formulario de registro del paciente', () => {
     expect(screen.getByText('Mínimo 8 caracteres.')).toBeInTheDocument();
   });
 
-  it('menor de 18: el apoderado pasa a ser obligatorio', async () => {
+  it('menor de 18: aparecen nombre, DNI y celular del apoderado, obligatorios; un adulto no los ve', async () => {
     renderizar(<FormPaciente textoBoton="Registrar paciente" onEnviar={async () => {}} />);
     const u = userEvent.setup();
-    const etiqueta = () => screen.getByText(/Apoderado/, { selector: 'label' });
-    expect(etiqueta()).toHaveTextContent('(opcional)');
+    expect(screen.queryByLabelText('Nombre del apoderado')).toBeNull();
     await u.type(screen.getByLabelText('Fecha de nacimiento'), moverFecha(hoyEnLima(), { anios: -8 }));
-    expect(etiqueta()).toHaveClass('obligatorio');
+    for (const campo of ['Nombre del apoderado', 'DNI del apoderado', 'Celular del apoderado']) {
+      expect(screen.getByText(campo, { selector: 'label' })).toHaveClass('obligatorio');
+    }
     expect(screen.getByText(/Es menor de edad/)).toBeInTheDocument();
+    await u.type(screen.getByLabelText('Nombre del apoderado'), 'Rosa2 Ruiz');
+    expect(screen.getByLabelText('Nombre del apoderado')).toHaveValue('Rosa Ruiz');
+    await u.type(screen.getByLabelText('Celular del apoderado'), '123');
+    expect(screen.getByText('El celular debe empezar con 9 y tener 9 dígitos')).toBeInTheDocument();
   });
 });
 

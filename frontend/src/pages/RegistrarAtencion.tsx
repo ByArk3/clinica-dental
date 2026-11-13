@@ -1,13 +1,13 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { atencionSchema, LIMITE_TEXTO } from '@clinica/shared';
+import { atencionSchema, limpiarTextoLibre, LIMITE_TEXTO, nombrePieza, type AtencionDTO } from '@clinica/shared';
 import { atencionApi, historialApi, tarifarioApi, type ResultadoAtencion } from '../api/recursos';
 import { PiezaDental } from '../components/PiezaDental';
 import { TablaInsumos, calcularConsumo } from '../components/TablaInsumos';
 import { VistaHistorial } from '../components/VistaHistorial';
-import { BotonAccion, Contador } from '../components/Interaccion';
-import { hoyLima, mensajeError, solesPE } from '../formato';
+import { BotonAccion, ConfirmarSiNo, Contador, FilaResumen } from '../components/Interaccion';
+import { edadDe, hoyLima, mensajeError, numPE, solesPE } from '../formato';
 
 interface Linea {
   clave: number;
@@ -35,6 +35,7 @@ export default function RegistrarAtencion() {
   const [lineas, setLineas] = useState<Linea[]>([nuevaLinea()]);
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [resultado, setResultado] = useState<ResultadoAtencion | null>(null);
+  const [porConfirmar, setPorConfirmar] = useState<AtencionDTO | null>(null);
 
   const porId = useMemo(() => new Map(tarifario.data?.map((t) => [t.id, t])), [tarifario.data]);
   const elegidos = lineas.map((l) => (l.tratamientoId ? porId.get(l.tratamientoId) : undefined));
@@ -44,11 +45,13 @@ export default function RegistrarAtencion() {
   const guardar = useMutation({
     mutationFn: (d: Parameters<typeof atencionApi.registrar>[1]) => atencionApi.registrar(Number(citaId), d),
     onSuccess: (r) => {
+      setPorConfirmar(null);
       setResultado(r);
       qc.invalidateQueries({ queryKey: ['mis-citas-od'] });
       qc.invalidateQueries({ queryKey: ['historial'] });
       qc.invalidateQueries({ queryKey: ['tarifario-activo'] });
     },
+    onError: () => setPorConfirmar(null),
   });
 
   const actualizar = (clave: number, cambio: Partial<Linea>) => setLineas((ls) => ls.map((l) => (l.clave === clave ? { ...l, ...cambio } : l)));
@@ -68,11 +71,11 @@ export default function RegistrarAtencion() {
       return setErrores(c);
     }
     setErrores({});
-    guardar.mutate(v.data);
+    setPorConfirmar(v.data); // primero «¿Guardar la atención?» (Sí / No)
   }
 
   if (citas.isLoading) return <p className="text-muted">Cargando…</p>;
-  if (!cita) return <div className="alert alert-warning">La cita no está disponible para atención. <Link to="/atencion">Volver</Link></div>;
+  if (!cita) return <div className="alert alert-warning">La cita no está disponible para atención. <Link to="/atencion/registrar">Volver</Link></div>;
 
   if (resultado) {
     return (
@@ -93,7 +96,7 @@ export default function RegistrarAtencion() {
         {resultado.alertas.length > 0 && (
           <div className="alert alert-warning">Stock mínimo alcanzado: {resultado.alertas.join(', ')}. Se generó una alerta para el administrador.</div>
         )}
-        <Link to="/atencion" className="btn btn-acento">Volver a mis citas</Link>
+        <Link to="/atencion/registrar" className="btn btn-acento">Atender al siguiente paciente</Link>
       </div>
     );
   }
@@ -102,7 +105,7 @@ export default function RegistrarAtencion() {
     <>
       <div className="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-3">
         <h1 className="h4 mb-0">Registrar atención</h1>
-        <Link to="/atencion" className="small">← Mis citas del día</Link>
+        <Link to="/atencion/registrar" className="small">← Registrar atención</Link>
       </div>
       <p className="mb-3">
         <strong>{cita.paciente.nombres} {cita.paciente.apellidos}</strong> · {cita.hora} · {cita.motivo}
@@ -115,13 +118,13 @@ export default function RegistrarAtencion() {
         <div className="col-lg-7">
           <form className="tarjeta" onSubmit={enviar} noValidate>
             <div className="mb-3">
-              <label htmlFor="diagnostico" className="form-label">Diagnóstico *</label>
-              <textarea id="diagnostico" rows={2} className={`form-control ${errores.diagnostico ? 'is-invalid' : ''}`} value={diagnostico} maxLength={LIMITE_TEXTO.diagnostico} onChange={(e) => setDiagnostico(e.target.value)} />
+              <label htmlFor="diagnostico" className="form-label obligatorio">Diagnóstico</label>
+              <textarea id="diagnostico" rows={2} className={`form-control ${errores.diagnostico ? 'is-invalid' : ''}`} value={diagnostico} maxLength={LIMITE_TEXTO.diagnostico} onChange={(e) => setDiagnostico(limpiarTextoLibre(e.target.value, LIMITE_TEXTO.diagnostico))} />
             <Contador valor={diagnostico} max={LIMITE_TEXTO.diagnostico} />
               <div className="invalid-feedback">{errores.diagnostico}</div>
             </div>
 
-            <span className="form-label d-block">Tratamientos del tarifario *</span>
+            <span className="form-label obligatorio d-block">Tratamientos del tarifario</span>
             {errores.tratamientos && <div className="text-danger small mb-2">{errores.tratamientos}</div>}
             {lineas.map((l, n) => (
               <div className="border rounded p-2 mb-2" key={l.clave}>
@@ -143,7 +146,7 @@ export default function RegistrarAtencion() {
                     </button>
                   )}
                 </div>
-                <PiezaDental valor={l.piezaDental} onCambiar={(p) => actualizar(l.clave, { piezaDental: p })} />
+                <PiezaDental valor={l.piezaDental} edad={edadDe(cita.paciente.fechaNacimiento)} onCambiar={(p) => actualizar(l.clave, { piezaDental: p })} />
               </div>
             ))}
             <button type="button" className="btn btn-sm btn-outline-secondary mb-3" onClick={() => setLineas((ls) => [...ls, nuevaLinea()])}>
@@ -151,9 +154,10 @@ export default function RegistrarAtencion() {
             </button>
 
             <div className="mb-3">
-              <label htmlFor="observaciones" className="form-label">Observaciones</label>
-              <textarea id="observaciones" rows={2} className="form-control" value={observaciones} maxLength={LIMITE_TEXTO.observaciones} onChange={(e) => setObservaciones(e.target.value)} />
-            <Contador valor={observaciones} max={LIMITE_TEXTO.observaciones} />
+              <label htmlFor="observaciones" className="form-label">Observaciones <small className="text-muted">(opcional)</small></label>
+              <textarea id="observaciones" rows={2} className={`form-control ${errores.observaciones ? 'is-invalid' : ''}`} value={observaciones} maxLength={LIMITE_TEXTO.observaciones} onChange={(e) => setObservaciones(limpiarTextoLibre(e.target.value, LIMITE_TEXTO.observaciones))} />
+              <Contador valor={observaciones} max={LIMITE_TEXTO.observaciones} />
+              <div className="invalid-feedback">{errores.observaciones}</div>
             </div>
 
             <h2 className="h6">Insumos que se descontarán</h2>
@@ -164,6 +168,27 @@ export default function RegistrarAtencion() {
             </div>
             {guardar.isError && <div className="alert alert-danger mt-3" role="alert">{mensajeError(guardar.error)}</div>}
             <BotonAccion type="submit" className="btn btn-acento w-100 mt-3" mutacion={guardar}>Guardar atención</BotonAccion>
+            <ConfirmarSiNo abierto={!!porConfirmar} titulo="¿Guardar la atención?" ocupado={guardar.isPending} onNo={() => setPorConfirmar(null)} onSi={() => porConfirmar && guardar.mutate(porConfirmar)}>
+              {porConfirmar && (
+                <>
+                  <FilaResumen etiqueta="Paciente">{cita.paciente.nombres} {cita.paciente.apellidos}</FilaResumen>
+                  <FilaResumen etiqueta="Diagnóstico">{porConfirmar.diagnostico.length > 160 ? `${porConfirmar.diagnostico.slice(0, 160)}…` : porConfirmar.diagnostico}</FilaResumen>
+                  {porConfirmar.tratamientos.map((t, i) => {
+                    const tr = porId.get(t.tratamientoId);
+                    return (
+                      <FilaResumen key={i} etiqueta={i === 0 ? 'Tratamientos' : ''}>
+                        {tr?.nombre}{t.piezaDental ? ` — pieza ${t.piezaDental} · ${nombrePieza(t.piezaDental)}` : ''} · {solesPE(tr?.precio ?? 0)}
+                      </FilaResumen>
+                    );
+                  })}
+                  <FilaResumen etiqueta="Total a Caja">{solesPE(total)}</FilaResumen>
+                  <FilaResumen etiqueta="Insumos">
+                    {consumo.length === 0 ? 'Ninguno' : consumo.map((f) => `${f.nombre}: ${numPE(f.cantidad)} ${f.unidad}`).join(' · ')}
+                  </FilaResumen>
+                  <p className="small text-muted mt-2 mb-0">Al guardar se descuentan los insumos del stock y la cita pasa a Caja para cobrarse.</p>
+                </>
+              )}
+            </ConfirmarSiNo>
           </form>
         </div>
         <div className="col-lg-5">

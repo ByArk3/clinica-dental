@@ -50,7 +50,7 @@ describe('CU-11 RegistrarAtencion', () => {
     const u = userEvent.setup();
     expect(await screen.findByRole('note')).toHaveTextContent('Alergias: Penicilina'); // aviso de alergias arriba
     await waitFor(() => expect(screen.getAllByText('Penicilina')).toHaveLength(2)); // y en la ficha
-    await u.type(screen.getByLabelText('Diagnóstico *'), 'Caries en 16');
+    await u.type(screen.getByLabelText('Diagnóstico'), 'Caries en 16');
     await screen.findByRole('option', { name: /Curación con resina/ });
     await u.selectOptions(screen.getByLabelText('Tratamiento 1'), '1');
     await u.click(screen.getByRole('button', { name: 'Pieza 16' }));
@@ -59,6 +59,7 @@ describe('CU-11 RegistrarAtencion', () => {
     expect(within(fila).getByText('Quedará en stock mínimo: se generará alerta')).toBeInTheDocument();
     expect(screen.getByText('S/ 120.00')).toBeInTheDocument();
     await u.click(screen.getByRole('button', { name: 'Guardar atención' }));
+    await u.click(await screen.findByRole('button', { name: 'Sí' }));
     expect(await screen.findByText('Atención registrada')).toBeInTheDocument();
     expect(screen.getByText(/Stock mínimo alcanzado: Resina compuesta A2/)).toBeInTheDocument();
     expect(llamadas.find((l) => l.metodo === 'POST')?.body).toEqual({ diagnostico: 'Caries en 16', tratamientos: [{ tratamientoId: 1, piezaDental: '16' }] });

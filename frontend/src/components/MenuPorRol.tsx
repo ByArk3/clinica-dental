@@ -6,6 +6,8 @@ import { useAuth } from '../auth';
 interface Item {
   texto: string;
   ruta?: string; // sin ruta = módulo de una iteración posterior
+  /** true = solo se marca en esa ruta exacta (no en sus subrutas) */
+  exacta?: boolean;
 }
 
 const MENU: Record<Rol, Item[]> = {
@@ -21,7 +23,8 @@ const MENU: Record<Rol, Item[]> = {
     { texto: 'Caja', ruta: '/caja' },
   ],
   odontologo: [
-    { texto: 'Mis citas del día', ruta: '/atencion' },
+    { texto: 'Citas del día', ruta: '/atencion', exacta: true },
+    { texto: 'Registrar atención', ruta: '/atencion/registrar' },
     { texto: 'Historial clínico', ruta: '/historial' },
   ],
   administrador: [
@@ -57,7 +60,7 @@ export function MenuPorRol() {
         <Nav className="flex-column w-100">
           {MENU[usuario.rol].map((i) =>
             i.ruta ? (
-              <Nav.Link as={NavLink} to={i.ruta} key={i.texto}>
+              <Nav.Link as={NavLink} to={i.ruta} end={i.exacta} key={i.texto}>
                 {i.texto}
               </Nav.Link>
             ) : (

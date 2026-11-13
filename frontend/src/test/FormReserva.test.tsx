@@ -11,7 +11,7 @@ const cita = { id: 5, pacienteId: 1, odontologoId: 1, odontologo: 'Dr. Luis Pare
 
 async function elegirOdontologoYFecha(fecha = '2030-01-07') {
   const u = userEvent.setup();
-  await u.type(screen.getByLabelText('Motivo'), 'Dolor');
+  await u.type(screen.getByLabelText(/^Motivo/), 'Dolor');
   await screen.findByRole('option', { name: /Luis Paredes/ });
   await u.selectOptions(screen.getByLabelText('Odontólogo'), '1');
   await u.type(screen.getByLabelText('Fecha'), fecha);
@@ -25,6 +25,7 @@ describe('FormReserva (CU-06)', () => {
     const u = await elegirOdontologoYFecha();
     await u.click(await screen.findByRole('button', { name: '08:30' }));
     await u.click(screen.getByRole('button', { name: 'Reservar a las 08:30' }));
+    await u.click(await screen.findByRole('button', { name: 'Sí' }));
     expect(await screen.findByText('Cita registrada')).toBeInTheDocument();
     expect(screen.getByText('07/01/2030 a las 08:30 con Dr. Luis Paredes')).toBeInTheDocument();
     expect(screen.getByText('Pendiente de confirmación')).toBeInTheDocument();
@@ -41,6 +42,7 @@ describe('FormReserva (CU-06)', () => {
     const u = await elegirOdontologoYFecha();
     await u.click(await screen.findByRole('button', { name: '08:30' }));
     await u.click(screen.getByRole('button', { name: 'Reservar a las 08:30' }));
+    await u.click(await screen.findByRole('button', { name: 'Sí' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(MENSAJES.HORARIO_NO_DISPONIBLE);
     await waitFor(() => expect(screen.queryByRole('button', { name: '08:30' })).not.toBeInTheDocument());
     expect(llamadas.filter((l) => l.url.startsWith('/api/disponibilidad'))).toHaveLength(2);
@@ -56,6 +58,7 @@ describe('FormReserva (CU-06)', () => {
     const u = await elegirOdontologoYFecha();
     await u.click(await screen.findByRole('button', { name: '08:30' }));
     await u.click(screen.getByRole('button', { name: 'Reservar a las 08:30' }));
+    await u.click(await screen.findByRole('button', { name: 'Sí' }));
     expect(await screen.findByText(MENSAJES.ADELANTO_OBLIGATORIO)).toBeInTheDocument();
     expect(screen.getByText('Pendiente de adelanto')).toBeInTheDocument();
   });

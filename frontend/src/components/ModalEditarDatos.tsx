@@ -1,25 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ETIQUETA_SEXO, LARGO_NUMERICO, SEXOS, dniSchema, editarPacienteSchema, esMenorDeEdad, soloLetras, type Sexo, LIMITE_TEXTO } from '@clinica/shared';
+import { ETIQUETA_SEXO, LARGO_NUMERICO, SEXOS, dniSchema, limpiarTextoLibre, problemaTextoLibre, editarPacienteSchema, esMenorDeEdad, soloLetras, type Sexo, LIMITE_TEXTO } from '@clinica/shared';
 import { citasApi, pacientesApi, type Cita, type Paciente } from '../api/recursos';
 import { ApiError } from '../api/cliente';
 import { useUsuarioOpcional } from '../auth';
 import { fechaPE, mensajeError, solesPE } from '../formato';
-import { AvisoFlotante, BotonAccion, CampoDigitos } from './Interaccion';
+import { AvisoFlotante, BotonAccion, CampoDigitos, correoValido } from './Interaccion';
 import { DniPaciente } from './DniPaciente';
 import { fechaMinimaNacimiento, hoyEnLima } from '@clinica/shared';
 
-type Campo = 'telefono' | 'email' | 'direccion' | 'apoderado' | 'nombres' | 'apellidos' | 'fechaNacimiento' | 'sexo';
+type Campo = 'telefono' | 'email' | 'direccion' | 'apoderado' | 'apoderadoDni' | 'apoderadoTelefono' | 'nombres' | 'apellidos' | 'fechaNacimiento' | 'sexo';
 type Valores = Record<Campo, string>;
 const IDENTIDAD: Campo[] = ['nombres', 'apellidos', 'fechaNacimiento', 'sexo'];
 const ETIQUETAS: Record<Campo, string> = {
-  telefono: 'Celular', email: 'Correo', direccion: 'Dirección', apoderado: 'Apoderado',
+  telefono: 'Celular', email: 'Correo', direccion: 'Dirección', apoderado: 'Nombre del apoderado', apoderadoDni: 'DNI del apoderado', apoderadoTelefono: 'Celular del apoderado',
   nombres: 'Nombres', apellidos: 'Apellidos', fechaNacimiento: 'Fecha de nacimiento', sexo: 'Sexo',
 };
 
 const valoresDe = (p: Paciente): Valores => ({
   telefono: p.telefono, email: p.email ?? '', direccion: p.direccion ?? '', apoderado: p.apoderado ?? '',
+  apoderadoDni: p.apoderadoDni ?? '', apoderadoTelefono: p.apoderadoTelefono ?? '',
   nombres: p.nombres, apellidos: p.apellidos, fechaNacimiento: p.fechaNacimiento, sexo: p.sexo ?? '',
 });
 const mostrar = (k: Campo, v: string) => (!v ? '(vacío)' : k === 'fechaNacimiento' ? fechaPE(v) : k === 'sexo' ? ETIQUETA_SEXO[v as Sexo] : v);
@@ -80,7 +81,10 @@ export function ModalEditarDatos({ pacienteId, cita, pestanaInicial, onCerrar }:
 
   const guardar = useMutation({
     mutationFn: () => {
-      const r = editarPacienteSchema.safeParse({ ...v, sexo: v!.sexo || null, motivo: motivo || undefined });
+      const menor = esMenorDeEdad(v!.fechaNacimiento);
+      // un adulto no lleva apoderado: lo que hubiera se conserva tal cual
+      const apoderado = menor ? {} : { apoderado: original!.apoderado, apoderadoDni: original!.apoderadoDni, apoderadoTelefono: original!.apoderadoTelefono };
+      const r = editarPacienteSchema.safeParse({ ...v, ...apoderado, sexo: v!.sexo || null, motivo: motivo || undefined });
       if (!r.success) {
         const c: Record<string, string> = {};
         for (const i of r.error.issues) c[i.path.join('.')] ??= i.message;
@@ -105,7 +109,7 @@ export function ModalEditarDatos({ pacienteId, cita, pestanaInicial, onCerrar }:
   const obligatorio = (k: Campo) =>
     ['nombres', 'apellidos', 'fechaNacimiento', 'sexo', 'telefono'].includes(k) ||
     (k === 'email' && !!paciente.data?.tieneCuenta) ||
-    (k === 'apoderado' && !!v && esMenorDeEdad(v.fechaNacimiento));
+    (k.startsWith('apoderado') && !!v && esMenorDeEdad(v.fechaNacimiento));
   const campo = (k: Campo, opciones: { col: string; tipo?: string }) => {
     if (!v || !original) return null;
     const cambio = v[k].trim() !== original[k];
@@ -114,8 +118,8 @@ export function ModalEditarDatos({ pacienteId, cita, pestanaInicial, onCerrar }:
         <label htmlFor={`e-${k}`} className={`form-label ${obligatorio(k) ? 'obligatorio' : ''}`}>
           {ETIQUETAS[k]} {!obligatorio(k) && <small className="text-muted">(opcional)</small>}
         </label>
-        {k === 'telefono' ? (
-          <CampoDigitos id="e-telefono" value={v.telefono} onChange={(x) => setV({ ...v, telefono: x })} largo={LARGO_NUMERICO.celular} error={errores.telefono} className={cambio ? 'campo-cambiado' : ''} />
+        {k === 'telefono' || k === 'apoderadoTelefono' || k === 'apoderadoDni' ? (
+          <CampoDigitos id={`e-${k}`} value={v[k]} onChange={(x) => setV({ ...v, [k]: x })} largo={k === 'apoderadoDni' ? LARGO_NUMERICO.dni : LARGO_NUMERICO.celular} celular={k !== 'apoderadoDni'} error={errores[k]} className={cambio ? 'campo-cambiado' : ''} />
         ) : k === 'sexo' ? (
           <select id="e-sexo" className={`form-select ${errores.sexo ? 'is-invalid' : ''} ${cambio ? 'campo-cambiado' : ''}`} value={v.sexo} onChange={(e) => setV({ ...v, sexo: e.target.value })}>
             <option value="">—</option>
@@ -129,11 +133,11 @@ export function ModalEditarDatos({ pacienteId, cita, pestanaInicial, onCerrar }:
             maxLength={k === 'direccion' ? LIMITE_TEXTO.direccion : k === 'apoderado' ? LIMITE_TEXTO.apoderado : k === 'nombres' || k === 'apellidos' ? 60 : undefined}
             className={`form-control ${errores[k] ? 'is-invalid' : ''} ${cambio ? 'campo-cambiado' : ''}`}
             value={v[k]}
-            onChange={(e) => setV({ ...v, [k]: k === 'nombres' || k === 'apellidos' ? soloLetras(e.target.value) : e.target.value })}
+            onChange={(e) => setV({ ...v, [k]: k === 'nombres' || k === 'apellidos' ? soloLetras(e.target.value) : k === 'apoderado' ? soloLetras(e.target.value).slice(0, LIMITE_TEXTO.apoderado) : e.target.value })}
+            onBlur={k === 'email' ? (e) => setErrores({ ...errores, email: e.target.value.trim() && !correoValido(e.target.value) ? 'Correo inválido' : '' }) : undefined}
           />
         )}
-        {k !== 'telefono' && <div className="invalid-feedback">{errores[k]}</div>}
-        {k === 'apoderado' && obligatorio(k) && !errores.apoderado && <div className="form-text">Es menor de edad: nombre, DNI y celular del padre, madre o tutor.</div>}
+        {k !== 'telefono' && k !== 'apoderadoTelefono' && k !== 'apoderadoDni' && <div className="invalid-feedback">{errores[k]}</div>}
         {k === 'email' && obligatorio(k) && !errores.email && <div className="form-text">Inicia sesión en la web con este correo.</div>}
         {k === 'fechaNacimiento' && !cambio && edadDe(v.fechaNacimiento) !== null && <div className="form-text">{edadDe(v.fechaNacimiento)} años</div>}
         {cambio && (
@@ -174,9 +178,16 @@ export function ModalEditarDatos({ pacienteId, cita, pestanaInicial, onCerrar }:
             <h3 className="h6 text-uppercase text-muted small mb-2">Contacto <span className="fw-normal text-lowercase">— se cambia libremente</span></h3>
             <div className="row g-3 mb-4">
               {campo('telefono', { col: 'col-sm-4' })}
-              {campo('email', { col: 'col-sm-4', tipo: 'email' })}
-              {campo('apoderado', { col: 'col-sm-4' })}
+              {campo('email', { col: 'col-sm-8', tipo: 'email' })}
               {campo('direccion', { col: 'col-12' })}
+              {esMenorDeEdad(v.fechaNacimiento) && (
+                <>
+                  <div className="col-12 small fw-semibold border-top pt-2">Es menor de edad: datos del padre, madre o tutor</div>
+                  {campo('apoderado', { col: 'col-sm-6' })}
+                  {campo('apoderadoDni', { col: 'col-sm-3' })}
+                  {campo('apoderadoTelefono', { col: 'col-sm-3' })}
+                </>
+              )}
             </div>
             <h3 className="h6 text-uppercase text-muted small mb-2">Identidad <span className="fw-normal text-lowercase">— si cambia, pide el motivo y queda en la auditoría</span></h3>
             <div className="row g-3">
@@ -291,11 +302,14 @@ function SeccionDni({ paciente, esAdmin, onGuardado }: { paciente: Paciente; esA
 function SeccionCita({ cita, onGuardado }: { cita: Cita; onGuardado: (mensaje: string) => void }) {
   const qc = useQueryClient();
   const tarifario = useQuery({ queryKey: ['tarifario-publico'], queryFn: citasApi.tarifario, staleTime: 5 * 60_000 });
-  const [motivo, setMotivo] = useState(cita.motivo);
+  // motivo opcional: lo escrito (vacío si no se escribió; entonces la agenda muestra el tratamiento previsto)
+  const escrito = cita.motivoEscrito ?? cita.motivo;
+  const [motivo, setMotivo] = useState(escrito);
+  const problemaMotivo = problemaTextoLibre(motivo);
   const [tratamientoId, setTratamientoId] = useState<number | ''>(cita.tratamientoPrevistoId ?? '');
   const editable = ['pendiente_confirmacion', 'pendiente_adelanto', 'confirmada', 'pago_en_verificacion'].includes(cita.estado);
   const puedeCambiarTratamiento = cita.estado === 'pendiente_adelanto' && !cita.adelantoPagado;
-  const cambioMotivo = motivo.trim() !== cita.motivo;
+  const cambioMotivo = motivo.trim() !== escrito;
   const cambioTratamiento = tratamientoId !== '' && tratamientoId !== (cita.tratamientoPrevistoId ?? '');
   const guardar = useMutation({
     mutationFn: () => citasApi.editarDatos(cita.id, { motivo: motivo.trim(), ...(cambioTratamiento ? { tratamientoPrevistoId: Number(tratamientoId) } : {}) }),
@@ -314,11 +328,13 @@ function SeccionCita({ cita, onGuardado }: { cita: Cita; onGuardado: (mensaje: s
       </p>
       {!editable && <div className="alert alert-secondary">Esta cita ya no se puede editar.</div>}
       <div className="mb-3">
-        <label htmlFor="e-motivo-cita" className="form-label">Motivo</label>
-        <input id="e-motivo-cita" maxLength={LIMITE_TEXTO.motivoCita} className={`form-control ${cambioMotivo ? 'campo-cambiado' : ''}`} value={motivo} disabled={!editable} onChange={(e) => setMotivo(e.target.value)} />
+        <label htmlFor="e-motivo-cita" className="form-label">Motivo <small className="text-muted">(opcional)</small></label>
+        <input id="e-motivo-cita" maxLength={LIMITE_TEXTO.motivoCita} placeholder="Ej.: dolor de muela, sensibilidad" className={`form-control ${cambioMotivo ? 'campo-cambiado' : ''} ${problemaMotivo ? 'is-invalid' : ''}`} value={motivo} disabled={!editable} onChange={(e) => setMotivo(limpiarTextoLibre(e.target.value, LIMITE_TEXTO.motivoCita))} />
+        <div className="invalid-feedback">{problemaMotivo}</div>
+        {!motivo.trim() && <div className="form-text">Si queda vacío, se muestra el tratamiento previsto.</div>}
         {cambioMotivo && (
           <div className="form-text text-warning-emphasis">
-            Antes: «{cita.motivo}» <button type="button" className="btn btn-link btn-sm p-0 align-baseline" onClick={() => setMotivo(cita.motivo)}>Deshacer</button>
+            Antes: «{escrito || '(vacío)'}» <button type="button" className="btn btn-link btn-sm p-0 align-baseline" onClick={() => setMotivo(escrito)}>Deshacer</button>
           </div>
         )}
       </div>
@@ -344,7 +360,7 @@ function SeccionCita({ cita, onGuardado }: { cita: Cita; onGuardado: (mensaje: s
       </div>
       {guardar.isError && <div className="alert alert-danger" role="alert">{mensajeError(guardar.error)}</div>}
       {editable && (
-        <BotonAccion type="button" mutacion={guardar} disabled={!cambioMotivo && !cambioTratamiento} onClick={() => guardar.mutate()}>
+        <BotonAccion type="button" mutacion={guardar} disabled={(!cambioMotivo && !cambioTratamiento) || !!problemaMotivo} onClick={() => guardar.mutate()}>
           Guardar datos de la cita
         </BotonAccion>
       )}

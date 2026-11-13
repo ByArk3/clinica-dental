@@ -25,7 +25,7 @@ describe('Insumos: Modificar con pestañas', () => {
     await u.click(within(modal).getByRole('button', { name: 'Corregir stock' }));
     await u.type(within(modal).getByLabelText('Cantidad contada (par)'), '45');
     expect(within(modal).getByText('-3')).toBeInTheDocument();
-    await u.type(within(modal).getByLabelText('Motivo'), 'Conteo físico mensual');
+    await u.type(within(modal).getByLabelText(/^Motivo/), 'Conteo físico mensual');
     await u.click(within(modal).getByRole('button', { name: 'Guardar corrección' }));
     expect(await screen.findByRole('status')).toHaveTextContent('Stock de «Guantes de nitrilo M» corregido: 48 → 45 par');
     expect(llamadas.find((l) => l.metodo === 'POST')?.body).toEqual({ tipo: 'ajuste', cantidad: -3, motivo: 'Conteo físico mensual' });

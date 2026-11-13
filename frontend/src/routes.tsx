@@ -16,6 +16,7 @@ import MiPerfil from './pages/MiPerfil';
 import Historial from './pages/Historial';
 import MisCitasOdontologo from './pages/MisCitasOdontologo';
 import RegistrarAtencion from './pages/RegistrarAtencion';
+import PorAtender from './pages/PorAtender';
 import Tarifario from './pages/Tarifario';
 import Insumos from './pages/Insumos';
 import Caja from './pages/Caja';
@@ -82,6 +83,8 @@ export function Rutas() {
         </Route>
         <Route element={<Protegida roles={['odontologo']} />}>
           <Route path="/atencion" element={<MisCitasOdontologo />} />
+          <Route path="/atencion/registrar" element={<PorAtender />} />
+          <Route path="/atencion/registrar/:citaId" element={<RegistrarAtencion />} />
           <Route path="/atencion/:citaId" element={<RegistrarAtencion />} />
           <Route path="/atencion/editar/:atencionId" element={<EditarAtencion />} />
         </Route>

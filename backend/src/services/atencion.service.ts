@@ -1,6 +1,6 @@
 // CU-11 Registrar tratamiento (atención) — Odontólogo. RN-06, RN-08, RN-09.
 import { Prisma } from '@prisma/client';
-import { MENSAJES, type AtencionDTO, type EditarAtencionDTO, type UsuarioSesion } from '@clinica/shared';
+import { MENSAJES, motivoAMostrar, type AtencionDTO, type EditarAtencionDTO, type UsuarioSesion } from '@clinica/shared';
 import { prisma } from '../lib/prisma.js';
 import { ErrorNegocio } from '../lib/errores.js';
 import { ahoraLima, dateAFecha, dateAHora, fechaADate } from '../lib/fechas.js';
@@ -17,6 +17,7 @@ export async function citasDelOdontologo(odontologoId: number, fecha: string) {
     include: {
       paciente: { select: { id: true, dni: true, nombres: true, apellidos: true, fechaNacimiento: true, ficha: { select: { alergias: true } } } },
       atencion: { select: { id: true } },
+      tratamientoPrevisto: { select: { nombre: true } },
     },
   });
   const hoy = ahoraLima().fecha;
@@ -24,7 +25,7 @@ export async function citasDelOdontologo(odontologoId: number, fecha: string) {
     id: c.id,
     fecha: dateAFecha(c.fecha),
     hora: dateAHora(c.hora),
-    motivo: c.motivo,
+    motivo: motivoAMostrar(c.motivo, c.tratamientoPrevisto?.nombre),
     estado: c.estado,
     puedeAtender: c.estado === 'confirmada' && dateAFecha(c.fecha) <= hoy,
     atencionId: c.atencion?.id ?? null, // para corregirla
@@ -118,7 +119,7 @@ export async function verParaEditar(atencionId: number, usuario: UsuarioSesion) 
   const a = await prisma.atencion.findUnique({
     where: { id: atencionId },
     include: {
-      cita: { include: { paciente: { select: { id: true, dni: true, nombres: true, apellidos: true, ficha: { select: { alergias: true } } } }, comprobantes: { where: { anuladoEn: null, tipo: 'servicio' } } } },
+      cita: { include: { tratamientoPrevisto: { select: { nombre: true } }, paciente: { select: { id: true, dni: true, nombres: true, apellidos: true, ficha: { select: { alergias: true } } } }, comprobantes: { where: { anuladoEn: null, tipo: 'servicio' } } } },
       tratamientos: { orderBy: { id: 'asc' }, include: { tratamiento: { select: { nombre: true } } } },
     },
   });
@@ -128,7 +129,7 @@ export async function verParaEditar(atencionId: number, usuario: UsuarioSesion) 
     citaId: a.citaId,
     fecha: dateAFecha(a.cita.fecha),
     hora: dateAHora(a.cita.hora),
-    motivo: a.cita.motivo,
+    motivo: motivoAMostrar(a.cita.motivo, a.cita.tratamientoPrevisto?.nombre),
     paciente: { id: a.cita.paciente.id, dni: a.cita.paciente.dni, nombres: a.cita.paciente.nombres, apellidos: a.cita.paciente.apellidos, alergias: a.cita.paciente.ficha?.alergias ?? null },
     diagnostico: a.diagnostico,
     observaciones: a.observaciones,

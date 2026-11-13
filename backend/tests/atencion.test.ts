@@ -109,7 +109,7 @@ describe('CU-11 Registrar tratamiento', () => {
     const od = await sesion('odontologo');
     const r = await od.post(`/api/citas/${c.id}/atencion`).send({ diagnostico: 'Caries', tratamientos: [{ tratamientoId: await idTrat('Consulta'), piezaDental: '19' }] });
     expect(r.status).toBe(422);
-    expect(r.body.campos['tratamientos.0.piezaDental']).toBe('Pieza dental inválida (FDI 11–48)');
+    expect(r.body.campos['tratamientos.0.piezaDental']).toBe('Pieza dental inválida (FDI 11–48 o 51–85)');
   });
 
   it('RN-08: tratamiento desactivado → 422 y la transacción no deja rastro (ni stock ni estado)', async () => {

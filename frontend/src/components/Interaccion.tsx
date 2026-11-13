@@ -1,7 +1,8 @@
 // Piezas de interacción reutilizables: botón que trabaja, copiar con un toque y campo de solo dígitos con ✓/✗.
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { soloDigitos } from '@clinica/shared';
+import { Modal } from 'react-bootstrap';
+import { CELULAR_PERU, MENSAJE_CELULAR, soloDigitos } from '@clinica/shared';
 
 interface MutacionMinima {
   isPending: boolean;
@@ -79,6 +80,7 @@ export function CampoDigitos({
   className = '',
   placeholder,
   style,
+  celular,
 }: {
   id: string;
   value: string;
@@ -88,10 +90,14 @@ export function CampoDigitos({
   className?: string;
   placeholder?: string;
   style?: React.CSSProperties;
+  /** true = celular peruano: además de los 9 dígitos, debe empezar con 9 */
+  celular?: boolean;
 }) {
   const [tocado, setTocado] = useState(false);
-  const completo = value.length === largo;
-  const incompleto = tocado && value.length > 0 && !completo;
+  const noEmpiezaCon9 = !!celular && value.length > 0 && !value.startsWith('9');
+  const completo = value.length === largo && (!celular || CELULAR_PERU.test(value));
+  const incompleto = tocado && value.length > 0 && value.length < largo;
+  if (noEmpiezaCon9 && !error) error = MENSAJE_CELULAR;
   const estado = error || incompleto ? 'is-invalid' : completo ? 'is-valid' : '';
   return (
     <>
@@ -168,3 +174,47 @@ export function Contador({ valor, max }: { valor: string; max: number }) {
     </div>
   );
 }
+
+/**
+ * Confirmación «¿Está seguro?» con solo dos botones: «Sí» y «No». Con «No» se cierra y lo escrito queda en el
+ * formulario. `children` es el resumen de lo que se va a guardar.
+ */
+export function ConfirmarSiNo({
+  abierto,
+  titulo,
+  children,
+  onSi,
+  onNo,
+  ocupado,
+}: {
+  abierto: boolean;
+  titulo: string;
+  children?: ReactNode;
+  onSi: () => void;
+  onNo: () => void;
+  ocupado?: boolean;
+}) {
+  return (
+    <Modal show={abierto} onHide={onNo} centered>
+      <Modal.Header closeButton>
+        <Modal.Title className="h5">{titulo}</Modal.Title>
+      </Modal.Header>
+      {children && <Modal.Body>{children}</Modal.Body>}
+      <Modal.Footer>
+        <button type="button" className="btn btn-outline-secondary" onClick={onNo} disabled={ocupado}>No</button>
+        <button type="button" className="btn btn-acento" onClick={onSi} disabled={ocupado} autoFocus>{ocupado ? 'Guardando…' : 'Sí'}</button>
+      </Modal.Footer>
+    </Modal>
+  );
+}
+
+/** Fila «Etiqueta: valor» para los resúmenes de las confirmaciones. */
+export const FilaResumen = ({ etiqueta, children }: { etiqueta: string; children: ReactNode }) => (
+  <div className="d-flex gap-2 small py-1 border-bottom">
+    <span className="text-muted" style={{ minWidth: 130 }}>{etiqueta}</span>
+    <span className="fw-semibold text-break">{children}</span>
+  </div>
+);
+
+/** Correo: se marca «Correo inválido» al salir del campo (no mientras se escribe). */
+export const correoValido = (t: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t.trim());

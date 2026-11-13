@@ -101,7 +101,7 @@ describe('CU-04 Actualizar datos de contacto', () => {
     const pac = await sesion('paciente');
     const r = await pac.patch('/api/pacientes/me').send({ telefono: '123', email: 'no-es-correo' });
     expect(r.status).toBe(422);
-    expect(r.body.campos).toMatchObject({ telefono: 'El teléfono debe tener 9 dígitos', email: 'Correo inválido' });
+    expect(r.body.campos).toMatchObject({ telefono: 'El celular debe tener 9 dígitos', email: 'Correo inválido' });
   });
 
   it('RNF07: el paciente no puede editar a otro paciente por la ruta de recepción', async () => {

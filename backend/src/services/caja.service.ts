@@ -3,7 +3,7 @@
 // Reglas acordadas: campañas por línea según la fecha de la cita; adelanto = 50 % del tratamiento previsto;
 // el adelanto pagado y el saldo a favor se descuentan del cobro final; lo que sobra del adelanto → saldo a favor.
 import { Prisma } from '@prisma/client';
-import { MENSAJES, type ComprobanteDTO, type Importe, type UsuarioSesion, VUELTO_MAXIMO } from '@clinica/shared';
+import { MENSAJES, nombrePieza, type ComprobanteDTO, type Importe, type UsuarioSesion, VUELTO_MAXIMO } from '@clinica/shared';
 import { prisma, type Tx } from '../lib/prisma.js';
 import { ErrorNegocio } from '../lib/errores.js';
 import { dateAFecha, dateAHora, fechaPE } from '../lib/fechas.js';
@@ -139,7 +139,7 @@ export async function calcularImporte(db: Tx | typeof prisma, citaId: number): P
     paciente,
     lineas: lineas.map((t, i) => ({
       tratamientoId: t.tratamientoId,
-      descripcion: t.piezaDental ? `${t.tratamiento.nombre} — pieza ${t.piezaDental}` : t.tratamiento.nombre,
+      descripcion: t.piezaDental ? `${t.tratamiento.nombre} — pieza ${t.piezaDental} · ${nombrePieza(t.piezaDental)}` : t.tratamiento.nombre,
       precio: t.precioAplicado.toFixed(2),
       descuento: campanas[i].descuento.toFixed(2),
       campana: campanas[i].campana,

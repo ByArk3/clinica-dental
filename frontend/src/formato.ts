@@ -38,3 +38,10 @@ export const fechaHoraPE = (iso: string) =>
   new Intl.DateTimeFormat('es-PE', { timeZone: ZONA, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso));
 
 export const numPE = (n: string | number) => Number(n).toLocaleString('es-PE', { maximumFractionDigits: 2 });
+
+/** Edad en años cumplidos a hoy (hora de Lima) para una fecha aaaa-mm-dd. */
+export function edadDe(fechaNacimiento: string) {
+  const [a, m, d] = fechaNacimiento.split('-').map(Number);
+  const [ha, hm, hd] = hoyLima().split('-').map(Number);
+  return ha - a - (hm < m || (hm === m && hd < d) ? 1 : 0);
+}

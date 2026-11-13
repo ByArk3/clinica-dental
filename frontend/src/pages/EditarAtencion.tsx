@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { editarAtencionSchema, MENSAJES, LIMITE_TEXTO } from '@clinica/shared';
+import { editarAtencionSchema, MENSAJES, LIMITE_TEXTO, limpiarTextoLibre } from '@clinica/shared';
 import { atencionApi, tarifarioApi, type ResultadoEdicion } from '../api/recursos';
-import { PiezaDental } from '../components/PiezaDental';
+import { PiezaDental, textoPieza } from '../components/PiezaDental';
 import { BotonAccion, Contador } from '../components/Interaccion';
 import { fechaPE, mensajeError, solesPE } from '../formato';
 
@@ -95,7 +95,7 @@ export default function EditarAtencion() {
         )}
         {resultado.alertas.length > 0 && <div className="alert alert-warning">Stock mínimo alcanzado: {resultado.alertas.join(', ')}.</div>}
         <div className="d-flex gap-2">
-          <Link to="/atencion" className="btn btn-acento">Mis citas del día</Link>
+          <Link to="/atencion" className="btn btn-acento">Citas del día</Link>
           <Link to={`/historial?paciente=${a.paciente.id}`} className="btn btn-outline-secondary">Ver historial</Link>
         </div>
       </div>
@@ -106,7 +106,7 @@ export default function EditarAtencion() {
     <>
       <div className="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-3">
         <h1 className="h4 mb-0">Editar atención</h1>
-        <Link to="/atencion" className="small">← Mis citas del día</Link>
+        <Link to="/atencion" className="small">← Citas del día</Link>
       </div>
       <p className="mb-3">
         <strong>{a.paciente.nombres} {a.paciente.apellidos}</strong> · {fechaPE(a.fecha)} {a.hora} · {a.motivo}
@@ -115,8 +115,8 @@ export default function EditarAtencion() {
 
       <form className="tarjeta" onSubmit={enviar} noValidate style={{ maxWidth: 720 }}>
         <div className="mb-3">
-          <label htmlFor="diagnostico" className="form-label">Diagnóstico *</label>
-          <textarea id="diagnostico" rows={2} className={`form-control ${errores.diagnostico ? 'is-invalid' : ''}`} value={diagnostico} maxLength={LIMITE_TEXTO.diagnostico} onChange={(e) => setDiagnostico(e.target.value)} />
+          <label htmlFor="diagnostico" className="form-label obligatorio">Diagnóstico</label>
+          <textarea id="diagnostico" rows={2} className={`form-control ${errores.diagnostico ? 'is-invalid' : ''}`} value={diagnostico} maxLength={LIMITE_TEXTO.diagnostico} onChange={(e) => setDiagnostico(limpiarTextoLibre(e.target.value, LIMITE_TEXTO.diagnostico))} />
             <Contador valor={diagnostico} max={LIMITE_TEXTO.diagnostico} />
           <div className="invalid-feedback">{errores.diagnostico}</div>
         </div>
@@ -139,7 +139,7 @@ export default function EditarAtencion() {
             {!cobrada ? (
               <PiezaDental valor={l.piezaDental} onCambiar={(p) => actualizar(l.clave, { piezaDental: p })} />
             ) : (
-              l.piezaDental && <div className="small text-muted">Pieza {l.piezaDental}</div>
+              l.piezaDental && <div className="small text-muted">{textoPieza(l.piezaDental)}</div>
             )}
           </div>
         ))}
@@ -152,7 +152,8 @@ export default function EditarAtencion() {
 
         <div className="mb-3">
           <label htmlFor="observaciones" className="form-label">Observaciones</label>
-          <textarea id="observaciones" rows={2} className="form-control" value={observaciones} maxLength={LIMITE_TEXTO.observaciones} onChange={(e) => setObservaciones(e.target.value)} />
+          <textarea id="observaciones" rows={2} className={`form-control ${errores.observaciones ? 'is-invalid' : ''}`} value={observaciones} maxLength={LIMITE_TEXTO.observaciones} onChange={(e) => setObservaciones(limpiarTextoLibre(e.target.value, LIMITE_TEXTO.observaciones))} />
+          <div className="invalid-feedback">{errores.observaciones}</div>
             <Contador valor={observaciones} max={LIMITE_TEXTO.observaciones} />
         </div>
         <div className="mb-3">

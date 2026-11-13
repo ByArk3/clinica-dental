@@ -153,7 +153,7 @@ export async function sembrarDemo(prisma: PrismaClient<any>, { silencioso = fals
         dni: sinDni ? null : nuevoDni(), nombres, apellidos, sexo: mujer ? 'femenino' : 'masculino', fechaNacimiento: fechaDB(nac), telefono: celular(),
         email: !nino && g.si(0.4) ? `${nombres.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')}.${apellidos.split(' ')[0].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')}${i}@correo.local` : null,
         direccion: g.si(0.6) ? `${g.uno(CALLES)} ${g.entre(100, 2500)}, Trujillo` : null,
-        apoderado: nino ? `${g.uno(g.si(0.5) ? NOMBRES_F : NOMBRES_M)} ${apellidos.split(' ')[0]} (DNI ${nuevoDni()}, cel. ${celular()})` : null,
+        ...(nino ? { apoderado: `${g.uno(g.si(0.5) ? NOMBRES_F : NOMBRES_M)} ${apellidos.split(' ')[0]}`, apoderadoDni: nuevoDni(), apoderadoTelefono: celular() } : {}),
         createdAt: creado,
         ficha: { create: { alergias: g.si(0.15) ? g.uno(ALERGIAS) : null, antecedentes: !nino && g.si(0.2) ? g.uno(ANTECEDENTES) : null } },
       },

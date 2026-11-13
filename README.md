@@ -141,7 +141,7 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | Descuentos (P3) y monto del adelanto (P6) gestionados por el Administrador | `admin.test.ts` |
 | CU-38 Panel de control · CU-39 Reporte de ingresos · CU-40 Reporte de inventario (rango de fechas, exportación CSV para Excel) | `reporte.test.ts`, `Iteracion4.test.tsx` |
 
-Total: **327 pruebas de API + 119 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y los CU-58 y CU-59 están implementados.
+Total: **335 pruebas de API + 125 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y los CU-58 y CU-59 están implementados.
 
 **Tareas programadas** (`backend/src/jobs`, node-cron, hora de Lima; se activan con `JOBS_ENABLED=true`):
 - **Cada 5 min:** libera las reservas cuyo adelanto no se pagó ni reportó en 1 hora (RN-04; también las citas antiguas
@@ -369,6 +369,7 @@ Resumen de todo lo agregado en las últimas 24 horas (commits `a7d987b` a `34bbf
 |---|---|
 | `20261109000000_paciente_sin_dni_y_correcciones` | DNI opcional, columna `sexo`, acciones de auditoría `corregir_paciente`, `cambiar_dni`, `editar_cita` |
 | `20261110000000_administrador_principal` | Columna `principal` (uno solo, índice único y `CHECK`), marca al administrador más antiguo, acciones de auditoría de usuarios |
+| `20261113000000_apoderado_en_tres_campos` | Columnas `apoderado_dni` y `apoderado_telefono`; separa los apoderados antiguos con formato «Nombre (DNI …, cel. …)» y deja los demás tal cual en el nombre |
 
 ### Rutas nuevas de la API
 `GET /pacientes/por-nombre` · `POST/GET /pacientes/sin-dni` · `GET/PATCH /pacientes/:id` · `PUT /pacientes/:id/dni` ·
@@ -386,6 +387,24 @@ Resumen de todo lo agregado en las últimas 24 horas (commits `a7d987b` a `34bbf
   nombres del personal (se permite el punto para «Dr.», «Dra.», «Mg.»), especialidad, contacto del proveedor, unidad del insumo y
   búsqueda por nombre; el titular de Yape/Plin admite letras, números y `. & - ( )`. Los textos libres tienen límite
   (`LIMITE_TEXTO` en `shared`) y los largos muestran un contador «n/máx».
+- **Motivo de la cita opcional (13 nov.):** «Motivo (opcional)» al reservar y en «Editar cita». Si queda vacío, la Agenda, Buscar
+  cita y el odontólogo ven el tratamiento previsto (`motivoAMostrar` en `shared`; la API devuelve `motivo` para mostrar y
+  `motivoEscrito` con lo escrito).
+- **Apoderado en 3 campos:** nombre (solo letras), DNI (8 dígitos) y celular; solo aparecen para menores de 18 y ahí son
+  obligatorios, en el registro web, presencial, sin DNI, Editar datos y «Mis datos».
+- **«Mis datos» del paciente:** un adulto no ve el apoderado; un menor no puede borrarlo; el correo es obligatorio (si lo cambia,
+  cambia también su usuario de la web); obligatorios marcados; «Guardar cambios» desactivado sin cambios.
+- **Confirmación «Sí / No»** (`ConfirmarSiNo` en `components/Interaccion.tsx`) con un resumen: al registrar un paciente (con o sin
+  DNI), al reservar una cita (odontólogo, fecha, hora, tratamiento y adelanto), en «Mis datos» (lo que cambió) y al guardar una
+  atención (diagnóstico, tratamientos, total e insumos).
+- **Celular:** 9 dígitos que empiezan con 9 (paciente y apoderado). **Correo:** se marca «Correo inválido» al salir del campo.
+- **Texto libre** (motivo, alergias, antecedentes, diagnóstico, observaciones; `problemaTextoLibre` en `shared`): solo letras,
+  números y signos comunes; al menos 3 letras; ninguna palabra de 6 o más caracteres que mezcle letras y números («sdsd2323»).
+- **Menú del odontólogo:** «Citas del día» (toda la agenda de una fecha) · **«Registrar atención»** (nueva: los pacientes de hoy
+  por atender, con el siguiente destacado; ruta `/atencion/registrar`) · «Historial clínico».
+- **Odontograma:** títulos por zona («Arriba · derecha del paciente»…), nombre de cada diente al pasar el mouse y al elegirlo
+  («Pieza 36 — primer molar inferior izquierdo»), botón «✕ Quitar pieza» y **dientes de leche** (51–85), que se muestran primero
+  si el paciente tiene menos de 12 años. Caja, comprobante e historial muestran el nombre del diente (`nombrePieza` en `shared`).
 
 ### Pendientes
 - No hay pendientes anotados. Descartado por ahora: límite de intentos en el registro web (ver «Riesgos conocidos»).

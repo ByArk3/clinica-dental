@@ -133,7 +133,9 @@ model Paciente {
   telefono        String
   email           String?
   direccion       String?
-  apoderado       String? // P14
+  apoderado         String? // P14: nombre del apoderado
+  apoderadoDni      String? @map("apoderado_dni") @db.VarChar(8)
+  apoderadoTelefono String? @map("apoderado_telefono") @db.VarChar(9)
   sexo            Sexo?
   inasistencias   Int      @default(0)
   restringido     Boolean  @default(false) // RN-12

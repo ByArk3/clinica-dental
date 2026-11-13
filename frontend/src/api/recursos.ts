@@ -13,6 +13,8 @@ export interface Paciente {
   saldoVencimientos?: { monto: string; venceEn: string }[];
   direccion?: string | null;
   apoderado?: string | null;
+  apoderadoDni?: string | null;
+  apoderadoTelefono?: string | null;
   sexo?: Sexo | null;
   /** Tiene cuenta web (inicia sesión con su correo) */
   tieneCuenta?: boolean;
@@ -41,7 +43,10 @@ export interface Cita {
   odontologo: string;
   fecha: string;
   hora: string;
+  /** Lo que se muestra: el motivo escrito o, si no hay, el tratamiento previsto */
   motivo: string;
+  /** Lo que escribió el paciente o la recepcionista (puede estar vacío) */
+  motivoEscrito?: string;
   canal: Canal;
   estado: EstadoCita;
   tratamientoPrevisto: string | null;
@@ -178,7 +183,7 @@ export interface PacienteEncontrado {
   atenciones: number;
 }
 export interface Historial {
-  paciente: { id: number; dni: string | null; nombres: string; apellidos: string; fechaNacimiento: string; telefono: string; apoderado: string | null; inasistencias: number };
+  paciente: { id: number; dni: string | null; nombres: string; apellidos: string; fechaNacimiento: string; telefono: string; apoderado: string | null; apoderadoDni?: string | null; apoderadoTelefono?: string | null; inasistencias: number };
   ficha: { alergias: string | null; antecedentes: string | null; notas: string | null };
   atenciones: {
     id: number;

@@ -5,6 +5,7 @@ import {
   fechaMaximaCita,
   HORAS_LIMITE_PACIENTE,
   MENSAJES,
+  motivoAMostrar,
   PORCENTAJE_ADELANTO,
   PORCENTAJE_ADELANTO_RESTRINGIDO,
   MINUTOS_PAGO_ADELANTO,
@@ -350,7 +351,7 @@ export async function buscarCitasDe(pacienteId: number) {
       .filter((c) => !esProxima(c))
       .reverse()
       .slice(0, 50)
-      .map((c) => ({ id: c.id, fecha: dateAFecha(c.fecha), hora: dateAHora(c.hora), odontologo: c.odontologo.usuario.nombres, motivo: c.motivo, estado: c.estado })),
+      .map((c) => ({ id: c.id, fecha: dateAFecha(c.fecha), hora: dateAHora(c.hora), odontologo: c.odontologo.usuario.nombres, motivo: motivoAMostrar(c.motivo, c.tratamientoPrevisto?.nombre), estado: c.estado })),
   };
 }
 
@@ -444,7 +445,9 @@ export function formatearCita(c: CitaCompleta, saldoFavor?: Prisma.Decimal) {
     odontologo: c.odontologo.usuario.nombres,
     fecha: dateAFecha(c.fecha),
     hora: dateAHora(c.hora),
-    motivo: c.motivo,
+    // Motivo opcional (pendiente 21): si no se escribió, se muestra el tratamiento previsto
+    motivo: motivoAMostrar(c.motivo, c.tratamientoPrevisto?.nombre),
+    motivoEscrito: c.motivo,
     canal: c.canal,
     estado: c.estado,
     tratamientoPrevisto: c.tratamientoPrevisto?.nombre ?? null,
@@ -477,7 +480,7 @@ export async function editarDatosCita(citaId: number, dto: { motivo: string; tra
     const data: Prisma.CitaUpdateInput = {};
     if (dto.motivo !== c.motivo) {
       data.motivo = dto.motivo;
-      cambios.push(`Motivo: «${c.motivo}» → «${dto.motivo}»`);
+      cambios.push(`Motivo: «${c.motivo || '—'}» → «${dto.motivo || '—'}»`);
     }
     if (dto.tratamientoPrevistoId && dto.tratamientoPrevistoId !== c.tratamientoPrevistoId) {
       const pagado = c.comprobantes.some((x) => x.tipo === 'adelanto');

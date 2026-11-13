@@ -23,7 +23,7 @@ describe('Nueva cita: pestañas «Registrar por DNI» y «Registrar sin DNI»', 
     expect(await screen.findByText('José Pérez')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Registrar sin DNI' })).toHaveClass('active');
     expect(screen.queryByRole('heading', { name: 'Registrar paciente sin DNI' })).toBeNull(); // no muestra el formulario vacío
-    expect(screen.getByLabelText('Motivo')).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Motivo/)).toBeInTheDocument();
   });
 
   it('«Sacar otra cita» con un paciente con DNI abre «Registrar por DNI» con su DNI escrito', async () => {
@@ -57,6 +57,7 @@ describe('Registro sin DNI', () => {
     expect(await screen.findByText('Elija el sexo')).toBeInTheDocument();
     await u.click(screen.getByRole('button', { name: 'Femenino' }));
     await u.click(screen.getAllByRole('button', { name: 'Registrar sin DNI' }).at(-1)!);
+    await u.click(await screen.findByRole('button', { name: 'Sí' }));
     expect(await screen.findByText('¿Es alguno de estos pacientes?')).toBeInTheDocument();
     expect(llamadas.some((l) => l.metodo === 'POST')).toBe(false);
     await u.click(screen.getByRole('button', { name: 'No es ninguno: registrar sin DNI' }));
@@ -157,7 +158,7 @@ describe('CU-58 Editar datos', () => {
     await u.click(await screen.findByRole('button', { name: 'Datos de la cita' }));
     expect(screen.getByLabelText('Tratamiento previsto')).toBeDisabled();
     expect(screen.getByText(/el adelanto de S\/ 20\.00 ya se pagó/)).toBeInTheDocument();
-    const motivo = screen.getByLabelText('Motivo');
+    const motivo = screen.getByLabelText(/^Motivo/);
     await u.clear(motivo);
     await u.type(motivo, 'Dolor al masticar');
     await u.click(screen.getByRole('button', { name: 'Guardar datos de la cita' }));

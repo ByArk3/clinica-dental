@@ -167,7 +167,7 @@ export default function NuevaCita() {
               </div>
             </div>
           ) : (
-            <FormPaciente sinDni textoBoton="Registrar sin DNI" onEnviar={(d) => registrarSinDni(d)} />
+            <FormPaciente sinDni confirmar textoBoton="Registrar sin DNI" onEnviar={(d) => registrarSinDni(d)} />
           )}
         </div>
       )}
@@ -180,6 +180,7 @@ export default function NuevaCita() {
           {reniec?.estado === 'sin_datos' && <p className="small text-muted" role="status">RENIEC no devolvió datos para ese DNI; escríbalos a mano.</p>}
           {reniec?.estado === 'no_disponible' && <p className="small text-muted" role="status">No se pudo consultar RENIEC ahora; escriba los datos a mano.</p>}
           <FormPaciente
+            confirmar
             dniInicial={dni}
             inicial={datosReniec}
             textoBoton="Registrar paciente"

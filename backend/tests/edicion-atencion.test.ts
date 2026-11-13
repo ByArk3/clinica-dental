@@ -53,8 +53,8 @@ describe('Editar una atención', () => {
     // la resina conserva su precio congelado (120), la extracción toma el del tarifario (80)
     const imp = (await (await sesion('recepcionista')).get(`/api/caja/citas/${citaId}/importe`)).body;
     expect(imp.lineas.map((l: { descripcion: string; precio: string }) => [l.descripcion, l.precio])).toEqual([
-      ['Curación con resina — pieza 26', '120.00'],
-      ['Extracción simple — pieza 38', '80.00'],
+      ['Curación con resina — pieza 26 · primer molar superior izquierdo', '120.00'],
+      ['Extracción simple — pieza 38 · tercer molar inferior izquierdo (muela del juicio)', '80.00'],
     ]);
   });
 

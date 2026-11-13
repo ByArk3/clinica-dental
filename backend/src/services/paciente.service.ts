@@ -1,4 +1,4 @@
-import { MENSAJES, normalizar, puntaje, type EditarPacienteDTO, type PacienteDTO, type PacienteSinDniDTO, type RegistroPacienteDTO } from '@clinica/shared';
+import { esMenorDeEdad, faltantesApoderado, MENSAJE_APODERADO, MENSAJES, normalizar, puntaje, type EditarPacienteDTO, type PacienteDTO, type PacienteSinDniDTO, type RegistroPacienteDTO } from '@clinica/shared';
 import { prisma, type Tx } from '../lib/prisma.js';
 import { ErrorNegocio } from '../lib/errores.js';
 import { fechaADate, dateAFecha, ahoraLima } from '../lib/fechas.js';
@@ -18,6 +18,8 @@ const CONTACTO = {
   email: true,
   direccion: true,
   apoderado: true,
+  apoderadoDni: true,
+  apoderadoTelefono: true,
   sexo: true,
   usuarioId: true,
   inasistencias: true,
@@ -43,7 +45,9 @@ async function crearConFicha(tx: Tx, dto: Omit<PacienteDTO, 'dni'> & { dni?: str
       telefono: dto.telefono,
       email: dto.email?.toLowerCase(),
       direccion: dto.direccion,
-      apoderado: dto.apoderado,
+      apoderado: dto.apoderado || null,
+      apoderadoDni: dto.apoderadoDni || null,
+      apoderadoTelefono: dto.apoderadoTelefono || null,
       sexo: dto.sexo,
       usuarioId,
       ficha: { create: { alergias: dto.alergias, antecedentes: dto.antecedentes } },
@@ -102,18 +106,33 @@ export async function obtenerContacto(id: number) {
 
 /** CU-04 Actualizar datos de contacto (paciente: los suyos; recepcionista: de cualquier paciente). */
 export async function actualizarContacto(id: number, dto: import('@clinica/shared').ContactoDTO) {
-  if (!(await prisma.paciente.findUnique({ where: { id } }))) {
-    throw new ErrorNegocio(404, 'PACIENTE_NO_ENCONTRADO', MENSAJES.PACIENTE_NO_ENCONTRADO);
+  const actual = await prisma.paciente.findUnique({ where: { id } });
+  if (!actual) throw new ErrorNegocio(404, 'PACIENTE_NO_ENCONTRADO', MENSAJES.PACIENTE_NO_ENCONTRADO);
+  // Menor de 18: no puede quedarse sin apoderado. Adulto: el apoderado no se toca (no se le muestra).
+  const menor = esMenorDeEdad(dateAFecha(actual.fechaNacimiento));
+  if (menor) {
+    const faltan = faltantesApoderado(dto);
+    if (Object.keys(faltan).length > 0) throw new ErrorNegocio(422, 'VALIDACION', MENSAJE_APODERADO, faltan);
   }
-  const p = await prisma.paciente.update({
-    where: { id },
-    data: {
-      telefono: dto.telefono,
-      email: dto.email?.toLowerCase() ?? null,
-      direccion: dto.direccion || null,
-      apoderado: dto.apoderado || null,
-    },
-    select: CONTACTO,
+  const email = dto.email?.toLowerCase() || null;
+  if (actual.usuarioId && !email) throw new ErrorNegocio(422, 'VALIDACION', 'Ingrese su correo', { email: 'Ingrese su correo' });
+  if (email && email !== actual.email && actual.usuarioId && (await prisma.usuario.findFirst({ where: { email, id: { not: actual.usuarioId } } }))) {
+    throw new ErrorNegocio(409, 'EMAIL_DUPLICADO', MENSAJES.EMAIL_DUPLICADO, { email: MENSAJES.EMAIL_DUPLICADO });
+  }
+  const p = await prisma.$transaction(async (tx) => {
+    const r = await tx.paciente.update({
+      where: { id },
+      data: {
+        telefono: dto.telefono,
+        email,
+        direccion: dto.direccion || null,
+        ...(menor ? { apoderado: dto.apoderado || null, apoderadoDni: dto.apoderadoDni || null, apoderadoTelefono: dto.apoderadoTelefono || null } : {}),
+      },
+      select: CONTACTO,
+    });
+    // el correo es su usuario de la web: se cambia también en la cuenta
+    if (actual.usuarioId && email && email !== actual.email) await tx.usuario.update({ where: { id: actual.usuarioId }, data: { email } });
+    return r;
   });
   return formatear(p);
 }
@@ -169,7 +188,7 @@ export async function registrarSinDni(dto: PacienteSinDniDTO) {
 const IDENTIDAD = ['nombres', 'apellidos', 'fechaNacimiento', 'sexo'] as const;
 const ETIQUETA: Record<string, string> = {
   nombres: 'Nombres', apellidos: 'Apellidos', fechaNacimiento: 'Fecha de nacimiento', sexo: 'Sexo',
-  telefono: 'Celular', email: 'Correo', direccion: 'Dirección', apoderado: 'Apoderado',
+  telefono: 'Celular', email: 'Correo', direccion: 'Dirección', apoderado: 'Apoderado', apoderadoDni: 'DNI del apoderado', apoderadoTelefono: 'Celular del apoderado',
 };
 
 /**
@@ -183,10 +202,12 @@ export async function editarPaciente(id: number, dto: EditarPacienteDTO, usuario
     const antes: Record<string, string | null> = {
       nombres: actual.nombres, apellidos: actual.apellidos, fechaNacimiento: dateAFecha(actual.fechaNacimiento), sexo: actual.sexo,
       telefono: actual.telefono, email: actual.email, direccion: actual.direccion, apoderado: actual.apoderado,
+      apoderadoDni: actual.apoderadoDni, apoderadoTelefono: actual.apoderadoTelefono,
     };
     const despues: Record<string, string | null> = {
       nombres: dto.nombres, apellidos: dto.apellidos, fechaNacimiento: dto.fechaNacimiento, sexo: dto.sexo ?? null,
       telefono: dto.telefono, email: dto.email?.toLowerCase() || null, direccion: dto.direccion || null, apoderado: dto.apoderado || null,
+      apoderadoDni: dto.apoderadoDni || null, apoderadoTelefono: dto.apoderadoTelefono || null,
     };
     const cambios = Object.keys(despues).filter((k) => (antes[k] ?? null) !== (despues[k] ?? null));
     if (cambios.length === 0) throw new ErrorNegocio(422, 'SIN_CAMBIOS', MENSAJES.SIN_CAMBIOS);
@@ -206,6 +227,7 @@ export async function editarPaciente(id: number, dto: EditarPacienteDTO, usuario
       data: {
         nombres: dto.nombres, apellidos: dto.apellidos, fechaNacimiento: fechaADate(dto.fechaNacimiento), sexo: dto.sexo ?? null,
         telefono: dto.telefono, email: despues.email, direccion: despues.direccion, apoderado: despues.apoderado,
+        apoderadoDni: despues.apoderadoDni, apoderadoTelefono: despues.apoderadoTelefono,
       },
       select: CONTACTO,
     });

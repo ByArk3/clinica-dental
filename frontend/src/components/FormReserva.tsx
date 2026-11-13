@@ -1,12 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { citaSchema, LIMITE_TEXTO } from '@clinica/shared';
+import { citaSchema, limpiarTextoLibre, LIMITE_TEXTO, PORCENTAJE_ADELANTO, type CitaDTO } from '@clinica/shared';
 import { citasApi, type Cita } from '../api/recursos';
 import { ApiError } from '../api/cliente';
 import { SelectorHorarios } from './SelectorHorarios';
 import { fechaPE, hoyLima, solesPE } from '../formato';
 import { ChipEstado } from './ChipEstado';
-import { BotonAccion } from './Interaccion';
+import { BotonAccion, ConfirmarSiNo, Contador, FilaResumen } from './Interaccion';
 import { PanelPagoAdelanto } from './PanelPagoAdelanto';
 import { fechaMaximaCita } from '@clinica/shared';
 
@@ -27,6 +27,7 @@ export function FormReserva({ pacienteId, onRegistrada }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [registrada, setRegistrada] = useState<{ cita: Cita; aviso?: string } | null>(null);
   const [tratamientoId, setTratamientoId] = useState<number | ''>('');
+  const [porConfirmar, setPorConfirmar] = useState<CitaDTO | null>(null);
   const tarifario = useQuery({ queryKey: ['tarifario-publico'], queryFn: citasApi.tarifario, staleTime: 5 * 60_000 });
   const consulta = tarifario.data?.find((t) => t.nombre === 'Consulta');
 
@@ -41,12 +42,14 @@ export function FormReserva({ pacienteId, onRegistrada }: Props) {
   const grabar = useMutation({
     mutationFn: citasApi.registrar,
     onSuccess: (r) => {
+      setPorConfirmar(null);
       setRegistrada(r);
       qc.invalidateQueries({ queryKey: ['disponibilidad'] });
       qc.invalidateQueries({ queryKey: ['mis-citas'] });
       onRegistrada?.(r.cita);
     },
     onError: (e) => {
+      setPorConfirmar(null);
       if (e instanceof ApiError) {
         setError(e.datos.mensaje);
         setErrores(e.datos.campos ?? {});
@@ -77,8 +80,9 @@ export function FormReserva({ pacienteId, onRegistrada }: Props) {
       return;
     }
     setErrores({});
-    grabar.mutate(v.data);
+    setPorConfirmar(v.data); // primero «¿Reservar esta cita?» (Sí / No)
   }
+  const tratamiento = tratamientoId ? tarifario.data?.find((t) => t.id === tratamientoId) : consulta;
 
   if (registrada) {
     const { cita, aviso } = registrada;
@@ -114,12 +118,13 @@ export function FormReserva({ pacienteId, onRegistrada }: Props) {
   return (
     <form className="tarjeta" onSubmit={enviar} noValidate>
       <div className="mb-3">
-        <label htmlFor="motivo" className="form-label">Motivo</label>
-        <input id="motivo" maxLength={LIMITE_TEXTO.motivoCita} className={`form-control ${errores.motivo ? 'is-invalid' : ''}`} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej.: dolor de muela, limpieza" />
+        <label htmlFor="motivo" className="form-label">Motivo <small className="text-muted">(opcional)</small></label>
+        <input id="motivo" maxLength={LIMITE_TEXTO.motivoCita} className={`form-control ${errores.motivo ? 'is-invalid' : ''}`} value={motivo} onChange={(e) => setMotivo(limpiarTextoLibre(e.target.value, LIMITE_TEXTO.motivoCita))} placeholder="Ej.: dolor de muela, sensibilidad" />
         <div className="invalid-feedback">{errores.motivo}</div>
+        <Contador valor={motivo} max={LIMITE_TEXTO.motivoCita} />
       </div>
       <div className="mb-3">
-        <label htmlFor="tratamiento-previsto" className="form-label">Tratamiento previsto</label>
+        <label htmlFor="tratamiento-previsto" className="form-label obligatorio">Tratamiento previsto</label>
         <select id="tratamiento-previsto" className={`form-select ${errores.tratamientoPrevistoId ? 'is-invalid' : ''}`} value={tratamientoId} onChange={(e) => setTratamientoId(e.target.value ? Number(e.target.value) : '')}>
           <option value="">Consulta de evaluación{consulta ? ` — ${solesPE(consulta.precio)}` : ''}</option>
           {tarifario.data?.filter((t) => t.nombre !== 'Consulta').map((t) => (
@@ -132,7 +137,7 @@ export function FormReserva({ pacienteId, onRegistrada }: Props) {
       </div>
       <div className="row g-3 mb-3">
         <div className="col-sm">
-          <label htmlFor="odontologo" className="form-label">Odontólogo</label>
+          <label htmlFor="odontologo" className="form-label obligatorio">Odontólogo</label>
           <select id="odontologo" className={`form-select ${errores.odontologoId ? 'is-invalid' : ''}`} value={odontologoId} onChange={(e) => { setOdontologoId(e.target.value ? Number(e.target.value) : ''); setHora(null); }}>
             <option value="">Seleccione…</option>
             {odontologos.data?.map((o) => (
@@ -151,17 +156,30 @@ export function FormReserva({ pacienteId, onRegistrada }: Props) {
           )}
         </div>
         <div className="col-sm-auto">
-          <label htmlFor="fecha" className="form-label">Fecha</label>
+          <label htmlFor="fecha" className="form-label obligatorio">Fecha</label>
           <input id="fecha" type="date" min={hoyLima()} max={fechaMaximaCita()} style={{ width: 180, maxWidth: '100%' }} className={`form-control ${errores.fecha ? 'is-invalid' : ''}`} value={fecha} onChange={(e) => cambiarFecha(e.target.value)} />
           <div className="invalid-feedback">{errores.fecha && 'Elija una fecha'}</div>
         </div>
       </div>
       <div className="mb-3">
-        <span className="form-label d-block">Horario</span>
+        <span className="form-label obligatorio d-block">Horario</span>
         <SelectorHorarios disponibilidad={disponibilidad.data} cargando={disponibilidad.isFetching} seleccionado={hora} onSeleccionar={setHora} onIrAFecha={cambiarFecha} onCambiarOdontologo={(id) => { setOdontologoId(id); setHora(null); }} />
         {errores.hora && <div className="text-danger small mt-1">{errores.hora}</div>}
       </div>
       {error && <div className="alert alert-danger" role="alert">{error}</div>}
+      <ConfirmarSiNo abierto={!!porConfirmar} titulo="¿Reservar esta cita?" ocupado={grabar.isPending} onNo={() => setPorConfirmar(null)} onSi={() => porConfirmar && grabar.mutate(porConfirmar)}>
+        {porConfirmar && (
+          <>
+            <FilaResumen etiqueta="Odontólogo">{elegido?.nombres}</FilaResumen>
+            <FilaResumen etiqueta="Fecha">{fechaPE(porConfirmar.fecha)}</FilaResumen>
+            <FilaResumen etiqueta="Hora">{porConfirmar.hora}</FilaResumen>
+            <FilaResumen etiqueta="Tratamiento">{tratamiento ? `${tratamiento.nombre} — ${solesPE(tratamiento.precio)}` : 'Consulta de evaluación'}</FilaResumen>
+            {porConfirmar.motivo && <FilaResumen etiqueta="Motivo">{porConfirmar.motivo}</FilaResumen>}
+            {tratamiento && <FilaResumen etiqueta={`Adelanto (${PORCENTAJE_ADELANTO} %)`}>{solesPE(Number(tratamiento.precio) * PORCENTAJE_ADELANTO / 100)}</FilaResumen>}
+            <p className="small text-muted mt-2 mb-0">El adelanto es del 100 % si el paciente tiene 3 o más inasistencias. Se descuenta del cobro final.</p>
+          </>
+        )}
+      </ConfirmarSiNo>
       <div className="accion-fija">
         <BotonAccion type="submit" className="btn btn-acento w-100" mutacion={grabar} textoPendiente="Registrando…" disabled={!hora} title={hora ? undefined : 'Elija un horario'}>
           {hora ? `Reservar a las ${hora}` : 'Elija un horario para reservar'}

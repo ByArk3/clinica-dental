@@ -127,11 +127,21 @@ describe('CU-06 Registrar cita — presencial (recepcionista)', () => {
     expect(r.body.campos.pacienteId).toBeDefined();
   });
 
-  it('RN-01: sin motivo ni hora → 422 con los campos señalados', async () => {
+  it('RN-01: sin hora → 422; el motivo es opcional pero, si se escribe, debe tener palabras', async () => {
     const recep = await sesion('recepcionista');
     const r = await recep.post('/api/citas').send({ pacienteId: 1, odontologoId: await idOdontologo(), fecha: LUNES() });
     expect(r.status).toBe(422);
-    expect(Object.keys(r.body.campos)).toEqual(expect.arrayContaining(['hora', 'motivo']));
+    expect(Object.keys(r.body.campos)).toEqual(['hora']);
+    const raro = await recep.post('/api/citas').send({ pacienteId: 1, odontologoId: await idOdontologo(), fecha: LUNES(), hora: '09:00', motivo: 'sdsd23232323' });
+    expect(raro.body.campos.motivo).toBe('Revise el texto: separe las palabras de los números (ej.: «500 mg»)');
+    expect((await recep.post('/api/citas').send({ pacienteId: 1, odontologoId: await idOdontologo(), fecha: LUNES(), hora: '09:00', motivo: '12345' })).body.campos.motivo).toBe('Escriba con palabras (al menos 3 letras)');
+  });
+
+  it('pendiente 21: sin motivo, la agenda muestra el tratamiento previsto', async () => {
+    const recep = await sesion('recepcionista');
+    const r = await recep.post('/api/citas').send({ pacienteId: 1, odontologoId: await idOdontologo(), fecha: LUNES(), hora: '09:00' });
+    expect(r.status).toBe(201);
+    expect(r.body.cita).toMatchObject({ motivo: 'Consulta', motivoEscrito: '' });
   });
 });
 

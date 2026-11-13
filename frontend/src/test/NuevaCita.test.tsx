@@ -14,7 +14,7 @@ describe('NuevaCita presencial (CU-06)', () => {
     await u.type(screen.getByLabelText('DNI del paciente'), '72458190');
     await u.click(screen.getByRole('button', { name: 'Buscar' }));
     expect(await screen.findByText('María Quispe Rojas')).toBeInTheDocument();
-    expect(screen.getByLabelText('Motivo')).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Motivo/)).toBeInTheDocument();
   });
 
   it('alterno 4.1: DNI no registrado → formulario de paciente nuevo con el DNI precargado; al guardar continúa con la cita', async () => {
@@ -35,6 +35,7 @@ describe('NuevaCita presencial (CU-06)', () => {
     await u.type(screen.getByLabelText('Celular'), '911222333');
     await u.click(screen.getByRole('button', { name: 'Masculino' }));
     await u.click(screen.getByRole('button', { name: 'Registrar paciente' }));
+    await u.click(await screen.findByRole('button', { name: 'Sí' }));
     expect(await screen.findByText('Raúl Gómez')).toBeInTheDocument();
     expect(llamadas.find((l) => l.metodo === 'POST')?.body).toMatchObject({ dni: '40404040', nombres: 'Raúl' });
   });

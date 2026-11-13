@@ -1,7 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { ETIQUETA_SEXO, LARGO_NUMERICO, SEXOS, esMenorDeEdad, pacienteSchema, pacienteSinDniSchema, registroPacienteSchema, soloLetras, LIMITE_TEXTO } from '@clinica/shared';
+import { ETIQUETA_SEXO, LARGO_NUMERICO, SEXOS, esMenorDeEdad, limpiarTextoLibre, pacienteSchema, pacienteSinDniSchema, registroPacienteSchema, soloLetras, LIMITE_TEXTO, type Sexo } from '@clinica/shared';
 import { ApiError } from '../api/cliente';
-import { CampoDigitos } from './Interaccion';
+import { CampoDigitos, ConfirmarSiNo, Contador, correoValido, FilaResumen } from './Interaccion';
+import { DniPaciente } from './DniPaciente';
+import { edadDe, fechaPE } from '../formato';
 import { CampoPassword, ConfirmarPassword, NO_COINCIDEN } from './CampoPassword';
 import { fechaMinimaNacimiento, hoyEnLima } from '@clinica/shared';
 
@@ -18,10 +20,14 @@ interface Props {
   textoBoton: string;
   onEnviar: (datos: any) => Promise<unknown>; // eslint-disable-line @typescript-eslint/no-explicit-any
   onCancelar?: () => void;
+  /** Pide «¿Registrar a este paciente?» (Sí / No) con un resumen antes de enviar (registro presencial). */
+  confirmar?: boolean;
 }
 
 /** Campos solo de números, con su largo máximo */
-const NUMERICOS: Record<string, number> = { dni: LARGO_NUMERICO.dni, telefono: LARGO_NUMERICO.celular };
+const NUMERICOS: Record<string, number> = { dni: LARGO_NUMERICO.dni, telefono: LARGO_NUMERICO.celular, apoderadoDni: LARGO_NUMERICO.dni, apoderadoTelefono: LARGO_NUMERICO.celular };
+const CELULARES = new Set(['telefono', 'apoderadoTelefono']);
+const TEXTO_LIBRE = new Set(['alergias', 'antecedentes']);
 
 const CAMPOS: { nombre: string; etiqueta: string; tipo?: string; col: string; opcional?: boolean }[] = [
   { nombre: 'dni', etiqueta: 'DNI', col: 'col-sm-4' },
@@ -32,13 +38,16 @@ const CAMPOS: { nombre: string; etiqueta: string; tipo?: string; col: string; op
   { nombre: 'telefono', etiqueta: 'Celular', tipo: 'tel', col: 'col-sm-4' },
   { nombre: 'email', etiqueta: 'Correo', tipo: 'email', col: 'col-sm-4', opcional: true },
   { nombre: 'direccion', etiqueta: 'Dirección', col: 'col-sm-8', opcional: true },
-  { nombre: 'apoderado', etiqueta: 'Apoderado', col: 'col-sm-4', opcional: true },
+  // Apoderado (P14): solo para menores de 18, y ahí los 3 datos son obligatorios
+  { nombre: 'apoderado', etiqueta: 'Nombre del apoderado', col: 'col-sm-6' },
+  { nombre: 'apoderadoDni', etiqueta: 'DNI del apoderado', col: 'col-sm-3' },
+  { nombre: 'apoderadoTelefono', etiqueta: 'Celular del apoderado', col: 'col-sm-3' },
   { nombre: 'alergias', etiqueta: 'Alergias', col: 'col-sm-6', opcional: true },
   { nombre: 'antecedentes', etiqueta: 'Antecedentes', col: 'col-sm-6', opcional: true },
 ];
 
 /** CU-03 Registrar paciente (crea también su ficha en el servidor, RN-05). */
-export function FormPaciente({ conCuenta, sinDni, dniInicial = '', inicial, textoBoton, onEnviar, onCancelar }: Props) {
+export function FormPaciente({ conCuenta, sinDni, dniInicial = '', inicial, textoBoton, onEnviar, onCancelar, confirmar }: Props) {
   const [v, setV] = useState<Valores>({ ...inicial, dni: dniInicial });
   // Si los datos precargados llegan después (RENIEC), solo se completan los campos que siguen vacíos
   useEffect(() => {
@@ -47,6 +56,7 @@ export function FormPaciente({ conCuenta, sinDni, dniInicial = '', inicial, text
   const [errores, setErrores] = useState<Valores>({});
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [porConfirmar, setPorConfirmar] = useState<Record<string, unknown> | null>(null);
 
   const campos = conCuenta
     ? [
@@ -57,14 +67,17 @@ export function FormPaciente({ conCuenta, sinDni, dniInicial = '', inicial, text
     : sinDni
       ? CAMPOS.filter((c) => c.nombre !== 'dni')
       : CAMPOS;
-  // Menor de 18: el apoderado pasa a ser obligatorio
+  // Menor de 18: aparecen los 3 datos del apoderado (obligatorios)
   const menor = esMenorDeEdad(v.fechaNacimiento ?? '');
-  const opcional = (c: { nombre: string; opcional?: boolean }) => (c.nombre === 'apoderado' ? !menor : !!c.opcional);
+  const visibles = campos.filter((c) => menor || !c.nombre.startsWith('apoderado'));
+  const opcional = (c: { nombre: string; opcional?: boolean }) => !!c.opcional;
 
   async function enviar(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    const r = (conCuenta ? registroPacienteSchema : sinDni ? pacienteSinDniSchema : pacienteSchema).safeParse({ ...v, sexo: v.sexo || undefined });
+    // un adulto no lleva apoderado (si se escribió y luego se cambió la fecha, no se envía)
+    const datos = menor ? v : { ...v, apoderado: '', apoderadoDni: '', apoderadoTelefono: '' };
+    const r = (conCuenta ? registroPacienteSchema : sinDni ? pacienteSinDniSchema : pacienteSchema).safeParse({ ...datos, sexo: v.sexo || undefined });
     const noCoinciden = conCuenta && (v.confirmar ?? '') !== (v.password ?? '');
     if (!r.success || noCoinciden) {
       const c: Valores = {};
@@ -74,14 +87,21 @@ export function FormPaciente({ conCuenta, sinDni, dniInicial = '', inicial, text
       return;
     }
     setErrores({});
+    if (confirmar) return setPorConfirmar(r.data);
+    await guardar(r.data);
+  }
+
+  async function guardar(datos: Record<string, unknown>) {
     setEnviando(true);
     try {
-      await onEnviar(r.data);
+      await onEnviar(datos);
+      setPorConfirmar(null);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.datos.mensaje);
         setErrores(err.datos.campos ?? {});
       } else setError('No se pudo conectar con el servidor');
+      setPorConfirmar(null);
     } finally {
       setEnviando(false);
     }
@@ -91,7 +111,8 @@ export function FormPaciente({ conCuenta, sinDni, dniInicial = '', inicial, text
     <form onSubmit={enviar} noValidate>
       <p className="small text-muted mb-2"><span className="text-danger">*</span> Campo obligatorio</p>
       <div className="row g-3">
-        {campos.map((c) => (
+        {visibles.flatMap((c) => [
+          ...(c.nombre === 'apoderado' ? [<div className="col-12 small fw-semibold border-top pt-2 mb-n2" key="titulo-apoderado">Es menor de edad: datos del padre, madre o tutor</div>] : []),
           <div className={c.col} key={c.nombre}>
             <label htmlFor={`p-${c.nombre}`} className={`form-label ${opcional(c) ? '' : 'obligatorio'}`}>
               {c.etiqueta} {opcional(c) && <small className="text-muted">(opcional)</small>}
@@ -115,24 +136,29 @@ export function FormPaciente({ conCuenta, sinDni, dniInicial = '', inicial, text
                 ))}
               </div>
             ) : NUMERICOS[c.nombre] ? (
-              <CampoDigitos id={`p-${c.nombre}`} value={v[c.nombre] ?? ''} onChange={(x) => setV({ ...v, [c.nombre]: x })} largo={NUMERICOS[c.nombre]} error={errores[c.nombre]} />
+              <CampoDigitos id={`p-${c.nombre}`} value={v[c.nombre] ?? ''} onChange={(x) => setV({ ...v, [c.nombre]: x })} largo={NUMERICOS[c.nombre]} error={errores[c.nombre]} celular={CELULARES.has(c.nombre)} />
             ) : (
               <input
                 id={`p-${c.nombre}`}
                 type={c.tipo ?? 'text'}
                 {...(c.nombre === 'fechaNacimiento' ? { min: fechaMinimaNacimiento(), max: hoyEnLima() } : {})}
-                maxLength={c.nombre === 'direccion' ? LIMITE_TEXTO.direccion : c.nombre === 'apoderado' ? LIMITE_TEXTO.apoderado : c.nombre === 'alergias' || c.nombre === 'antecedentes' ? LIMITE_TEXTO.motivo : undefined}
+                maxLength={c.nombre === 'direccion' ? LIMITE_TEXTO.direccion : c.nombre === 'apoderado' ? LIMITE_TEXTO.apoderado : TEXTO_LIBRE.has(c.nombre) ? LIMITE_TEXTO.ficha : undefined}
                 className={`form-control ${errores[c.nombre] ? 'is-invalid' : ''}`}
                 value={v[c.nombre] ?? ''}
-                onChange={(e) => setV({ ...v, [c.nombre]: c.nombre === 'nombres' || c.nombre === 'apellidos' ? soloLetras(e.target.value) : e.target.value })}
+                onChange={(e) => {
+                  const x = e.target.value;
+                  setV({ ...v, [c.nombre]: c.nombre === 'nombres' || c.nombre === 'apellidos' ? soloLetras(x) : c.nombre === 'apoderado' ? soloLetras(x).slice(0, LIMITE_TEXTO.apoderado) : TEXTO_LIBRE.has(c.nombre) ? limpiarTextoLibre(x, LIMITE_TEXTO.ficha) : x });
+                  if (c.nombre === 'email' && errores.email && correoValido(x)) setErrores({ ...errores, email: '' });
+                }}
+                onBlur={c.nombre === 'email' ? (e) => setErrores({ ...errores, email: e.target.value.trim() && !correoValido(e.target.value) ? 'Correo inválido' : '' }) : undefined}
                 aria-required={!opcional(c)}
               />
             )}
-            {c.nombre === 'apoderado' && menor && <div className="form-text">Es menor de edad: nombre, DNI y celular del padre, madre o tutor.</div>}
+            {TEXTO_LIBRE.has(c.nombre) && <Contador valor={v[c.nombre] ?? ''} max={LIMITE_TEXTO.ficha} />}
             {c.nombre === 'sexo' && errores.sexo && <div className="text-danger small mt-1">{errores.sexo}</div>}
             {c.nombre !== 'password' && c.nombre !== 'confirmar' && c.nombre !== 'sexo' && !NUMERICOS[c.nombre] && <div className="invalid-feedback">{errores[c.nombre]}</div>}
-          </div>
-        ))}
+          </div>,
+        ])}
       </div>
       {conCuenta && <p className="small text-muted mt-2 mb-0">Mínimo 8 caracteres.</p>}
       {error && (
@@ -140,6 +166,19 @@ export function FormPaciente({ conCuenta, sinDni, dniInicial = '', inicial, text
           {error}
         </div>
       )}
+      <ConfirmarSiNo abierto={!!porConfirmar} titulo="¿Registrar a este paciente?" ocupado={enviando} onNo={() => setPorConfirmar(null)} onSi={() => porConfirmar && void guardar(porConfirmar)}>
+        {porConfirmar && (
+          <>
+            <FilaResumen etiqueta="Paciente">{v.nombres} {v.apellidos}</FilaResumen>
+            <FilaResumen etiqueta="DNI">{sinDni ? <DniPaciente dni={null} /> : v.dni}</FilaResumen>
+            <FilaResumen etiqueta="Nacimiento">{fechaPE(v.fechaNacimiento)} ({edadDe(v.fechaNacimiento)} años)</FilaResumen>
+            <FilaResumen etiqueta="Sexo">{ETIQUETA_SEXO[v.sexo as Sexo]}</FilaResumen>
+            <FilaResumen etiqueta="Celular">{v.telefono}</FilaResumen>
+            {v.email && <FilaResumen etiqueta="Correo">{v.email}</FilaResumen>}
+            {menor && <FilaResumen etiqueta="Apoderado">{v.apoderado} · DNI {v.apoderadoDni} · Cel. {v.apoderadoTelefono}</FilaResumen>}
+          </>
+        )}
+      </ConfirmarSiNo>
       <div className="d-flex gap-2 mt-3">
         <button type="submit" className="btn btn-acento" disabled={enviando}>
           {enviando ? 'Guardando…' : textoBoton}

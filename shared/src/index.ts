@@ -204,7 +204,8 @@ export const LIMITE_TEXTO = {
   razonSocial: 150,
   nombreCorto: 80,
   direccion: 150,
-  apoderado: 150,
+  apoderado: 120,
+  ficha: 500,
   contacto: 100,
 } as const;
 
@@ -260,7 +261,51 @@ export const fechaNacimientoSchema = fechaSchema
 /** Filtros «desde / hasta» de consultas (reportes, kárdex, auditoría): «hasta» no pasa de hoy. */
 export const hastaHoySchema = fechaSchema.refine((f) => f <= hoyEnLima(), 'La fecha final no puede ser posterior a hoy');
 export const horaSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Hora inválida (hh:mm)');
-const telefonoSchema = z.string().regex(/^\d{9}$/, 'El teléfono debe tener 9 dígitos');
+/** Celular peruano: 9 dígitos que empiezan con 9 (paciente, apoderado y personal). */
+export const CELULAR_PERU = /^9\d{8}$/;
+export const MENSAJE_CELULAR = 'El celular debe empezar con 9 y tener 9 dígitos';
+const telefonoSchema = z.string().regex(/^\d{9}$/, 'El celular debe tener 9 dígitos').regex(/^9/, 'El celular debe empezar con 9');
+
+// ---------- Texto libre (motivo, alergias, antecedentes, diagnóstico, observaciones) ----------
+const LETRA = /[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g;
+const NO_PERMITIDO_TEXTO = /[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9\s.,;:()/%°'"¿?¡!+-]/g;
+/** Quita al escribir lo que no va en un texto libre (emojis, <, >, #, *, @…) y recorta al máximo. */
+export const limpiarTextoLibre = (texto: string, max: number) => texto.replace(NO_PERMITIDO_TEXTO, '').slice(0, max);
+export const MENSAJES_TEXTO_LIBRE = {
+  caracteres: 'Use solo letras, números y . , ; : - ( ) /',
+  pocasLetras: 'Escriba con palabras (al menos 3 letras)',
+  mezclado: 'Revise el texto: separe las palabras de los números (ej.: «500 mg»)',
+} as const;
+/**
+ * Regla de los textos libres: solo letras, números y signos comunes; al menos 3 letras; y ninguna «palabra» de 6 o más
+ * caracteres que mezcle letras y números («sdsd2323»): se escribe «Penicilina 500 mg», «pieza 36».
+ * Vacío → sin problema (si el campo es obligatorio, se valida aparte).
+ */
+export function problemaTextoLibre(texto: string): string | null {
+  const t = texto.trim();
+  if (!t) return null;
+  if (new RegExp(NO_PERMITIDO_TEXTO.source).test(t)) return MENSAJES_TEXTO_LIBRE.caracteres;
+  if ((t.match(LETRA) ?? []).length < 3) return MENSAJES_TEXTO_LIBRE.pocasLetras;
+  if (t.split(/[\s.,;:()/]+/).some((w) => w.length >= 6 && /\d/.test(w) && new RegExp(LETRA.source).test(w))) return MENSAJES_TEXTO_LIBRE.mezclado;
+  return null;
+}
+/** Texto libre opcional (vacío permitido) con la regla de arriba. */
+const textoLibreOpcional = (max: number) =>
+  z.string().trim().max(max, `Máximo ${max} caracteres`).superRefine((t, ctx) => {
+    const p = problemaTextoLibre(t);
+    if (p) ctx.addIssue({ code: z.ZodIssueCode.custom, message: p });
+  });
+/** Texto libre obligatorio. */
+const textoLibreObligatorio = (max: number, vacio: string) =>
+  z.string().trim().min(1, vacio).max(max, `Máximo ${max} caracteres`).superRefine((t, ctx) => {
+    const p = problemaTextoLibre(t);
+    if (p) ctx.addIssue({ code: z.ZodIssueCode.custom, message: p });
+  });
+/** Motivo de la cita: opcional; si queda vacío, se muestra el tratamiento previsto. */
+export const motivoCitaSchema = textoLibreOpcional(200).optional().transform((t) => t ?? '');
+/** Lo que se muestra como motivo: el escrito o, si no hay, el tratamiento previsto. */
+export const motivoAMostrar = (motivo: string | null | undefined, tratamientoPrevisto?: string | null) =>
+  motivo?.trim() || tratamientoPrevisto || 'Sin motivo indicado';
 
 // ---------- Auth (CU-01 / CU-02) ----------
 export const loginSchema = z.object({
@@ -307,12 +352,33 @@ export function esMenorDeEdad(fechaNacimiento: string, hoy = hoyEnLima()) {
   return /^\d{4}-\d{2}-\d{2}$/.test(fechaNacimiento) && fechaNacimiento > moverFecha(hoy, { anios: -MAYORIA_DE_EDAD });
 }
 export const MENSAJE_APODERADO = 'Para menores de 18 años, registre los datos del apoderado';
+export const MENSAJES_APODERADO = {
+  nombre: 'Ingrese el nombre del apoderado',
+  dni: 'Ingrese el DNI del apoderado',
+  telefono: 'Ingrese el celular del apoderado',
+} as const;
+/** Apoderado (P14) en 3 campos: nombre (solo letras), DNI (8 dígitos) y celular (empieza con 9). */
+const apoderadoCampos = {
+  apoderado: z.string().trim().max(LIMITE_TEXTO.apoderado, `Máximo ${LIMITE_TEXTO.apoderado} caracteres`)
+    .refine((t) => !t || LETRAS_NOMBRE.test(t), 'El nombre del apoderado lleva solo letras').optional().nullable(),
+  apoderadoDni: z.string().trim().refine((t) => !t || /^\d{8}$/.test(t), 'El DNI del apoderado debe tener 8 dígitos').optional().nullable(),
+  apoderadoTelefono: z.string().trim().refine((t) => !t || CELULAR_PERU.test(t), MENSAJE_CELULAR).optional().nullable(),
+};
+type ConApoderado = { apoderado?: string | null; apoderadoDni?: string | null; apoderadoTelefono?: string | null };
+/** Menor de 18 → los 3 datos del apoderado son obligatorios (también lo usa la API en «Mis datos»). */
+export function faltantesApoderado(d: ConApoderado): Partial<Record<'apoderado' | 'apoderadoDni' | 'apoderadoTelefono', string>> {
+  const f: Partial<Record<'apoderado' | 'apoderadoDni' | 'apoderadoTelefono', string>> = {};
+  if ((d.apoderado ?? '').trim().length < 3) f.apoderado = MENSAJES_APODERADO.nombre;
+  if (!(d.apoderadoDni ?? '').trim()) f.apoderadoDni = MENSAJES_APODERADO.dni;
+  if (!(d.apoderadoTelefono ?? '').trim()) f.apoderadoTelefono = MENSAJES_APODERADO.telefono;
+  return f;
+}
 /** Regla común: menor de 18 → apoderado obligatorio (registro web, presencial, sin DNI y Editar datos). */
-function exigirApoderado(d: { fechaNacimiento: string; apoderado?: string | null; sexo?: string | null }, ctx: z.RefinementCtx) {
+function exigirApoderado(d: { fechaNacimiento: string; sexo?: string | null } & ConApoderado, ctx: z.RefinementCtx) {
   // el sexo se revisa aquí (y no en el campo) para mostrar todos los faltantes a la vez
   if (!d.sexo) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['sexo'], message: 'Elija el sexo' });
-  if (esMenorDeEdad(d.fechaNacimiento) && (d.apoderado ?? '').trim().length < 3) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['apoderado'], message: MENSAJE_APODERADO });
+  if (esMenorDeEdad(d.fechaNacimiento)) {
+    for (const [campo, mensaje] of Object.entries(faltantesApoderado(d))) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [campo], message: mensaje });
   }
 }
 const sexoObligatorio = z.enum(['femenino', 'masculino'], { errorMap: () => ({ message: 'Elija el sexo' }) }).nullish();
@@ -325,9 +391,9 @@ const pacienteBase = z.object({
   telefono: telefonoSchema,
   email: z.string().email('Correo inválido').optional().or(z.literal('').transform(() => undefined)),
   direccion: z.string().trim().max(150, 'Máximo 150 caracteres').optional(),
-  apoderado: z.string().trim().max(150, 'Máximo 150 caracteres').optional(), // P14
-  alergias: z.string().trim().optional(),
-  antecedentes: z.string().trim().optional(),
+  ...apoderadoCampos, // P14
+  alergias: textoLibreOpcional(LIMITE_TEXTO.ficha).optional(),
+  antecedentes: textoLibreOpcional(LIMITE_TEXTO.ficha).optional(),
   sexo: sexoObligatorio,
 });
 /** Registro presencial con DNI (el correo es opcional). */
@@ -353,7 +419,7 @@ export const editarPacienteSchema = z.object({
   telefono: telefonoSchema,
   email: z.string().email('Correo inválido').optional().or(z.literal('').transform(() => undefined)),
   direccion: z.string().trim().max(150, 'Máximo 150 caracteres').optional(),
-  apoderado: z.string().trim().max(150, 'Máximo 150 caracteres').optional(),
+  ...apoderadoCampos,
   nombres: nombreSchema('Ingrese los nombres'),
   apellidos: nombreSchema('Ingrese los apellidos'),
   fechaNacimiento: fechaNacimientoSchema,
@@ -372,7 +438,7 @@ export const dniPacienteSchema = z.object({
 
 /** Editar datos de la cita: motivo y (si el adelanto no se pagó) tratamiento previsto. */
 export const editarCitaSchema = z.object({
-  motivo: z.string().trim().min(3, 'Indique el motivo de la cita').max(200),
+  motivo: motivoCitaSchema,
   tratamientoPrevistoId: z.coerce.number().int().positive().optional(),
 });
 
@@ -404,7 +470,7 @@ export const citaSchema = z.object({
   odontologoId: z.number().int().positive('Seleccione un odontólogo'),
   fecha: fechaSchema,
   hora: horaSchema,
-  motivo: z.string().trim().min(3, 'Indique el motivo de la cita').max(200),
+  motivo: motivoCitaSchema,
   // Sirve para calcular el adelanto (si corresponde) y para la agenda. Por defecto: Consulta.
   tratamientoPrevistoId: z.coerce.number().int().positive().optional().nullable(),
 });
@@ -466,11 +532,14 @@ export const rechazarPagoSchema = z.object({ motivo: z.string().trim().min(5, 'I
 export const cancelarCitaSchema = z.object({ porClinica: z.boolean().optional() });
 
 // ---------- CU-04 Actualizar datos de contacto ----------
+/** «Mis datos» del paciente: el correo es obligatorio (es su usuario y por ahí recupera la contraseña). El apoderado solo
+ * se pide a menores (la API lo revisa con la fecha de nacimiento guardada). */
 export const contactoSchema = z.object({
   telefono: telefonoSchema,
-  email: z.string().email('Correo inválido').optional().or(z.literal('').transform(() => undefined)),
+  // obligatorio si tiene cuenta web (la API lo revisa; «Mis datos» también lo marca)
+  email: z.string().trim().email('Correo inválido').optional().or(z.literal('').transform(() => undefined)),
   direccion: z.string().trim().max(150, 'Máximo 150 caracteres').optional(),
-  apoderado: z.string().trim().max(150, 'Máximo 150 caracteres').optional(),
+  ...apoderadoCampos,
 });
 export type ContactoDTO = z.infer<typeof contactoSchema>;
 
@@ -535,17 +604,41 @@ export type InsumoNuevoDTO = z.infer<typeof insumoNuevoSchema>;
 
 // ---------- Atención (CU-11) ----------
 /** Piezas permanentes en notación FDI: cuadrantes 1–4, piezas 1–8 (11–18, 21–28, 31–38, 41–48). */
-export const PIEZAS_FDI = [1, 2, 3, 4].flatMap((c) => [1, 2, 3, 4, 5, 6, 7, 8].map((p) => `${c}${p}`));
+export const PIEZAS_PERMANENTES = [1, 2, 3, 4].flatMap((c) => [1, 2, 3, 4, 5, 6, 7, 8].map((p) => `${c}${p}`));
+/** Dientes de leche (temporales): cuadrantes 5–8, piezas 1–5 (51–55, 61–65, 71–75, 81–85). */
+export const PIEZAS_TEMPORALES = [5, 6, 7, 8].flatMap((c) => [1, 2, 3, 4, 5].map((p) => `${c}${p}`));
+export const PIEZAS_FDI = [...PIEZAS_PERMANENTES, ...PIEZAS_TEMPORALES];
+/** Hasta esta edad el odontograma muestra primero los dientes de leche. */
+export const EDAD_DIENTES_DE_LECHE = 12;
+const NOMBRE_DIENTE_PERMANENTE = ['', 'incisivo central', 'incisivo lateral', 'canino', 'primer premolar', 'segundo premolar', 'primer molar', 'segundo molar', 'tercer molar (muela del juicio)'];
+const NOMBRE_DIENTE_TEMPORAL = ['', 'incisivo central', 'incisivo lateral', 'canino', 'primer molar', 'segundo molar'];
+/** Zona de la boca de cada cuadrante, vista desde el paciente. */
+export const ZONA_CUADRANTE: Record<number, { arriba: boolean; lado: 'derecho' | 'izquierdo' }> = {
+  1: { arriba: true, lado: 'derecho' }, 2: { arriba: true, lado: 'izquierdo' }, 3: { arriba: false, lado: 'izquierdo' }, 4: { arriba: false, lado: 'derecho' },
+  5: { arriba: true, lado: 'derecho' }, 6: { arriba: true, lado: 'izquierdo' }, 7: { arriba: false, lado: 'izquierdo' }, 8: { arriba: false, lado: 'derecho' },
+};
+/** «36» → «primer molar inferior izquierdo»; «54» → «primer molar de leche superior derecho». */
+export function nombrePieza(pieza: string): string {
+  const c = Number(pieza[0]);
+  const n = Number(pieza[1]);
+  const zona = ZONA_CUADRANTE[c];
+  if (!zona) return '';
+  const temporal = c >= 5;
+  const diente = (temporal ? NOMBRE_DIENTE_TEMPORAL : NOMBRE_DIENTE_PERMANENTE)[n];
+  if (!diente) return '';
+  const [base, extra] = diente.split(' (');
+  return `${base}${temporal ? ' de leche' : ''} ${zona.arriba ? 'superior' : 'inferior'} ${zona.lado}${extra ? ` (${extra}` : ''}`;
+}
 export const atencionSchema = z.object({
-  diagnostico: z.string().trim().min(3, 'Ingrese el diagnóstico').max(2000),
-  observaciones: z.string().trim().max(2000).optional(),
+  diagnostico: textoLibreObligatorio(2000, 'Ingrese el diagnóstico'),
+  observaciones: textoLibreOpcional(2000).optional(),
   tratamientos: z
     .array(
       z.object({
         tratamientoId: z.coerce.number().int().positive('Elija un tratamiento'),
         piezaDental: z
           .string()
-          .refine((p) => PIEZAS_FDI.includes(p), 'Pieza dental inválida (FDI 11–48)')
+          .refine((p) => PIEZAS_FDI.includes(p), 'Pieza dental inválida (FDI 11–48 o 51–85)')
           .optional()
           .or(z.literal('').transform(() => undefined)),
       }),

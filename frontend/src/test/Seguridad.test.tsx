@@ -84,7 +84,7 @@ describe('Editar atención', () => {
     });
     editar();
     const u = userEvent.setup();
-    const diag = await screen.findByLabelText('Diagnóstico *');
+    const diag = await screen.findByLabelText('Diagnóstico');
     await waitFor(() => expect(diag).toHaveValue('Caries en 16'));
     await u.clear(diag);
     await u.type(diag, 'Caries en 26');
@@ -128,7 +128,7 @@ describe('Historial con correcciones', () => {
     expect(screen.getByText('Editado')).toBeInTheDocument();
     expect(screen.getByText(/Editado el 04\/11\/2026.*por Dr\. Luis Paredes – motivo: Me equivoqué de pieza/)).toBeInTheDocument();
     expect(screen.getByText('Antes decía — diagnóstico: Caries en 16')).toBeInTheDocument();
-    expect(screen.getByText('Tratamientos: Curación con resina (pieza 16)')).toBeInTheDocument();
+    expect(screen.getByText('Tratamientos: Curación con resina — pieza 16 · primer molar superior derecho')).toBeInTheDocument();
   });
 });
 

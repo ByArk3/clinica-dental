@@ -1,3 +1,4 @@
+import { textoPieza } from './PiezaDental';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ModalEditarDatos } from './ModalEditarDatos';
@@ -6,7 +7,7 @@ import { useUsuarioOpcional } from '../auth';
 import { fechaHoraPE, fechaPE, solesPE } from '../formato';
 import { DniPaciente } from './DniPaciente';
 
-const piezas = (t: { nombre: string; piezaDental: string | null }[]) => t.map((x) => (x.piezaDental ? `${x.nombre} (pieza ${x.piezaDental})` : x.nombre)).join(', ');
+const piezas = (t: { nombre: string; piezaDental: string | null }[]) => t.map((x) => (x.piezaDental ? `${x.nombre} — ${textoPieza(x.piezaDental)}` : x.nombre)).join(', ');
 
 /** Ficha y atenciones del paciente (CU-10). Solo se muestra a Odontólogo y Administrador (RN-07). */
 export function VistaHistorial({ h, compacto }: { h: Historial; compacto?: boolean }) {
@@ -23,7 +24,7 @@ export function VistaHistorial({ h, compacto }: { h: Historial; compacto?: boole
         )}
         <p className="small text-muted mb-2">
           <DniPaciente dni={h.paciente.dni} /> · {edad} años · Cel. {h.paciente.telefono}
-          {h.paciente.apoderado && <> · Apoderado: {h.paciente.apoderado}</>}
+          {h.paciente.apoderado && <> · Apoderado: {h.paciente.apoderado}{h.paciente.apoderadoDni && ` (DNI ${h.paciente.apoderadoDni})`}{h.paciente.apoderadoTelefono && ` · Cel. ${h.paciente.apoderadoTelefono}`}</>}
           {usuario?.rol === 'administrador' && (
             <button type="button" className="btn btn-link btn-sm p-0 ms-2 align-baseline" onClick={() => setEditar(true)}>
               Editar datos / DNI
@@ -62,7 +63,7 @@ export function VistaHistorial({ h, compacto }: { h: Historial; compacto?: boole
               {a.tratamientos.map((t, i) => (
                 <li key={i}>
                   {t.nombre}
-                  {t.piezaDental && <> — pieza {t.piezaDental}</>} <span className="text-muted">({solesPE(t.precio)})</span>
+                  {t.piezaDental && <> — {textoPieza(t.piezaDental)}</>} <span className="text-muted">({solesPE(t.precio)})</span>
                 </li>
               ))}
             </ul>

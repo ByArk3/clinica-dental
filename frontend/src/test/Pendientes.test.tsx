@@ -77,6 +77,7 @@ describe('Autocompletar con RENIEC (Nueva cita)', () => {
       await u.type(screen.getByLabelText('Celular'), '911222333');
       await u.click(screen.getByRole('button', { name: 'Femenino' }));
       await u.click(screen.getByRole('button', { name: 'Registrar paciente' }));
+      await u.click(await screen.findByRole('button', { name: 'Sí' }));
       await waitFor(() => expect(llamadas.find((l) => l.metodo === 'POST')?.body).toMatchObject({ dni: '45678912', nombres: 'Raúl', apellidos: 'Gómez' }));
     } finally {
       globalThis.fetch = fetchOriginal;

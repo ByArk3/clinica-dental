@@ -86,6 +86,8 @@ export async function historial(pacienteId: number) {
       fechaNacimiento: dateAFecha(paciente.fechaNacimiento),
       telefono: paciente.telefono,
       apoderado: paciente.apoderado,
+      apoderadoDni: paciente.apoderadoDni,
+      apoderadoTelefono: paciente.apoderadoTelefono,
       inasistencias: paciente.inasistencias,
     },
     ficha: { alergias: paciente.ficha.alergias, antecedentes: paciente.ficha.antecedentes, notas: paciente.ficha.notas },

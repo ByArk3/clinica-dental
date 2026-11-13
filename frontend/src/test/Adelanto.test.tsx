@@ -103,7 +103,7 @@ describe('FormReserva con tratamiento previsto', () => {
     });
     renderizar(<FormReserva />);
     const u = userEvent.setup();
-    await u.type(screen.getByLabelText('Motivo'), 'Dolor');
+    await u.type(screen.getByLabelText(/^Motivo/), 'Dolor');
     await screen.findByRole('option', { name: 'Extracción simple — S/ 80.00' });
     // la consulta es la opción por defecto, con su precio y una ayuda
     expect(screen.getByRole('option', { name: 'Consulta de evaluación — S/ 40.00' })).toBeInTheDocument();
@@ -113,6 +113,7 @@ describe('FormReserva con tratamiento previsto', () => {
     await u.type(screen.getByLabelText('Fecha'), '2030-01-07');
     await u.click(await screen.findByRole('button', { name: '10:00' }));
     await u.click(screen.getByRole('button', { name: 'Reservar a las 10:00' }));
+    await u.click(await screen.findByRole('button', { name: 'Sí' }));
     expect(await screen.findByText(MENSAJES.ADELANTO_OBLIGATORIO)).toBeInTheDocument();
     expect(screen.getByTestId('panel-adelanto')).toHaveTextContent('Adelanto: S/ 40.00');
     expect(llamadas.find((l) => l.metodo === 'POST')?.body).toMatchObject({ tratamientoPrevistoId: 6 });

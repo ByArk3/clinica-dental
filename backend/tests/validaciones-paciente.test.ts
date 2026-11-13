@@ -1,7 +1,6 @@
 // Registro y corrección de pacientes: nombres solo letras, sexo obligatorio, apoderado para menores, contraseña del paciente
 import { beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
-import { MENSAJE_APODERADO } from '@clinica/shared';
 import { app, idPaciente, prisma, reiniciarBD, sesion } from './helpers.js';
 import { ahoraLima, sumarDias } from '../src/lib/fechas.js';
 
@@ -34,8 +33,8 @@ describe('Registro web del paciente', () => {
 
   it('un menor de edad necesita apoderado (también en la web)', async () => {
     const r = await request(app).post('/api/auth/registro-paciente').send({ ...web, fechaNacimiento: hace(15) });
-    expect(r.body.campos.apoderado).toBe(MENSAJE_APODERADO);
-    expect((await request(app).post('/api/auth/registro-paciente').send({ ...web, fechaNacimiento: hace(15), apoderado: 'Rosa Ruiz (DNI 40000000, cel. 987000000)' })).status).toBe(201);
+    expect(r.body.campos).toMatchObject({ apoderado: 'Ingrese el nombre del apoderado', apoderadoDni: 'Ingrese el DNI del apoderado', apoderadoTelefono: 'Ingrese el celular del apoderado' });
+    expect((await request(app).post('/api/auth/registro-paciente').send({ ...web, fechaNacimiento: hace(15), apoderado: 'Rosa Ruiz', apoderadoDni: '40000000', apoderadoTelefono: '987000000' })).status).toBe(201);
   });
 
   it('restablecer contraseña: el paciente tampoco puede usar su DNI ni su nombre', async () => {
@@ -55,16 +54,16 @@ describe('Registro presencial y Editar datos', () => {
     const recep = await sesion('recepcionista');
     const base = { dni: '45678913', nombres: 'Luis', apellidos: 'Polo', fechaNacimiento: hace(8), telefono: '912345678' };
     const r = await recep.post('/api/pacientes').send(base);
-    expect(r.body.campos).toMatchObject({ sexo: 'Elija el sexo', apoderado: MENSAJE_APODERADO });
-    expect((await recep.post('/api/pacientes').send({ ...base, sexo: 'masculino', apoderado: 'Ana Polo (DNI 40000001, cel. 987000001)' })).status).toBe(201);
+    expect(r.body.campos).toMatchObject({ sexo: 'Elija el sexo', apoderado: 'Ingrese el nombre del apoderado' });
+    expect((await recep.post('/api/pacientes').send({ ...base, sexo: 'masculino', apoderado: 'Ana Polo', apoderadoDni: '40000001', apoderadoTelefono: '987000001' })).status).toBe(201);
   });
 
   it('Editar datos: menor sin apoderado y sexo vacío se piden al guardar', async () => {
     const recep = await sesion('recepcionista');
-    const p = (await recep.post('/api/pacientes/sin-dni').send({ nombres: 'José', apellidos: 'Pérez', fechaNacimiento: hace(8), telefono: '999999999', sexo: 'masculino', apoderado: 'Carla Pérez (cel. 988888888)' })).body;
+    const p = (await recep.post('/api/pacientes/sin-dni').send({ nombres: 'José', apellidos: 'Pérez', fechaNacimiento: hace(8), telefono: '999999999', sexo: 'masculino', apoderado: 'Carla Pérez', apoderadoDni: '40000002', apoderadoTelefono: '988888888' })).body;
     await prisma.paciente.update({ where: { id: p.id }, data: { apoderado: null, sexo: null } });
     const r = await recep.patch(`/api/pacientes/${p.id}`).send({ telefono: '999999998', nombres: 'José', apellidos: 'Pérez', fechaNacimiento: p.fechaNacimiento });
-    expect(r.body.campos).toMatchObject({ apoderado: MENSAJE_APODERADO, sexo: 'Elija el sexo' });
+    expect(r.body.campos).toMatchObject({ apoderado: 'Ingrese el nombre del apoderado', sexo: 'Elija el sexo' });
   });
 
   it('Editar datos: con cuenta web el correo es obligatorio y se cambia también en la cuenta', async () => {
