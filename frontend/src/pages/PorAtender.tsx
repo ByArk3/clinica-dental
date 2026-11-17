@@ -2,27 +2,29 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { atencionApi } from '../api/recursos';
 import { DniPaciente } from '../components/DniPaciente';
+import { ChipEstado } from '../components/ChipEstado';
 import { edadDe, fechaPE, hoyLima } from '../formato';
 
 /**
- * CU-11 «Registrar atención» (menú del odontólogo): los pacientes de hoy que faltan atender, en orden de hora,
- * con el siguiente destacado. Al elegir uno se abre el formulario de la atención.
+ * CU-11 «Registrar atención» (menú del odontólogo): el único lugar desde donde se atiende. Arriba, los pacientes de hoy
+ * que faltan atender (el siguiente destacado); abajo, los ya atendidos hoy, con «Editar atención».
  */
 export default function PorAtender() {
   const hoy = hoyLima();
   const citas = useQuery({ queryKey: ['mis-citas-od', hoy], queryFn: () => atencionApi.misCitas(hoy), refetchInterval: 60_000 });
   const pendientes = (citas.data ?? []).filter((c) => c.puedeAtender).sort((a, b) => a.hora.localeCompare(b.hora));
-  const atendidas = (citas.data ?? []).filter((c) => c.atencionId).length;
+  const atendidas = (citas.data ?? []).filter((c) => c.atencionId).sort((a, b) => a.hora.localeCompare(b.hora));
 
   return (
     <>
-      <div className="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-1">
-        <h1 className="h4 mb-0">Registrar atención</h1>
-        <Link to="/atencion" className="small">Ver todas las citas del día →</Link>
-      </div>
-      <p className="text-muted small mb-3">
-        Hoy, {fechaPE(hoy)}: {pendientes.length} por atender{atendidas > 0 && ` · ${atendidas} ya atendida${atendidas > 1 ? 's' : ''}`}.
-      </p>
+      <h1 className="h4 mb-2">Registrar atención · {fechaPE(hoy)}</h1>
+      {citas.data && (
+        <div className="d-flex flex-wrap gap-2 mb-3" aria-label="Resumen del día">
+          <span className="chip chip-confirmada">{pendientes.length} por atender</span>
+          <span className="chip chip-pagada">{atendidas.length} atendido{atendidas.length === 1 ? '' : 's'}</span>
+          {pendientes[0] && <span className="chip chip-atendida">Próximo: {pendientes[0].hora}</span>}
+        </div>
+      )}
       {citas.isLoading && <p className="text-muted">Cargando…</p>}
       {citas.data && pendientes.length === 0 && <div className="tarjeta text-muted">No hay pacientes por atender hoy.</div>}
       <div className="d-grid gap-2">
@@ -44,6 +46,26 @@ export default function PorAtender() {
           </div>
         ))}
       </div>
+
+      {atendidas.length > 0 && (
+        <>
+          <h2 className="h6 text-uppercase text-muted mt-4 mb-2">Atendidos hoy</h2>
+          <div className="d-grid gap-2" data-testid="atendidos-hoy">
+            {atendidas.map((c) => (
+              <div className="tarjeta py-2" key={c.id}>
+                <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                  <div>
+                    <strong className="me-2">{c.hora}</strong>
+                    {c.paciente.nombres} {c.paciente.apellidos}
+                    <span className="ms-2"><ChipEstado estado={c.estado} /></span>
+                  </div>
+                  <Link className="btn btn-sm btn-outline-secondary" to={`/atencion/editar/${c.atencionId}`}>Editar atención</Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </>
   );
 }

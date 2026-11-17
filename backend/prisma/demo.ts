@@ -1,5 +1,7 @@
 // Datos de DEMOSTRACIÓN (se cargan con la semilla: npm run db:seed o SEED=true en Docker). TODO ES FICTICIO.
-// Simula ~3 meses de historia de la clínica y las próximas 2 semanas, respetando las reglas del sistema:
+// Simula ~3 meses de historia de la clínica y las citas futuras hasta el 20/12/2026 (como mínimo 2 semanas), con
+// 200 personas: 2 administradores, 2 recepcionistas, 5 odontólogos y 191 pacientes (96 con cuenta web y 95 presenciales,
+// 10 de ellos con «DNI pendiente»). Respeta las reglas del sistema:
 // adelanto del 50 % (100 % si está restringido), cobro final con el adelanto y el saldo a favor descontados,
 // stock que baja con cada atención y sube con los pedidos recibidos, comprobantes numerados sin huecos y en orden.
 // Siempre genera lo mismo (generador pseudoaleatorio con semilla fija); las fechas son relativas a «hoy».
@@ -62,7 +64,7 @@ const CON_PIEZA = new Set(['Curación con resina', 'Extracción simple', 'Extrac
 const PIEZAS_ADULTO = ['11', '12', '14', '15', '16', '17', '21', '24', '25', '26', '27', '34', '35', '36', '37', '38', '44', '45', '46', '47', '48'];
 const PIEZAS_NINO = ['16', '26', '36', '46', '17', '27', '37', '47'];
 
-type Pac = { id: number; edad: number; nino: boolean; inasist: number; restringido: boolean; saldo: Prisma.Decimal; abonos: { id: number; restante: Prisma.Decimal }[]; dni: string | null; nombres: string; apellidos: string; fichaId: number };
+type Pac = { id: number; usuarioId: number | null; edad: number; nino: boolean; inasist: number; restringido: boolean; saldo: Prisma.Decimal; abonos: { id: number; restante: Prisma.Decimal }[]; dni: string | null; nombres: string; apellidos: string; fichaId: number };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function sembrarDemo(prisma: PrismaClient<any>, { silencioso = false } = {}) {
@@ -86,6 +88,19 @@ export async function sembrarDemo(prisma: PrismaClient<any>, { silencioso = fals
   const chavez = await prisma.odontologo.upsert({ where: { usuarioId: uChavez.id }, update: {}, create: { usuarioId: uChavez.id, cmp: '00003', especialidad: 'Ortodoncia' } });
   if ((await prisma.horarioAtencion.count({ where: { odontologoId: chavez.id } })) === 0) {
     await prisma.horarioAtencion.createMany({ data: [2, 3, 4, 5, 6].map((dia) => ({ odontologoId: chavez.id, diaSemana: dia, horaInicio: horaDB('09:00'), horaFin: horaDB('13:00') })) });
+  }
+  // Segundo administrador (Carlos Vega sigue siendo el principal, RN-23)
+  await prisma.usuario.upsert({ where: { email: 'patricia.salazar@clinica.local' }, update: {}, create: { nombres: 'Patricia Salazar', email: 'patricia.salazar@clinica.local', password: hash, rol: 'administrador' } });
+  // Dos odontólogos más (5 en total), cada uno con su horario
+  for (const x of [
+    { nombres: 'Dra. Rocío Benites', email: 'rocio.benites@clinica.local', cmp: '00004', especialidad: 'Odontopediatría', tramos: [1, 2, 3, 4, 5].map((dia) => [dia, '14:00', '19:00'] as const) },
+    { nombres: 'Dr. Miguel Asmat', email: 'miguel.asmat@clinica.local', cmp: '00005', especialidad: 'Periodoncia', tramos: [[1, '08:00', '13:00'], [3, '08:00', '13:00'], [5, '08:00', '13:00'], [6, '08:00', '12:00']] as const },
+  ]) {
+    const u = await prisma.usuario.upsert({ where: { email: x.email }, update: {}, create: { nombres: x.nombres, email: x.email, password: hash, rol: 'odontologo' } });
+    const od = await prisma.odontologo.upsert({ where: { usuarioId: u.id }, update: {}, create: { usuarioId: u.id, cmp: x.cmp, especialidad: x.especialidad } });
+    if ((await prisma.horarioAtencion.count({ where: { odontologoId: od.id } })) === 0) {
+      await prisma.horarioAtencion.createMany({ data: x.tramos.map(([dia, ini, fin]) => ({ odontologoId: od.id, diaSemana: dia, horaInicio: horaDB(ini), horaFin: horaDB(fin) })) });
+    }
   }
   const ana = await prisma.usuario.findUniqueOrThrow({ where: { email: 'ana.rios@clinica.local' } });
   const admin = await prisma.usuario.findUniqueOrThrow({ where: { email: 'carlos.vega@clinica.local' } });
@@ -127,7 +142,7 @@ export async function sembrarDemo(prisma: PrismaClient<any>, { silencioso = fals
   // ---------- Pacientes ----------
   const existentes = await prisma.paciente.findMany({ include: { ficha: true } });
   const pacientes: Pac[] = existentes.map((p) => ({
-    id: p.id, edad: Number(hoy.slice(0, 4)) - p.fechaNacimiento.getUTCFullYear(), nino: false, inasist: p.inasistencias, restringido: p.restringido,
+    id: p.id, usuarioId: p.usuarioId, edad: Number(hoy.slice(0, 4)) - p.fechaNacimiento.getUTCFullYear(), nino: false, inasist: p.inasistencias, restringido: p.restringido,
     saldo: D(p.saldoFavor), abonos: [], dni: p.dni, nombres: p.nombres, apellidos: p.apellidos, fichaId: p.ficha!.id,
   }));
   const usados = new Set(existentes.map((p) => p.dni));
@@ -139,19 +154,39 @@ export async function sembrarDemo(prisma: PrismaClient<any>, { silencioso = fals
     return x;
   };
   const celular = () => `9${g.entre(10_000_000, 99_999_999)}`;
-  for (let i = 0; i < 60; i++) {
+  // Metas: 96 pacientes con cuenta web y 95 presenciales (sin cuenta), contando los de la semilla
+  const META_WEB = 96;
+  const META_PRESENCIAL = 95;
+  const SIN_DNI = 11; // presenciales registrados sin DNI a la mano; a uno ya le completaron el DNI → quedan 10 pendientes
+  const nWeb = Math.max(0, META_WEB - existentes.filter((p) => p.usuarioId).length);
+  const nPresencial = Math.max(0, META_PRESENCIAL - existentes.filter((p) => !p.usuarioId).length);
+  const sinTildes = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ñ/g, 'n');
+  const correos = new Set((await prisma.usuario.findMany({ select: { email: true } })).map((u) => u.email));
+  const correoDe = (nombres: string, apellidos: string) => {
+    const base = `${sinTildes(nombres.split(' ')[0])}.${sinTildes(apellidos.split(' ')[0])}`;
+    let email = `${base}@correo.local`;
+    for (let k = 2; correos.has(email); k++) email = `${base}${k}@correo.local`;
+    correos.add(email);
+    return email;
+  };
+  for (let i = 0; i < nWeb + nPresencial; i++) {
+    const web = i < nWeb;
+    const j = web ? i : i - nWeb; // posición dentro de su grupo
     const mujer = g.si(0.55);
-    const nino = i < 8; // 8 menores de edad
-    const sinDni = i >= 57; // 3 registrados sin DNI a la mano (en las últimas semanas)
+    // menores: 2 con cuenta web (registrados por su apoderado) y 12 presenciales
+    const nino = web ? j < 2 : j < 12;
+    const sinDni = !web && j >= nPresencial - SIN_DNI; // registrados sin DNI a la mano (en las últimas semanas)
     const nombres = mujer ? g.uno(NOMBRES_F) : g.uno(NOMBRES_M);
     const apellidos = `${g.uno(APELLIDOS)} ${g.uno(APELLIDOS)}`;
     const edad = nino ? g.entre(5, 15) : g.entre(19, 72);
     const nac = `${Number(hoy.slice(0, 4)) - edad - 1}-${String(g.entre(1, 12)).padStart(2, '0')}-${String(g.entre(1, 28)).padStart(2, '0')}`;
     const creado = sinDni ? en(sumarDias(hoy, -g.entre(2, 12)), '10:00') : en(sumarDias(T0, -g.entre(5, 300)), '11:00');
+    const email = web || (!nino && g.si(0.3)) ? correoDe(nombres, apellidos) : null;
+    const usuario = web ? await prisma.usuario.create({ data: { nombres: `${nombres} ${apellidos}`, email: email!, password: hash, rol: 'paciente', createdAt: creado } }) : null;
     const p = await prisma.paciente.create({
       data: {
         dni: sinDni ? null : nuevoDni(), nombres, apellidos, sexo: mujer ? 'femenino' : 'masculino', fechaNacimiento: fechaDB(nac), telefono: celular(),
-        email: !nino && g.si(0.4) ? `${nombres.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')}.${apellidos.split(' ')[0].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')}${i}@correo.local` : null,
+        email, usuarioId: usuario?.id ?? null,
         direccion: g.si(0.6) ? `${g.uno(CALLES)} ${g.entre(100, 2500)}, Trujillo` : null,
         ...(nino ? { apoderado: `${g.uno(g.si(0.5) ? NOMBRES_F : NOMBRES_M)} ${apellidos.split(' ')[0]}`, apoderadoDni: nuevoDni(), apoderadoTelefono: celular() } : {}),
         createdAt: creado,
@@ -159,17 +194,18 @@ export async function sembrarDemo(prisma: PrismaClient<any>, { silencioso = fals
       },
       include: { ficha: true },
     });
-    pacientes.push({ id: p.id, edad, nino, inasist: 0, restringido: false, saldo: D(0), abonos: [], dni: p.dni, nombres, apellidos, fichaId: p.ficha!.id });
+    pacientes.push({ id: p.id, usuarioId: usuario?.id ?? null, edad, nino, inasist: 0, restringido: false, saldo: D(0), abonos: [], dni: p.dni, nombres, apellidos, fichaId: p.ficha!.id });
   }
   // Los pacientes de la semilla ya eran pacientes antes del periodo simulado
   await prisma.paciente.updateMany({ where: { id: { in: existentes.map((p) => p.id) } }, data: { createdAt: en(sumarDias(T0, -120), '10:00') } });
+  // DNI que traerá después el primer paciente registrado sin DNI (se reserva aquí para que la lista de usuarios no cambie según el día)
+  const dniCompletado = nuevoDni();
   const conHistoria = pacientes.filter((p) => p.dni !== null);
   const sinDni = pacientes.filter((p) => p.dni === null);
   const maria = pacientes.find((p) => p.dni === '72458190');
-  const mariaUsuario = await prisma.usuario.findUnique({ where: { email: 'maria.quispe@correo.local' } });
   const pedro = pacientes.find((p) => p.dni === '73445566');
   // Pacientes que faltan alguna vez (Pedro llega a 3 → queda restringido, RN-12)
-  const faltones = new Map<number, number>([[pedro?.id ?? -1, 1], ...conHistoria.slice(8, 12).map((p) => [p.id, 1] as [number, number])]);
+  const faltones = new Map<number, number>([[pedro?.id ?? -1, 1], ...conHistoria.filter((p) => !p.nino).slice(10, 22).map((p, i) => [p.id, i < 3 ? 3 : 1] as [number, number])]);
 
   // ---------- Inventario: stock inicial al comienzo de la historia ----------
   const stock = new Map(insumos.map((i) => [i.id, D(i.stockMinimo).mul(4).plus(15)]));
@@ -301,12 +337,13 @@ export async function sembrarDemo(prisma: PrismaClient<any>, { silencioso = fals
 
   async function crearCita(o: (typeof odontologos)[number], f: string, h: string, p: Pac, previsto: string, estado: string, creada: Date, extra: Record<string, unknown> = {}) {
     ocupado.add(`${o.id}|${f}|${h}`);
-    const web = p === maria && mariaUsuario && g.si(0.6);
+    // Los pacientes con cuenta reservan casi siempre por la web; los demás, en la clínica
+    const web = !!p.usuarioId && g.si(0.7);
     citasCreadas++;
     return prisma.cita.create({
       data: {
         pacienteId: p.id, odontologoId: o.id, fecha: fechaDB(f), hora: horaDB(h), motivo: g.uno(MOTIVOS), canal: web ? 'web' : 'presencial', estado: estado as never,
-        tratamientoPrevistoId: trat[previsto].id, montoAdelanto: adelantoDe(p, previsto), creadoPorId: web ? mariaUsuario!.id : g.uno(recepcionistas).id,
+        tratamientoPrevistoId: trat[previsto].id, montoAdelanto: adelantoDe(p, previsto), creadoPorId: web ? p.usuarioId! : g.uno(recepcionistas).id,
         tokenConfirmacion: crypto.randomUUID(), createdAt: creada, updatedAt: creada, ...extra,
       },
     });
@@ -317,7 +354,7 @@ export async function sembrarDemo(prisma: PrismaClient<any>, { silencioso = fals
     const opciones = ATENCIONES.filter(([a]) => (p.nino ? a.ninos || a.t[0] === 'Consulta' : !a.ninos));
     const a = g.pesado(opciones);
     const cuando = masMin(en(f, h), 25);
-    const lineas = a.t.map((n) => ({ nombre: n, pieza: CON_PIEZA.has(n) ? g.uno(p.nino ? PIEZAS_NINO : PIEZAS_ADULTO) : null }));
+    const lineas = a.t.map((n) => ({ nombre: n, pieza: !CON_PIEZA.has(n) ? null : n === 'Extracción compleja' ? g.uno(['18', '28', '38', '48']) : g.uno(p.nino ? PIEZAS_NINO : PIEZAS_ADULTO) }));
     const at = await prisma.atencion.create({
       data: {
         citaId: cita.id, fichaId: p.fichaId, odontologoId: cita.odontologoId, diagnostico: a.dx, observaciones: a.obs ?? null, createdAt: cuando, updatedAt: cuando,
@@ -453,19 +490,21 @@ export async function sembrarDemo(prisma: PrismaClient<any>, { silencioso = fals
   }
   await inventarioHasta(ahora);
 
-  // ---------- Próximas citas: lo que queda de hoy y las próximas 2 semanas ----------
+  // ---------- Próximas citas: lo que queda de hoy y hasta el 20/12/2026 (como mínimo, las próximas 2 semanas) ----------
   let pendientes = 0;
   let enVerificacion = 0;
-  for (let f = hoy; f <= sumarDias(hoy, 14); f = sumarDias(f, 1)) {
+  const finAgenda = [sumarDias(hoy, 14), '2026-12-20'].sort()[1];
+  for (let f = hoy; f <= finAgenda; f = sumarDias(f, 1)) {
     if (diaSemana(f) === 7 || feriados.has(f)) continue;
+    const cerca = f <= sumarDias(hoy, 14); // la agenda se llena más cuanto más cerca está la fecha
     for (const o of odontologos) {
       const libres = bloquesDe(o, f).filter((h) => !ocupado.has(`${o.id}|${f}|${h}`) && (f > hoy || h > horaAhora));
-      const n = Math.min(libres.length, f === hoy ? 3 : g.entre(1, 3));
+      const n = Math.min(libres.length, f === hoy ? 3 : cerca ? g.entre(1, 3) : g.entre(0, 2));
       for (const h of [...libres].sort(() => g.r() - 0.5).slice(0, n).sort()) {
         const nuevo = sinDni.length > 0 && g.si(0.25);
         const p = nuevo ? sinDni.shift()! : elegirPaciente(g.si(0.07), f);
         const previsto = nuevo || g.si(0.75) ? 'Consulta' : g.pesado<string>([['Profilaxis', 3], ['Curación con resina', 2], ['Blanqueamiento', 1]]);
-        const estado = pendientes < 3 && g.si(0.15) ? 'pendiente_adelanto' : enVerificacion < 2 && g.si(0.12) ? 'pago_en_verificacion' : 'confirmada';
+        const estado = !cerca ? 'confirmada' : pendientes < 3 && g.si(0.15) ? 'pendiente_adelanto' : enVerificacion < 2 && g.si(0.12) ? 'pago_en_verificacion' : 'confirmada';
         if (estado === 'pendiente_adelanto') {
           pendientes++;
           // recién reservada: tiene 1 hora para pagar (la tarea programada la libera si no paga)
@@ -545,7 +584,7 @@ export async function sembrarDemo(prisma: PrismaClient<any>, { silencioso = fals
   // Un paciente que vino sin DNI la semana pasada y ya lo trajo
   const completado = pacientes.filter((p) => p.dni === null)[0];
   if (completado) {
-    const dni = nuevoDni();
+    const dni = dniCompletado;
     await prisma.paciente.update({ where: { id: completado.id }, data: { dni } });
     await prisma.auditoria.create({ data: { usuarioId: sofia.id, accion: 'cambiar_dni', pacienteId: completado.id, detalle: `Completó el DNI pendiente: ${dni}`, ip: '192.168.1.11', createdAt: masMin(ahora, -1440) } });
   }

@@ -2,6 +2,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { prisma, reiniciarBD } from './helpers.js';
 import { sembrarDemo } from '../prisma/demo.js';
+import { hoyEnLima, moverFecha } from '@clinica/shared';
 
 const uno = async (sql: string) => Number(((await prisma.$queryRawUnsafe(sql)) as { n: number }[])[0].n);
 
@@ -18,6 +19,25 @@ describe('Datos de demostración', () => {
     expect(await prisma.paciente.count({ where: { dni: null } })).toBeGreaterThan(0);
     expect(await prisma.pedido.count({ where: { estado: 'pendiente' } })).toBeGreaterThanOrEqual(1); // según la hora, puede haber otro pedido en camino
     expect(await prisma.alertaStock.count({ where: { revisada: false } })).toBeGreaterThan(0);
+  });
+
+  it('200 personas: 2 administradores (Carlos sigue de principal), 2 recepcionistas, 5 odontólogos y 191 pacientes', async () => {
+    const porRol = Object.fromEntries((await prisma.usuario.groupBy({ by: ['rol'], _count: true })).map((x) => [x.rol, x._count]));
+    expect(porRol).toMatchObject({ administrador: 2, recepcionista: 2, odontologo: 5 });
+    expect((await prisma.usuario.findFirstOrThrow({ where: { principal: true } })).email).toBe('carlos.vega@clinica.local');
+    expect(await prisma.paciente.count()).toBe(191);
+    expect(await prisma.paciente.count({ where: { usuarioId: { not: null } } })).toBe(96);
+    expect(porRol.paciente).toBe(96);
+    expect(await prisma.paciente.count({ where: { usuarioId: null } })).toBe(95);
+    expect(await prisma.paciente.count({ where: { dni: null } })).toBe(10);
+    expect(await prisma.usuario.count()).toBe(105);
+    // las citas futuras llegan hasta el 20/12/2026 (o 2 semanas, si ya pasó esa fecha)
+    const ultima = (await prisma.cita.findFirstOrThrow({ orderBy: { fecha: 'desc' } })).fecha.toISOString().slice(0, 10);
+    expect(ultima >= '2026-12-14' || ultima > hoyEnLima()).toBe(true);
+    expect(ultima <= [moverFecha(hoyEnLima(), { dias: 14 }), '2026-12-20'].sort()[1]).toBe(true);
+    // todos los odontólogos tienen agenda, y hay reservas hechas por la web
+    expect((await prisma.cita.groupBy({ by: ['odontologoId'] })).length).toBe(5);
+    expect(await prisma.cita.count({ where: { canal: 'web' } })).toBeGreaterThan(50);
   });
 
   it('el stock nunca queda negativo y coincide con el kárdex', async () => {

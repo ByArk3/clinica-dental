@@ -226,3 +226,39 @@ body { background: var(--fondo); }
 .insignia-principal { display: inline-block; padding: 0.1rem 0.55rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; color: #6b4e00; background: linear-gradient(135deg, #ffe08a, #f5b82e); box-shadow: 0 1px 2px var(--sombra); white-space: nowrap; }
 .aviso-principal { display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.9rem; border-radius: 10px; background: var(--bs-tertiary-bg); border: 1px solid var(--bs-border-color); font-size: 0.9rem; }
 .traspaso { padding: 0.8rem 1rem; border-radius: 10px; border: 1px dashed var(--bs-border-color); background: var(--bs-tertiary-bg); }
+
+/* Filas de alerta (stock en el mínimo, diferencias, stock insuficiente) en el modo oscuro: Bootstrap las pinta con
+   fondo claro y texto oscuro, que no se leen sobre el tema oscuro ni al pasar el mouse. Aquí: fondo ámbar/rojo suave,
+   texto claro, barra de color a la izquierda; los botones conservan su contraste. El modo claro queda como estaba. */
+[data-bs-theme='dark'] .table .table-warning {
+  --bs-table-color: #ffe8a3;
+  --bs-table-bg: rgba(255, 193, 7, 0.13);
+  --bs-table-border-color: rgba(255, 193, 7, 0.28);
+  --bs-table-striped-bg: rgba(255, 193, 7, 0.16);
+  --bs-table-hover-bg: rgba(255, 193, 7, 0.22);
+  --bs-table-hover-color: #fff3cd;
+  color: var(--bs-table-color);
+}
+[data-bs-theme='dark'] .table .table-danger {
+  --bs-table-color: #f8c4c9;
+  --bs-table-bg: rgba(220, 53, 69, 0.16);
+  --bs-table-border-color: rgba(220, 53, 69, 0.32);
+  --bs-table-striped-bg: rgba(220, 53, 69, 0.2);
+  --bs-table-hover-bg: rgba(220, 53, 69, 0.26);
+  --bs-table-hover-color: #fde2e4;
+  color: var(--bs-table-color);
+}
+[data-bs-theme='dark'] .table .table-warning > *:first-child { background-image: linear-gradient(to right, #ffc107 4px, transparent 4px); }
+[data-bs-theme='dark'] .table .table-danger > *:first-child { background-image: linear-gradient(to right, #dc3545 4px, transparent 4px); }
+[data-bs-theme='dark'] .table .table-warning .text-danger { color: #ff9aa4 !important; }
+/* Cifra en alerta (stock): ámbar y en negrita */
+.cifra-alerta { color: #997404; font-weight: 700; }
+[data-bs-theme='dark'] .cifra-alerta { color: #ffc107; }
+@media (hover: hover) {
+  /* al pasar el mouse la fila de alerta solo se aclara un poco; el texto no se oscurece */
+  [data-bs-theme='dark'] .table tbody tr.table-warning:hover > * { background-color: rgba(255, 193, 7, 0.22) !important; color: #fff3cd; }
+  [data-bs-theme='dark'] .table tbody tr.table-danger:hover > * { background-color: rgba(220, 53, 69, 0.26) !important; color: #fde2e4; }
+  .table tbody tr.table-warning:hover > * { background-color: #ffe69c !important; }
+  [data-bs-theme='dark'] .table tbody tr.table-warning:hover > *:first-child { background-image: linear-gradient(to right, #ffc107 4px, transparent 4px); }
+  [data-bs-theme='dark'] .table tbody tr.table-danger:hover > *:first-child { background-image: linear-gradient(to right, #dc3545 4px, transparent 4px); }
+}

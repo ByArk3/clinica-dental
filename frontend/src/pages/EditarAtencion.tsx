@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { editarAtencionSchema, MENSAJES, LIMITE_TEXTO, limpiarTextoLibre } from '@clinica/shared';
 import { atencionApi, tarifarioApi, type ResultadoEdicion } from '../api/recursos';
@@ -16,6 +16,7 @@ let siguienteClave = 1;
 
 /** Corregir una atención ya registrada (solo su odontólogo). Queda la versión anterior en el historial. */
 export default function EditarAtencion() {
+  const navigate = useNavigate();
   const { atencionId } = useParams();
   const id = Number(atencionId);
   const qc = useQueryClient();
@@ -95,7 +96,7 @@ export default function EditarAtencion() {
         )}
         {resultado.alertas.length > 0 && <div className="alert alert-warning">Stock mínimo alcanzado: {resultado.alertas.join(', ')}.</div>}
         <div className="d-flex gap-2">
-          <Link to="/atencion" className="btn btn-acento">Citas del día</Link>
+          <Link to="/atencion/registrar" className="btn btn-acento">Volver a Registrar atención</Link>
           <Link to={`/historial?paciente=${a.paciente.id}`} className="btn btn-outline-secondary">Ver historial</Link>
         </div>
       </div>
@@ -106,7 +107,7 @@ export default function EditarAtencion() {
     <>
       <div className="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-3">
         <h1 className="h4 mb-0">Editar atención</h1>
-        <Link to="/atencion" className="small">← Citas del día</Link>
+        <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/atencion/registrar'))}>← Regresar</button>
       </div>
       <p className="mb-3">
         <strong>{a.paciente.nombres} {a.paciente.apellidos}</strong> · {fechaPE(a.fecha)} {a.hora} · {a.motivo}

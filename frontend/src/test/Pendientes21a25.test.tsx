@@ -73,7 +73,30 @@ describe('Odontólogo: «Registrar atención»', () => {
     expect(siguiente).toHaveTextContent('Ana Ruiz');
     expect(screen.getByRole('link', { name: 'Atender ahora' })).toHaveAttribute('href', `/atencion/registrar/2?fecha=${hoy}`);
     expect(screen.getAllByRole('link', { name: /^Atender/ })).toHaveLength(2);
-    expect(screen.getByText(/2 por atender · 1 ya atendida/)).toBeInTheDocument();
+    // resumen en chips (sin el enlace «Ver todas las citas del día»)
+    expect(screen.getByText('2 por atender')).toBeInTheDocument();
+    expect(screen.getByText('1 atendido')).toBeInTheDocument();
+    expect(screen.getByText('Próximo: 09:00')).toBeInTheDocument();
+    expect(screen.queryByText(/Ver todas las citas/)).toBeNull();
+    // «Atendidos hoy» con «Editar atención»
+    expect(screen.getByTestId('atendidos-hoy')).toHaveTextContent('08:00');
+    expect(screen.getByRole('link', { name: 'Editar atención' })).toHaveAttribute('href', '/atencion/editar/7');
+  });
+});
+
+describe('Odontólogo: «Citas del día» solo para consultar', () => {
+  it('no tiene botón para atender: remite a «Registrar atención»; las atendidas conservan «Editar atención»', async () => {
+    const { default: MisCitasOdontologo } = await import('../pages/MisCitasOdontologo');
+    const hoy = hoyEnLima();
+    const base = { fecha: hoy, motivo: 'Consulta', paciente: { id: 1, dni: '72458190', nombres: 'Ana', apellidos: 'Ruiz', fechaNacimiento: '2000-01-01', alergias: null } };
+    simularApi({ 'GET /odontologos/me/citas': { body: [
+      { ...base, id: 2, hora: '09:00', estado: 'confirmada', puedeAtender: true, atencionId: null },
+      { ...base, id: 1, hora: '08:00', estado: 'atendida', puedeAtender: false, atencionId: 7 },
+    ] } });
+    renderizar(<MisCitasOdontologo />);
+    expect(await screen.findByRole('link', { name: 'Registrar atención' })).toHaveAttribute('href', '/atencion/registrar');
+    expect(screen.queryByRole('link', { name: /^Atender/ })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Editar atención' })).toBeInTheDocument();
   });
 });
 

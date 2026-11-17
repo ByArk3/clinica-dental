@@ -105,7 +105,7 @@ export default function RegistrarAtencion() {
     <>
       <div className="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-3">
         <h1 className="h4 mb-0">Registrar atención</h1>
-        <Link to="/atencion/registrar" className="small">← Registrar atención</Link>
+        <Link to="/atencion/registrar" className="btn btn-sm btn-outline-secondary">← Regresar</Link>
       </div>
       <p className="mb-3">
         <strong>{cita.paciente.nombres} {cita.paciente.apellidos}</strong> · {cita.hora} · {cita.motivo}

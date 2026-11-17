@@ -2,7 +2,10 @@ PRENDE EL PROYECTO USANDO DOCKER
 Clínica Dental — Grupo 1
 ================================
 
-Carpeta del proyecto: D:\Proyectos\clinica-dental
+Carpeta del proyecto: D:\Proyectos\clinica-dental (en otra PC puede ser C:\Proyectos\clinica-dental:
+cambiar la letra en los comandos).
+
+¿PC NUEVA, SIN NADA? Hacer primero la sección «DESDE CERO» del final y luego volver aquí.
 
 Antes de empezar: abrir Docker Desktop y esperar a que diga que está corriendo.
 Todos los comandos van en PowerShell, uno por uno y en este orden.
@@ -69,15 +72,15 @@ http://localhost:8080
 
 USUARIOS DE PRUEBA (contraseña de todos: Clinica2026)
 -----------------------------------------------------
-Administrador   carlos.vega@clinica.local
-Recepcionista   ana.rios@clinica.local
-Odontólogo      luis.paredes@clinica.local
-Odontóloga      carmen.diaz@clinica.local
-Paciente        maria.quispe@correo.local
+Administrador (principal)  carlos.vega@clinica.local
+Administradora             patricia.salazar@clinica.local
+Recepcionistas             ana.rios@clinica.local, sofia.mendoza@clinica.local
+Odontólogos                luis.paredes@clinica.local, carmen.diaz@clinica.local, andres.chavez@clinica.local,
+                           rocio.benites@clinica.local, miguel.asmat@clinica.local
+Paciente                   maria.quispe@correo.local
 
-También:
-Recepcionista   sofia.mendoza@clinica.local
-Odontólogo      andres.chavez@clinica.local
+La lista completa (200 personas: 96 pacientes con cuenta web y 95 presenciales) está en
+docs\usuarios-de-prueba.md
 
 
 PARA APAGARLO
@@ -92,3 +95,28 @@ NOTAS
 - Se construye cada imagen por separado (pasos 5 y 6) porque "docker compose up --build"
   puede fallar en Windows con un error de "bake".
 - Si un paso da error, sacar captura de la ventana de PowerShell.
+
+
+DESDE CERO (PC nueva que solo tiene Docker Desktop)
+===================================================
+Una sola vez. En PowerShell, uno por uno:
+
+a) Instalar Git:
+   winget install --id Git.Git -e --source winget
+   Cerrar PowerShell y abrirlo de nuevo. Comprobar:  git --version
+
+b) Crear la carpeta y descargar el proyecto:
+   mkdir C:\Proyectos\clinica-dental
+   cd C:\Proyectos\clinica-dental
+   git clone https://github.com/ByArk3/clinica-dental.git .
+   (el punto final descarga dentro de esta carpeta; si pide iniciar sesión en GitHub, aceptar)
+
+c) Crear el archivo .env (es un ARCHIVO, no una carpeta):
+   Copy-Item .env.docker.example .env
+   notepad .env
+   Revisar que diga:  SEED=true   y   COOKIE_SECURE=false
+   OJO: con COOKIE_SECURE=true no se puede iniciar sesión en http://localhost (solo sirve con HTTPS).
+   Si el Bloc de notas lo guardó como .env.txt:  Rename-Item .env.txt .env
+
+d) Seguir con los pasos 5, 6 y 7 de arriba (no hace falta el paso 4: la base es nueva).
+

@@ -55,11 +55,11 @@ export function TablaInsumos({ filas }: { filas: FilaConsumo[] }) {
               <td>
                 {f.nombre}
                 {f.resultante < 0 && <div className="small text-danger">Stock insuficiente: quedará en 0</div>}
-                {f.resultante >= 0 && f.resultante <= f.stockMinimo && <div className="small">Quedará en stock mínimo: se generará alerta</div>}
+                {f.resultante >= 0 && f.resultante <= f.stockMinimo && <div className="small">⚠ Quedará en stock mínimo: se generará alerta</div>}
               </td>
               <td className="text-end">{num(f.cantidad)} {f.unidad}</td>
               <td className="text-end">{num(f.stockActual)}</td>
-              <td className="text-end fw-semibold">{num(Math.max(0, f.resultante))}</td>
+              <td className={`text-end fw-semibold ${f.resultante <= f.stockMinimo ? 'cifra-alerta' : ''}`}>{num(Math.max(0, f.resultante))}</td>
             </tr>
           ))}
         </tbody>

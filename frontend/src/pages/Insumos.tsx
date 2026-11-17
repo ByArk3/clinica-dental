@@ -78,7 +78,7 @@ export default function Insumos() {
                 <tr key={i.id} className={!i.activo ? 'text-muted' : i.bajoMinimo ? 'table-warning' : ''}>
                   <td>{i.nombre} {!i.activo && <span className="badge text-bg-secondary">Desactivado</span>}</td>
                   <td>{i.unidad}</td>
-                  <td className="text-end fw-semibold">{num(i.stockActual)}</td>
+                  <td className={`text-end fw-semibold ${i.activo && i.bajoMinimo ? 'cifra-alerta' : ''}`}>{num(i.stockActual)}</td>
                   <td className="text-end">{num(i.stockMinimo)}</td>
                   <td className="text-end text-nowrap">
                     <button className="btn btn-sm btn-outline-secondary me-1" onClick={() => setKardexDe(i)}>Kárdex</button>

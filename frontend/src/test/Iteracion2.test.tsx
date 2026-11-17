@@ -56,7 +56,7 @@ describe('CU-11 RegistrarAtencion', () => {
     await u.click(screen.getByRole('button', { name: 'Pieza 16' }));
     // tabla de insumos: la resina quedará en el mínimo
     const fila = screen.getByText('Resina compuesta A2').closest('tr')!;
-    expect(within(fila).getByText('Quedará en stock mínimo: se generará alerta')).toBeInTheDocument();
+    expect(within(fila).getByText(/Quedará en stock mínimo: se generará alerta/)).toBeInTheDocument();
     expect(screen.getByText('S/ 120.00')).toBeInTheDocument();
     await u.click(screen.getByRole('button', { name: 'Guardar atención' }));
     await u.click(await screen.findByRole('button', { name: 'Sí' }));

@@ -7,7 +7,7 @@ import { fechaPE, hoyLima } from '../formato';
 import { fechaMaximaFutura } from '@clinica/shared';
 import { DniPaciente } from '../components/DniPaciente';
 
-/** CU-11 paso 1: «Citas del día» del odontólogo (toda su agenda de una fecha; para atender, «Registrar atención»). */
+/** «Citas del día» del odontólogo: para consultar su agenda de cualquier fecha. Para atender, «Registrar atención». */
 export default function MisCitasOdontologo() {
   const [fecha, setFecha] = useState(hoyLima());
   const citas = useQuery({ queryKey: ['mis-citas-od', fecha], queryFn: () => atencionApi.misCitas(fecha), refetchInterval: 60_000 });
@@ -36,10 +36,10 @@ export default function MisCitasOdontologo() {
             </div>
             <div className="small text-muted">{c.motivo}</div>
             {c.paciente.alergias && <div className="small text-danger fw-semibold">⚠ Alergias: {c.paciente.alergias}</div>}
-            {c.puedeAtender && (
-              <Link className="btn btn-sm btn-acento mt-2" to={`/atencion/registrar/${c.id}?fecha=${c.fecha}`}>
-                Registrar atención
-              </Link>
+            {c.puedeAtender && c.fecha === hoyLima() && (
+              <div className="small mt-2">
+                Por atender: ver en <Link to="/atencion/registrar">Registrar atención</Link>
+              </div>
             )}
             {c.atencionId && (
               <Link className="btn btn-sm btn-outline-secondary mt-2" to={`/atencion/editar/${c.atencionId}`}>

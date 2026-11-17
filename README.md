@@ -141,7 +141,7 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | Descuentos (P3) y monto del adelanto (P6) gestionados por el Administrador | `admin.test.ts` |
 | CU-38 Panel de control · CU-39 Reporte de ingresos · CU-40 Reporte de inventario (rango de fechas, exportación CSV para Excel) | `reporte.test.ts`, `Iteracion4.test.tsx` |
 
-Total: **335 pruebas de API + 125 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y los CU-58 y CU-59 están implementados.
+Total: **336 pruebas de API + 126 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y los CU-58 y CU-59 están implementados.
 
 **Tareas programadas** (`backend/src/jobs`, node-cron, hora de Lima; se activan con `JOBS_ENABLED=true`):
 - **Cada 5 min:** libera las reservas cuyo adelanto no se pagó ni reportó en 1 hora (RN-04; también las citas antiguas
@@ -359,7 +359,7 @@ Resumen de todo lo agregado en las últimas 24 horas (commits `a7d987b` a `34bbf
   de usuarios.
 - **Datos de demostración:** `SEED=true` carga además ~3 meses de historia ficticia coherente (66 pacientes, ~390 citas, ~620
   comprobantes, pedidos, kárdex, alertas y auditoría) y las citas de las próximas 2 semanas; solo en una base sin citas, en una
-  sola transacción. Usuarios extra: `sofia.mendoza@clinica.local` y `andres.chavez@clinica.local`.
+  sola transacción. Ver la lista completa en `docs/usuarios-de-prueba.md`.
 - **Correos:** las direcciones `.local` (de prueba) no se envían aunque haya SMTP.
 - **Docker:** la API tiene hasta 10 minutos para el primer arranque; guía para Windows en «Prende el proyecto usando docker.txt».
 - **Pruebas:** siempre usan la base `…_test` y se niegan a vaciar otra.
@@ -405,6 +405,16 @@ Resumen de todo lo agregado en las últimas 24 horas (commits `a7d987b` a `34bbf
 - **Odontograma:** títulos por zona («Arriba · derecha del paciente»…), nombre de cada diente al pasar el mouse y al elegirlo
   («Pieza 36 — primer molar inferior izquierdo»), botón «✕ Quitar pieza» y **dientes de leche** (51–85), que se muestran primero
   si el paciente tiene menos de 12 años. Caja, comprobante e historial muestran el nombre del diente (`nombrePieza` en `shared`).
+- **Odontólogo (17 nov.):** «Citas del día» queda solo para consultar (cualquier fecha; las de hoy por atender remiten a
+  «Registrar atención»); «Registrar atención» es el único lugar para atender: resumen en chips (por atender · atendidos ·
+  próximo), el siguiente paciente destacado y «Atendidos hoy» con «Editar atención». El formulario tiene «← Regresar».
+- **Filas de alerta en el modo oscuro** (stock en el mínimo, diferencias de pedido, stock insuficiente): fondo ámbar o rojo
+  suave, texto claro y barra de color; al pasar el mouse ya no se oscurece el texto (`estilos.css`). El modo claro no cambia.
+- **Datos de demostración ampliados:** 200 personas — 2 administradores (Carlos Vega sigue de principal; se agrega Patricia
+  Salazar), 2 recepcionistas, 5 odontólogos (se agregan Dra. Rocío Benites, Odontopediatría, y Dr. Miguel Asmat, Periodoncia,
+  con su horario) y 191 pacientes: 96 con cuenta web y 95 presenciales (10 con «DNI pendiente»). Citas futuras hasta el
+  20/12/2026. Lista completa en [`docs/usuarios-de-prueba.md`](docs/usuarios-de-prueba.md). Se cargan solo en una base sin
+  citas: para verlos en una base que ya tenía la demo anterior hay que hacer `docker compose down -v` una vez.
 
 ### Pendientes
 - No hay pendientes anotados. Descartado por ahora: límite de intentos en el registro web (ver «Riesgos conocidos»).
