@@ -55,7 +55,7 @@ body { background: var(--fondo); }
 .pantalla-acceso { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1rem; background: var(--oscuro); }
 .acceso { width: 100%; max-width: 400px; }
 
-.chip { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
+.chip { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; align-self: flex-start; }
 .chip-pendiente_confirmacion { background: #fff3cd; color: #7a5b00; }
 .chip-pendiente_adelanto { background: #ffe0cc; color: #8a3b00; }
 .chip-confirmada { background: #d1f0f2; color: #0b5a61; }

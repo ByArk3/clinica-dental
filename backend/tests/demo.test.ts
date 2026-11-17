@@ -40,6 +40,29 @@ describe('Datos de demostración', () => {
     expect(await prisma.cita.count({ where: { canal: 'web' } })).toBeGreaterThan(50);
   });
 
+  it('Administrador: 30 insumos, 25 tratamientos, 10 proveedores, pedidos en todos los estados, alertas y ajustes', async () => {
+    expect(await prisma.insumo.count()).toBe(30);
+    expect(await prisma.insumo.count({ where: { activo: false } })).toBe(2);
+    expect(await prisma.tratamiento.count()).toBe(25);
+    expect(await prisma.tratamiento.count({ where: { activo: false } })).toBe(2);
+    expect(await prisma.proveedor.count()).toBe(10);
+    expect(await prisma.pedido.count()).toBeGreaterThanOrEqual(40);
+    const estados = new Set((await prisma.pedido.groupBy({ by: ['estado'] })).map((x) => x.estado));
+    for (const e of ['pendiente', 'recibido', 'recibido_con_diferencias', 'anulado']) expect(estados).toContain(e);
+    expect(await prisma.pedido.count({ where: { estado: 'pendiente' } })).toBeGreaterThanOrEqual(5);
+    expect(await prisma.alertaStock.count()).toBeGreaterThanOrEqual(25);
+    expect(await prisma.alertaStock.count({ where: { revisada: false } })).toBeGreaterThanOrEqual(5);
+    expect(await prisma.movimientoKardex.count({ where: { tipo: { in: ['merma', 'ajuste'] } } })).toBeGreaterThanOrEqual(15);
+    // ningún pedido figura recibido en el futuro, y los insumos desactivados no se piden
+    expect(await prisma.pedido.count({ where: { recibidoEn: { gt: new Date() } } })).toBe(0);
+    expect(await prisma.detallePedido.count({ where: { insumo: { activo: false } } })).toBe(0);
+    // cada especialista atiende lo suyo
+    const endo = await prisma.atencionTratamiento.count({ where: { tratamiento: { nombre: { startsWith: 'Endodoncia' } } } });
+    expect(endo).toBeGreaterThan(0);
+    expect(await prisma.atencionTratamiento.count({ where: { tratamiento: { nombre: { startsWith: 'Endodoncia' } }, atencion: { odontologo: { especialidad: 'Endodoncia' } } } })).toBe(endo);
+    expect(await prisma.descuento.count({ where: { nombre: { endsWith: '(diciembre)' } } })).toBe(2);
+  });
+
   it('el stock nunca queda negativo y coincide con el kárdex', async () => {
     expect(await uno(`SELECT count(*)::int n FROM movimientos_kardex WHERE saldo < 0`)).toBe(0);
     expect(await uno(`SELECT count(*)::int n FROM (SELECT saldo, lag(saldo) OVER w + cantidad AS e, row_number() OVER w r FROM movimientos_kardex WINDOW w AS (PARTITION BY insumo_id ORDER BY created_at, id)) x WHERE r > 1 AND saldo <> e`)).toBe(0);

@@ -141,7 +141,7 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | Descuentos (P3) y monto del adelanto (P6) gestionados por el Administrador | `admin.test.ts` |
 | CU-38 Panel de control · CU-39 Reporte de ingresos · CU-40 Reporte de inventario (rango de fechas, exportación CSV para Excel) | `reporte.test.ts`, `Iteracion4.test.tsx` |
 
-Total: **336 pruebas de API + 126 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y los CU-58 y CU-59 están implementados.
+Total: **337 pruebas de API + 126 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y los CU-58 y CU-59 están implementados.
 
 **Tareas programadas** (`backend/src/jobs`, node-cron, hora de Lima; se activan con `JOBS_ENABLED=true`):
 - **Cada 5 min:** libera las reservas cuyo adelanto no se pagó ni reportó en 1 hora (RN-04; también las citas antiguas
@@ -415,6 +415,12 @@ Resumen de todo lo agregado en las últimas 24 horas (commits `a7d987b` a `34bbf
   con su horario) y 191 pacientes: 96 con cuenta web y 95 presenciales (10 con «DNI pendiente»). Citas futuras hasta el
   20/12/2026. Lista completa en [`docs/usuarios-de-prueba.md`](docs/usuarios-de-prueba.md). Se cargan solo en una base sin
   citas: para verlos en una base que ya tenía la demo anterior hay que hacer `docker compose down -v` una vez.
+- **Datos del Administrador en la demo:** 10 proveedores (1 desactivado), 30 insumos (2 desactivados) y 25 tratamientos
+  (2 desactivados) con sus insumos; cada odontólogo atiende lo de su especialidad (endodoncia, periodoncia, ortodoncia,
+  odontopediatría). Unos 55 pedidos en todos los estados (5–6 pendientes para la agenda hasta el 20/12), unas 35 alertas
+  (7 sin revisar), unos 25 ajustes de stock (mermas y conteos físicos) y 2 campañas de diciembre que llegan al 20/12.
+  Ningún pedido figura recibido en el futuro; el kárdex cuadra con el stock (lo revisa `tests/demo.test.ts`).
+- Corrección visual: los chips de estado ya no se estiran dentro de las tarjetas (Pedidos).
 
 ### Pendientes
 - No hay pendientes anotados. Descartado por ahora: límite de intentos en el registro web (ver «Riesgos conocidos»).
