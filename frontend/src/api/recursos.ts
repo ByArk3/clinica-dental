@@ -260,8 +260,11 @@ export interface AtencionEditable {
   diagnostico: string;
   observaciones: string | null;
   tratamientos: { tratamientoId: number; piezaDental: string | null; nombre: string; precio: string }[];
+  /** Insumos que realmente se descontaron (pueden diferir del tarifario si se ajustaron) */
+  insumos?: { insumoId: number; cantidad: string }[];
   cobrada: boolean;
 }
+export interface InsumoParaAtencion { id: number; nombre: string; unidad: string; stockActual: string; stockMinimo: string }
 export interface ResultadoEdicion {
   atencionId: number;
   citaId: number;
@@ -274,6 +277,8 @@ export const atencionApi = {
   misCitas: (fecha: string) => api<CitaOdontologo[]>(`/odontologos/me/citas${qs({ fecha })}`),
   registrar: (citaId: number, d: AtencionDTO) => api<ResultadoAtencion>(`/citas/${citaId}/atencion`, { method: 'POST', body: d }),
   ver: (atencionId: number) => api<AtencionEditable>(`/atenciones/${atencionId}`),
+  /** Insumos activos, para agregar alguno a la atención (pendiente 32) */
+  insumos: () => api<InsumoParaAtencion[]>('/insumos/para-atencion'),
   editar: (atencionId: number, d: EditarAtencionDTO) => api<ResultadoEdicion>(`/atenciones/${atencionId}`, { method: 'PATCH', body: d }),
 };
 

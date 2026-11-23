@@ -48,15 +48,23 @@ describe('CU-11 RegistrarAtencion', () => {
     });
     atender();
     const u = userEvent.setup();
-    expect(await screen.findByRole('note')).toHaveTextContent('Alergias: Penicilina'); // aviso de alergias arriba
-    await waitFor(() => expect(screen.getAllByText('Penicilina')).toHaveLength(2)); // y en la ficha
+    // franja del paciente arriba, con las alergias destacadas
+    await waitFor(() => expect(screen.getByTestId('franja-paciente')).toHaveTextContent('Alergias: Penicilina'));
     await u.type(screen.getByLabelText('Diagnóstico'), 'Caries en 16');
     await screen.findByRole('option', { name: /Curación con resina/ });
     await u.selectOptions(screen.getByLabelText('Tratamiento 1'), '1');
+    // el odontograma está plegado: se abre con «Elegir pieza» y se pliega al elegir
+    expect(screen.queryByRole('button', { name: 'Pieza 16' })).toBeNull();
+    await u.click(screen.getByRole('button', { name: 'Elegir pieza' }));
     await u.click(screen.getByRole('button', { name: 'Pieza 16' }));
+    expect(screen.queryByRole('button', { name: 'Pieza 17' })).toBeNull();
+    expect(screen.getByText(/primer molar superior derecho/)).toBeInTheDocument();
+    // resumen de insumos plegado: avisa cuántos quedarán en el mínimo; al abrirlo, la tabla
+    expect(screen.getByTestId('insumos-atencion')).toHaveTextContent('2 quedarán en stock mínimo');
+    await u.click(screen.getByRole('button', { name: 'Ver y ajustar insumos ▾' }));
     // tabla de insumos: la resina quedará en el mínimo
     const fila = screen.getByText('Resina compuesta A2').closest('tr')!;
-    expect(within(fila).getByText(/Quedará en stock mínimo: se generará alerta/)).toBeInTheDocument();
+    expect(within(fila).getByText(/Quedará en el mínimo/)).toBeInTheDocument();
     expect(screen.getByText('S/ 120.00')).toBeInTheDocument();
     await u.click(screen.getByRole('button', { name: 'Guardar atención' }));
     await u.click(await screen.findByRole('button', { name: 'Sí' }));
@@ -74,8 +82,8 @@ describe('CU-11 RegistrarAtencion', () => {
     await u.click(screen.getByRole('button', { name: '+ Agregar otro tratamiento' }));
     await u.selectOptions(screen.getByLabelText('Tratamiento 2'), '5');
     expect(screen.getByText('S/ 160.00')).toBeInTheDocument();
-    const fila = screen.getByText('Guantes de nitrilo M').closest('tr')!;
-    expect(within(fila).getByText('2 par')).toBeInTheDocument();
+    await u.click(screen.getByRole('button', { name: 'Ver y ajustar insumos ▾' }));
+    expect(screen.getByLabelText('Cantidad de Guantes de nitrilo M')).toHaveValue('2');
   });
 
   it('6.1: sin diagnóstico ni tratamiento resalta los campos y no envía', async () => {
@@ -166,5 +174,39 @@ describe('Tarifario CU-14..17', () => {
     await u.click(within(fila).getByRole('button', { name: 'Desactivar' }));
     await u.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Desactivar' }));
     expect(llamadas.some((l) => l.metodo === 'PATCH' && l.url === '/api/tratamientos/5/desactivar')).toBe(true);
+  });
+});
+
+describe('Pendiente 32: el odontólogo ajusta los insumos', () => {
+  it('sube la resina a 2, quita los guantes, agrega gasa y anota el motivo; se envían solo si se ajustaron', async () => {
+    const llamadas = simularApi({
+      'GET /odontologos/me/citas': { body: [cita] },
+      'GET /pacientes/1/historial': { body: historial },
+      'GET /tratamientos': { body: tarifario },
+      'GET /insumos/para-atencion': { body: [{ id: 3, nombre: 'Guantes de nitrilo M', unidad: 'par', stockActual: '7', stockMinimo: '10' }, { id: 7, nombre: 'Gasa estéril', unidad: 'paquete', stockActual: '20', stockMinimo: '8' }] },
+      'POST /citas/9/atencion': { status: 201, body: { atencionId: 1, citaId: 9, total: '120.00', alertas: [], insumos: [] } },
+    });
+    atender();
+    const u = userEvent.setup();
+    await u.type(await screen.findByLabelText('Diagnóstico'), 'Caries amplia en 16');
+    await screen.findByRole('option', { name: /Curación con resina/ });
+    await u.selectOptions(screen.getByLabelText('Tratamiento 1'), '1');
+    await u.click(screen.getByRole('button', { name: 'Ver y ajustar insumos ▾' }));
+    await u.click(screen.getByRole('button', { name: 'Más Resina compuesta A2' }));
+    expect(screen.getByLabelText('Cantidad de Resina compuesta A2')).toHaveValue('2');
+    expect(screen.getByText(/Ajustado \(tarifario: 1\)/)).toBeInTheDocument();
+    await u.click(screen.getByRole('button', { name: 'Quitar Guantes de nitrilo M' }));
+    await u.selectOptions(screen.getByLabelText('Agregar insumo'), '7');
+    expect(screen.getByText('Agregado')).toBeInTheDocument();
+    await u.type(screen.getByLabelText(/Motivo del ajuste/), 'Lesión grande');
+    await u.click(screen.getByRole('button', { name: 'Guardar atención' }));
+    expect(await screen.findByText('Insumos (ajustados)')).toBeInTheDocument();
+    await u.click(screen.getByRole('button', { name: 'Sí' }));
+    await screen.findByText('Atención registrada');
+    const body = llamadas.find((l) => l.metodo === 'POST')?.body as { insumos: { insumoId: number; cantidad: number }[]; motivoInsumos: string };
+    expect(body.motivoInsumos).toBe('Lesión grande');
+    expect(body.insumos).toEqual(expect.arrayContaining([{ insumoId: 7, cantidad: 1 }]));
+    expect(body.insumos.find((x) => x.insumoId === 3)).toBeUndefined();
+    expect(body.insumos.length).toBe(3);
   });
 });

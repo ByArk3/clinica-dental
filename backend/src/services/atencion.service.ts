@@ -1,7 +1,7 @@
 // CU-11 Registrar tratamiento (atención) — Odontólogo. RN-06, RN-08, RN-09.
 import { Prisma } from '@prisma/client';
 import { MENSAJES, motivoAMostrar, type AtencionDTO, type EditarAtencionDTO, type UsuarioSesion } from '@clinica/shared';
-import { prisma } from '../lib/prisma.js';
+import { prisma, type Tx } from '../lib/prisma.js';
 import { ErrorNegocio } from '../lib/errores.js';
 import { ahoraLima, dateAFecha, dateAHora, fechaADate } from '../lib/fechas.js';
 import { registrarMovimiento, type ResultadoMovimiento } from './stock.service.js';
@@ -79,13 +79,10 @@ export async function registrarAtencion(citaId: number, usuario: UsuarioSesion, 
     });
     await tx.cita.update({ where: { id: citaId }, data: { estado: 'atendida' } });
 
-    // 5.1: varios tratamientos → se descuentan los insumos de cada uno (sumados por insumo)
-    const consumo = new Map<number, Prisma.Decimal>();
-    for (const t of dto.tratamientos) {
-      for (const i of porId.get(t.tratamientoId)!.insumos) {
-        consumo.set(i.insumoId, (consumo.get(i.insumoId) ?? new Prisma.Decimal(0)).plus(i.cantidad));
-      }
-    }
+    // 5.1: varios tratamientos → se descuentan los insumos de cada uno (sumados por insumo).
+    // Pendiente 32: si el odontólogo ajustó los insumos, se descuenta lo que indicó.
+    const consumo = dto.insumos ? await consumoAjustado(tx, dto.insumos) : consumoDelTarifario(dto.tratamientos.map((t) => porId.get(t.tratamientoId)!));
+    const motivo = `Atención de la cita #${citaId}${dto.insumos ? ` — insumos ajustados por el odontólogo${dto.motivoInsumos ? `: ${dto.motivoInsumos}` : ''}` : ''}`;
     const movimientos: ResultadoMovimiento[] = [];
     for (const [insumoId, cantidad] of [...consumo].sort((a, b) => a[0] - b[0])) {
       movimientos.push(
@@ -94,7 +91,7 @@ export async function registrarAtencion(citaId: number, usuario: UsuarioSesion, 
           tipo: 'salida_tratamiento',
           cantidad,
           usuarioId: usuario.id,
-          motivo: `Atención de la cita #${citaId}`,
+          motivo,
           referencia: { tipo: 'atencion', id: atencion.id },
         }),
       );
@@ -112,6 +109,32 @@ export async function registrarAtencion(citaId: number, usuario: UsuarioSesion, 
 }
 
 type LineaAtencion = { tratamientoId: number; piezaDental: string | null };
+type ConInsumos = { insumos: { insumoId: number; cantidad: Prisma.Decimal }[] };
+
+/** Lo que consumen los tratamientos según el tarifario, sumado por insumo. */
+function consumoDelTarifario(tratamientos: ConInsumos[]) {
+  const consumo = new Map<number, Prisma.Decimal>();
+  for (const t of tratamientos) for (const i of t.insumos) consumo.set(i.insumoId, (consumo.get(i.insumoId) ?? new Prisma.Decimal(0)).plus(i.cantidad));
+  return consumo;
+}
+
+/** Insumos indicados por el odontólogo (pendiente 32): deben existir y estar activos; se suman si se repiten. */
+async function consumoAjustado(tx: Tx, lista: { insumoId: number; cantidad: number }[], yaUsados = new Set<number>()) {
+  const consumo = new Map<number, Prisma.Decimal>();
+  for (const i of lista) consumo.set(i.insumoId, (consumo.get(i.insumoId) ?? new Prisma.Decimal(0)).plus(i.cantidad));
+  const ids = [...consumo.keys()];
+  const existentes = await tx.insumo.findMany({ where: { id: { in: ids } } });
+  if (existentes.length !== ids.length) throw new ErrorNegocio(404, 'INSUMO_NO_ENCONTRADO', MENSAJES.INSUMO_NO_ENCONTRADO);
+  // un insumo desactivado solo se acepta si ya se había usado en esta atención (corrección)
+  if (existentes.some((x) => !x.activo && !yaUsados.has(x.id))) throw new ErrorNegocio(422, 'INSUMO_INACTIVO', MENSAJES.INSUMO_INACTIVO);
+  return consumo;
+}
+
+/** Lo que realmente se descontó para una atención (según el kárdex): salidas menos devoluciones. */
+async function consumoReal(tx: Tx, atencionId: number) {
+  const movs = await tx.movimientoKardex.groupBy({ by: ['insumoId'], where: { referenciaTipo: 'atencion', referenciaId: atencionId }, _sum: { cantidad: true } });
+  return new Map(movs.map((m) => [m.insumoId, (m._sum.cantidad ?? new Prisma.Decimal(0)).neg()]));
+}
 const claveLineas = (l: LineaAtencion[]) => l.map((t) => `${t.tratamientoId}:${t.piezaDental ?? ''}`).sort().join('|');
 
 /** Datos de una atención para editarla (solo su odontólogo). */
@@ -134,6 +157,8 @@ export async function verParaEditar(atencionId: number, usuario: UsuarioSesion) 
     diagnostico: a.diagnostico,
     observaciones: a.observaciones,
     tratamientos: a.tratamientos.map((t) => ({ tratamientoId: t.tratamientoId, piezaDental: t.piezaDental, nombre: t.tratamiento.nombre, precio: t.precioAplicado.toFixed(2) })),
+    // Insumos que realmente se descontaron (pueden diferir del tarifario si el odontólogo los ajustó)
+    insumos: [...(await consumoReal(prisma as unknown as Tx, a.id))].filter(([, c]) => c.gt(0)).map(([insumoId, c]) => ({ insumoId, cantidad: c.toFixed(2) })),
     cobrada: a.cita.comprobantes.length > 0,
   };
 }
@@ -162,11 +187,15 @@ export async function editarAtencion(atencionId: number, usuario: UsuarioSesion,
     const nuevas: LineaAtencion[] = dto.tratamientos.map((t) => ({ tratamientoId: t.tratamientoId, piezaDental: t.piezaDental ?? null }));
     const cambianTratamientos = claveLineas(nuevas) !== claveLineas(a.tratamientos);
     const observaciones = dto.observaciones || null;
-    if (!cambianTratamientos && dto.diagnostico === a.diagnostico && observaciones === a.observaciones) {
+    // Pendiente 32: insumos indicados por el odontólogo → se compara con lo que realmente se descontó
+    const previo = cambianTratamientos || dto.insumos ? await consumoReal(tx, atencionId) : new Map<number, Prisma.Decimal>();
+    const ajusteInsumos = dto.insumos ? await consumoAjustado(tx, dto.insumos, new Set(previo.keys())) : null;
+    const cambianInsumos = !!ajusteInsumos && [...new Set([...previo.keys(), ...ajusteInsumos.keys()])].some((id) => !(previo.get(id) ?? new Prisma.Decimal(0)).equals(ajusteInsumos.get(id) ?? 0));
+    if (!cambianTratamientos && !cambianInsumos && dto.diagnostico === a.diagnostico && observaciones === a.observaciones) {
       throw new ErrorNegocio(422, 'ATENCION_SIN_CAMBIOS', MENSAJES.ATENCION_SIN_CAMBIOS);
     }
     const cobrada = a.cita.comprobantes.length > 0 || a.cita.estado === 'pagada';
-    if (cambianTratamientos && cobrada) throw new ErrorNegocio(409, 'ATENCION_COBRADA', MENSAJES.ATENCION_COBRADA);
+    if ((cambianTratamientos || cambianInsumos) && cobrada) throw new ErrorNegocio(409, 'ATENCION_COBRADA', MENSAJES.ATENCION_COBRADA);
 
     // Versión anterior (lo que decía antes de corregir)
     await tx.atencionEdicion.create({
@@ -183,6 +212,7 @@ export async function editarAtencion(atencionId: number, usuario: UsuarioSesion,
     });
 
     const movimientos: ResultadoMovimiento[] = [];
+    let nuevoConsumo: Map<number, Prisma.Decimal> | null = ajusteInsumos;
     if (cambianTratamientos) {
       // RN-08: los tratamientos nuevos deben ser activos del tarifario (los que ya estaban se aceptan aunque se hayan desactivado)
       const previos = new Set(a.tratamientos.map((t) => t.tratamientoId));
@@ -196,11 +226,7 @@ export async function editarAtencion(atencionId: number, usuario: UsuarioSesion,
       const preciosPrevios = new Map<number, Prisma.Decimal[]>();
       for (const t of a.tratamientos) preciosPrevios.set(t.tratamientoId, [...(preciosPrevios.get(t.tratamientoId) ?? []), t.precioAplicado]);
 
-      // Diferencia de insumos: nuevo consumo − consumo anterior
-      const delta = new Map<number, Prisma.Decimal>();
-      const sumar = (insumoId: number, c: Prisma.Decimal) => delta.set(insumoId, (delta.get(insumoId) ?? new Prisma.Decimal(0)).plus(c));
-      for (const t of a.tratamientos) for (const i of t.tratamiento.insumos) sumar(i.insumoId, i.cantidad.neg());
-      for (const t of nuevas) for (const i of porId.get(t.tratamientoId)!.insumos) sumar(i.insumoId, i.cantidad);
+      nuevoConsumo ??= consumoDelTarifario(nuevas.map((t) => porId.get(t.tratamientoId)!));
 
       await tx.atencionTratamiento.deleteMany({ where: { atencionId } });
       await tx.atencionTratamiento.createMany({
@@ -211,6 +237,13 @@ export async function editarAtencion(atencionId: number, usuario: UsuarioSesion,
           precioAplicado: preciosPrevios.get(t.tratamientoId)?.shift() ?? porId.get(t.tratamientoId)!.precio,
         })),
       });
+    }
+    if (nuevoConsumo) {
+      // Diferencia de insumos: nuevo consumo − lo que realmente se descontó antes
+      const delta = new Map<number, Prisma.Decimal>();
+      for (const [id, c] of previo) delta.set(id, c.neg());
+      for (const [id, c] of nuevoConsumo) delta.set(id, (delta.get(id) ?? new Prisma.Decimal(0)).plus(c));
+      const motivo = `Corrección de la atención de la cita #${a.citaId}${dto.insumos && dto.motivoInsumos ? ` — ${dto.motivoInsumos}` : ''}`;
       for (const [insumoId, cantidad] of [...delta].filter(([, c]) => !c.isZero()).sort((x, y) => x[0] - y[0])) {
         movimientos.push(
           await registrarMovimiento(tx, {
@@ -219,7 +252,7 @@ export async function editarAtencion(atencionId: number, usuario: UsuarioSesion,
             tipo: cantidad.isPositive() ? 'salida_tratamiento' : 'ajuste',
             cantidad: cantidad.abs(),
             usuarioId: usuario.id,
-            motivo: `Corrección de la atención de la cita #${a.citaId}`,
+            motivo,
             referencia: { tipo: 'atencion', id: atencionId },
           }),
         );

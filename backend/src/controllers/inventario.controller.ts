@@ -28,6 +28,10 @@ export async function listarInsumos(req: Request, res: Response) {
     await InsumoService.listar({ q: textoQuery(req.query.q), activo: boolQuery(req.query.activo), bajoMinimo: boolQuery(req.query.bajoMinimo) }),
   );
 }
+/** Pendiente 32: insumos activos para que el odontólogo agregue alguno a la atención (sin datos de compras). */
+export async function insumosParaAtencion(_req: Request, res: Response) {
+  res.json((await InsumoService.listar({ activo: true })).map((i) => ({ id: i.id, nombre: i.nombre, unidad: i.unidad, stockActual: i.stockActual, stockMinimo: i.stockMinimo })));
+}
 /** CU-22 Buscar insumo: solo activos */
 export async function buscarInsumo(req: Request, res: Response) {
   res.json(await InsumoService.listar({ q: textoQuery(req.query.q), activo: true }));

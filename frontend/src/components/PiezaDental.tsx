@@ -29,12 +29,44 @@ interface Props {
   id?: string;
   /** Edad del paciente: con menos de 12 años se muestran primero los dientes de leche */
   edad?: number | null;
+  /** true = plegado: solo la pieza elegida y «Elegir / Cambiar pieza»; el odontograma se abre al pedirlo (pendiente 31) */
+  plegable?: boolean;
 }
 
-export function PiezaDental({ valor, onCambiar, id, edad }: Props) {
+export function PiezaDental({ valor, onCambiar, id, edad, plegable }: Props) {
+  const [abierto, setAbierto] = useState(!plegable);
   const [denticion, setDenticion] = useState<'permanente' | 'leche'>(() =>
     valor ? (Number(valor[0]) >= 5 ? 'leche' : 'permanente') : edad != null && edad < EDAD_DIENTES_DE_LECHE ? 'leche' : 'permanente',
   );
+  const elegir = (p: string | undefined) => {
+    onCambiar(p);
+    if (plegable && p) setAbierto(false);
+  };
+  const resumen = (
+    <div className="d-flex flex-wrap align-items-center gap-2 small">
+      {valor ? (
+        <span className="me-auto">
+          <strong>Pieza {valor}</strong> — {nombrePieza(valor)}
+        </span>
+      ) : (
+        <span className="text-muted me-auto">Sin pieza específica (tratamiento general)</span>
+      )}
+      {/* los botones van siempre juntos, en una sola fila */}
+      <span className="d-inline-flex gap-2 text-nowrap">
+        {plegable && (
+          <button type="button" className="btn btn-sm btn-outline-secondary py-0" aria-expanded={abierto} onClick={() => setAbierto(!abierto)}>
+            {abierto ? '▴ Ocultar odontograma' : valor ? 'Cambiar pieza' : 'Elegir pieza'}
+          </button>
+        )}
+        {valor && (
+          <button type="button" className="btn btn-sm btn-outline-secondary py-0" onClick={() => onCambiar(undefined)}>
+            ✕ Quitar pieza
+          </button>
+        )}
+      </span>
+    </div>
+  );
+  if (plegable && !abierto) return <div id={id}>{resumen}</div>;
   return (
     <div id={id}>
       <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1">
@@ -58,7 +90,7 @@ export function PiezaDental({ valor, onCambiar, id, edad }: Props) {
                   aria-pressed={valor === p}
                   aria-label={`Pieza ${p}`}
                   title={`${p} · ${nombrePieza(p)}`}
-                  onClick={() => onCambiar(valor === p ? undefined : p)}
+                  onClick={() => elegir(valor === p ? undefined : p)}
                 >
                   {p}
                 </button>
@@ -67,20 +99,7 @@ export function PiezaDental({ valor, onCambiar, id, edad }: Props) {
           </div>
         ))}
       </div>
-      <div className="d-flex flex-wrap align-items-center gap-2 small mt-1">
-        {valor ? (
-          <>
-            <span>
-              <strong>Pieza {valor}</strong> — {nombrePieza(valor)}
-            </span>
-            <button type="button" className="btn btn-sm btn-outline-secondary py-0" onClick={() => onCambiar(undefined)}>
-              ✕ Quitar pieza
-            </button>
-          </>
-        ) : (
-          <span className="text-muted">Sin pieza específica (tratamiento general)</span>
-        )}
-      </div>
+      <div className="mt-1">{resumen}</div>
       <div className="form-text mt-0">Numeración FDI: el primer dígito es la zona de la boca y el segundo, el diente contando desde el centro.</div>
     </div>
   );

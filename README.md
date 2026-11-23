@@ -141,7 +141,7 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | Descuentos (P3) y monto del adelanto (P6) gestionados por el Administrador | `admin.test.ts` |
 | CU-38 Panel de control · CU-39 Reporte de ingresos · CU-40 Reporte de inventario (rango de fechas, exportación CSV para Excel) | `reporte.test.ts`, `Iteracion4.test.tsx` |
 
-Total: **337 pruebas de API + 126 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y los CU-58 y CU-59 están implementados.
+Total: **341 pruebas de API + 127 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y los CU-58 y CU-59 están implementados.
 
 **Tareas programadas** (`backend/src/jobs`, node-cron, hora de Lima; se activan con `JOBS_ENABLED=true`):
 - **Cada 5 min:** libera las reservas cuyo adelanto no se pagó ni reportó en 1 hora (RN-04; también las citas antiguas
@@ -421,6 +421,19 @@ Resumen de todo lo agregado en las últimas 24 horas (commits `a7d987b` a `34bbf
   (7 sin revisar), unos 25 ajustes de stock (mermas y conteos físicos) y 2 campañas de diciembre que llegan al 20/12.
   Ningún pedido figura recibido en el futuro; el kárdex cuadra con el stock (lo revisa `tests/demo.test.ts`).
 - Corrección visual: los chips de estado ya no se estiran dentro de las tarjetas (Pedidos).
+- **«Registrar atención» y «Editar atención» segmentadas (23 nov.):** franja del paciente (alergias destacadas) y 4 secciones
+  numeradas — 1 Diagnóstico · 2 Tratamientos · 3 Observaciones · 4 Resumen y guardar. El odontograma de cada tratamiento está
+  plegado («Elegir / Cambiar pieza», `PiezaDental plegable`) y los insumos se resumen en una línea («Ver y ajustar insumos»). A
+  la derecha, solo las últimas 3 atenciones (`components/PanelAtencion.tsx`).
+- **El odontólogo ajusta los insumos de la atención:** − / +, quitar, «+ Agregar insumo…», «Volver a lo del tarifario» y motivo
+  opcional (`components/InsumosAtencion.tsx`). La API recibe `insumos` y `motivoInsumos` en `atencionSchema`; si no se envían,
+  se descuenta lo del tarifario. El precio no cambia. Al editar, se compara con lo que realmente se descontó según el kárdex y
+  se corrige solo la diferencia; con la atención cobrada no se cambian tratamientos ni insumos. Ruta nueva
+  `GET /insumos/para-atencion` (odontólogo y administrador: solo insumos activos).
+- **Modo oscuro:** botones secundarios («← Regresar», Kárdex, Modificar, Elegir pieza…) con texto y borde claros; piezas del
+  odontograma y textos de ayuda más legibles; asterisco rojo en «Tratamientos».
+- **Demo:** el 80 % de los insumos activos termina con 100 o más de stock (reposición recibida hoy) y el 20 % con stock bajo y
+  su alerta sin revisar; ningún movimiento, cobro ni recepción queda con hora futura.
 
 ### Pendientes
 - No hay pendientes anotados. Descartado por ahora: límite de intentos en el registro web (ver «Riesgos conocidos»).

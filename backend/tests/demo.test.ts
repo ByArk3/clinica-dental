@@ -61,6 +61,14 @@ describe('Datos de demostración', () => {
     expect(endo).toBeGreaterThan(0);
     expect(await prisma.atencionTratamiento.count({ where: { tratamiento: { nombre: { startsWith: 'Endodoncia' } }, atencion: { odontologo: { especialidad: 'Endodoncia' } } } })).toBe(endo);
     expect(await prisma.descuento.count({ where: { nombre: { endsWith: '(diciembre)' } } })).toBe(2);
+    // pendiente 33: ~80 % de los insumos activos con 100 o más; ~20 % con stock bajo (en el mínimo, con su alerta)
+    const activos = await prisma.insumo.findMany({ where: { activo: true } });
+    const altos = activos.filter((i) => i.stockActual.toNumber() >= 100).length;
+    const bajos = activos.filter((i) => i.stockActual.lte(i.stockMinimo));
+    expect(altos / activos.length).toBeGreaterThanOrEqual(0.75);
+    expect(bajos.length).toBeGreaterThanOrEqual(4);
+    expect(altos + bajos.length).toBe(activos.length);
+    for (const b of bajos) expect(await prisma.alertaStock.count({ where: { insumoId: b.id, revisada: false } })).toBe(1);
   });
 
   it('el stock nunca queda negativo y coincide con el kárdex', async () => {

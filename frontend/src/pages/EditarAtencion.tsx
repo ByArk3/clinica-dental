@@ -5,6 +5,9 @@ import { editarAtencionSchema, MENSAJES, LIMITE_TEXTO, limpiarTextoLibre } from 
 import { atencionApi, tarifarioApi, type ResultadoEdicion } from '../api/recursos';
 import { PiezaDental, textoPieza } from '../components/PiezaDental';
 import { BotonAccion, Contador } from '../components/Interaccion';
+import { InsumosAtencion, consumoEfectivo, type AjusteInsumos } from '../components/InsumosAtencion';
+import { FranjaPaciente, SeccionAtencion } from '../components/PanelAtencion';
+import { calcularConsumo } from '../components/TablaInsumos';
 import { fechaPE, mensajeError, solesPE } from '../formato';
 
 interface Linea {
@@ -29,6 +32,9 @@ export default function EditarAtencion() {
   const [motivo, setMotivo] = useState('');
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [resultado, setResultado] = useState<ResultadoEdicion | null>(null);
+  const [ajuste, setAjuste] = useState<AjusteInsumos>(null);
+  const [motivoInsumos, setMotivoInsumos] = useState('');
+  const catalogo = useQuery({ queryKey: ['insumos-para-atencion'], queryFn: atencionApi.insumos, staleTime: 60_000 });
 
   useEffect(() => {
     if (!atencion.data) return;
@@ -44,12 +50,24 @@ export default function EditarAtencion() {
     return [...m.values()];
   }, [tarifario.data, atencion.data]);
   const cobrada = !!atencion.data?.cobrada;
+  const porId = useMemo(() => new Map((tarifario.data ?? []).map((t) => [t.id, t])), [tarifario.data]);
+  const elegidos = lineas.map((l) => (l.tratamientoId ? porId.get(l.tratamientoId) : undefined));
+  // Lo que ya se descontó (vuelve al stock al calcular «Queda»)
+  const yaDescontado = useMemo(() => new Map((atencion.data?.insumos ?? []).map((x) => [x.insumoId, Number(x.cantidad)])), [atencion.data]);
+  // Si al registrarla se ajustaron los insumos, se parte de lo que realmente se usó
+  useEffect(() => {
+    if (!atencion.data?.insumos || !tarifario.data) return;
+    const base = calcularConsumo(atencion.data.tratamientos.map((t) => tarifario.data.find((x) => x.id === t.tratamientoId)));
+    const real = atencion.data.insumos;
+    const igual = base.length === real.length && base.every((b) => real.some((r) => r.insumoId === b.insumoId && Number(r.cantidad) === Math.round(b.cantidad * 100) / 100));
+    setAjuste(igual ? null : real.map((r) => ({ insumoId: r.insumoId, cantidad: String(Number(r.cantidad)) })));
+  }, [atencion.data, tarifario.data]);
 
   const guardar = useMutation({
     mutationFn: (d: Parameters<typeof atencionApi.editar>[1]) => atencionApi.editar(id, d),
     onSuccess: (r) => {
       setResultado(r);
-      for (const k of ['historial', 'mis-citas-od', 'atencion', 'tarifario-activo']) qc.invalidateQueries({ queryKey: [k] });
+      for (const k of ['historial', 'mis-citas-od', 'atencion', 'tarifario-activo', 'insumos-para-atencion']) qc.invalidateQueries({ queryKey: [k] });
     },
   });
   const actualizar = (clave: number, cambio: Partial<Linea>) => setLineas((ls) => ls.map((l) => (l.clave === clave ? { ...l, ...cambio } : l)));
@@ -61,6 +79,7 @@ export default function EditarAtencion() {
       observaciones: observaciones || undefined,
       motivo,
       tratamientos: lineas.filter((l) => l.tratamientoId).map((l) => ({ tratamientoId: Number(l.tratamientoId), piezaDental: l.piezaDental })),
+      ...(ajuste && !cobrada ? { insumos: consumoEfectivo(elegidos, ajuste), motivoInsumos: motivoInsumos || undefined } : {}),
     });
     if (!v.success) {
       const c: Record<string, string> = {};
@@ -105,65 +124,70 @@ export default function EditarAtencion() {
 
   return (
     <>
-      <div className="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-3">
+      <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
         <h1 className="h4 mb-0">Editar atención</h1>
-        <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/atencion/registrar'))}>← Regresar</button>
+        <button type="button" className="btn btn-outline-secondary btn-sm btn-regresar" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/atencion/registrar'))}><span aria-hidden="true">←</span> Regresar</button>
       </div>
-      <p className="mb-3">
-        <strong>{a.paciente.nombres} {a.paciente.apellidos}</strong> · {fechaPE(a.fecha)} {a.hora} · {a.motivo}
-      </p>
-      {cobrada && <div className="alert alert-info small">Esta atención ya fue cobrada: solo puede corregir el diagnóstico y las observaciones. Para cambiar los tratamientos, pida en caja que anulen el comprobante.</div>}
+      <FranjaPaciente nombre={`${a.paciente.nombres} ${a.paciente.apellidos}`} dni={a.paciente.dni} hora={`${fechaPE(a.fecha)} ${a.hora}`} motivo={a.motivo} alergias={a.paciente.alergias} />
+      {cobrada && <div className="alert alert-info small">Esta atención ya fue cobrada: solo puede corregir el diagnóstico y las observaciones. Para cambiar los tratamientos o los insumos, pida en caja que anulen el comprobante.</div>}
 
-      <form className="tarjeta" onSubmit={enviar} noValidate style={{ maxWidth: 720 }}>
-        <div className="mb-3">
-          <label htmlFor="diagnostico" className="form-label obligatorio">Diagnóstico</label>
+      <form onSubmit={enviar} noValidate style={{ maxWidth: 760 }}>
+        <SeccionAtencion n={1} titulo="Diagnóstico" obligatorio>
+          <label htmlFor="diagnostico" className="visually-hidden">Diagnóstico</label>
           <textarea id="diagnostico" rows={2} className={`form-control ${errores.diagnostico ? 'is-invalid' : ''}`} value={diagnostico} maxLength={LIMITE_TEXTO.diagnostico} onChange={(e) => setDiagnostico(limpiarTextoLibre(e.target.value, LIMITE_TEXTO.diagnostico))} />
-            <Contador valor={diagnostico} max={LIMITE_TEXTO.diagnostico} />
           <div className="invalid-feedback">{errores.diagnostico}</div>
-        </div>
+          <Contador valor={diagnostico} max={LIMITE_TEXTO.diagnostico} />
+        </SeccionAtencion>
 
-        <span className="form-label d-block">Tratamientos *</span>
-        {errores.tratamientos && <div className="text-danger small mb-2">{errores.tratamientos}</div>}
-        {lineas.map((l, n) => (
-          <div className="border rounded p-2 mb-2" key={l.clave}>
-            <div className="d-flex gap-2 mb-2">
-              <select aria-label={`Tratamiento ${n + 1}`} className="form-select" value={l.tratamientoId} disabled={cobrada} onChange={(e) => actualizar(l.clave, { tratamientoId: e.target.value ? Number(e.target.value) : '' })}>
-                <option value="">Seleccione…</option>
-                {opciones.map((t) => (
-                  <option key={t.id} value={t.id}>{t.nombre} — {solesPE(t.precio)}</option>
-                ))}
-              </select>
-              {!cobrada && lineas.length > 1 && (
-                <button type="button" className="btn btn-outline-secondary" aria-label={`Quitar tratamiento ${n + 1}`} onClick={() => setLineas((ls) => ls.filter((x) => x.clave !== l.clave))}>✕</button>
+        <SeccionAtencion n={2} titulo="Tratamientos" obligatorio>
+          {errores.tratamientos && <div className="text-danger small mb-2">{errores.tratamientos}</div>}
+          {lineas.map((l, n) => (
+            <div className="linea-tratamiento" key={l.clave}>
+              <div className="d-flex gap-2 align-items-center mb-2">
+                <select aria-label={`Tratamiento ${n + 1}`} className="form-select" value={l.tratamientoId} disabled={cobrada} onChange={(e) => actualizar(l.clave, { tratamientoId: e.target.value ? Number(e.target.value) : '' })}>
+                  <option value="">Seleccione…</option>
+                  {opciones.map((t) => (
+                    <option key={t.id} value={t.id}>{t.nombre} — {solesPE(t.precio)}</option>
+                  ))}
+                </select>
+                {!cobrada && lineas.length > 1 && (
+                  <button type="button" className="btn btn-outline-secondary" aria-label={`Quitar tratamiento ${n + 1}`} title="Quitar tratamiento" onClick={() => setLineas((ls) => ls.filter((x) => x.clave !== l.clave))}>✕</button>
+                )}
+              </div>
+              {!cobrada ? (
+                <PiezaDental plegable valor={l.piezaDental} onCambiar={(p) => actualizar(l.clave, { piezaDental: p })} />
+              ) : (
+                <div className="small text-muted">{l.piezaDental ? textoPieza(l.piezaDental) : 'Sin pieza específica (tratamiento general)'}</div>
               )}
             </div>
-            {!cobrada ? (
-              <PiezaDental valor={l.piezaDental} onCambiar={(p) => actualizar(l.clave, { piezaDental: p })} />
-            ) : (
-              l.piezaDental && <div className="small text-muted">{textoPieza(l.piezaDental)}</div>
-            )}
-          </div>
-        ))}
-        {!cobrada && (
-          <button type="button" className="btn btn-sm btn-outline-secondary mb-3" onClick={() => setLineas((ls) => [...ls, { clave: siguienteClave++, tratamientoId: '' }])}>
-            + Agregar otro tratamiento
-          </button>
-        )}
-        {!cobrada && <p className="small text-muted">Si cambia los tratamientos, el stock de insumos se corrige solo. Los que se mantienen conservan su precio.</p>}
+          ))}
+          {!cobrada && (
+            <button type="button" className="btn btn-sm btn-outline-secondary mt-2" onClick={() => setLineas((ls) => [...ls, { clave: siguienteClave++, tratamientoId: '' }])}>
+              + Agregar otro tratamiento
+            </button>
+          )}
+          {!cobrada && <p className="small text-muted mt-2 mb-0">Si cambia los tratamientos o los insumos, el stock se corrige solo con la diferencia. Los tratamientos que se mantienen conservan su precio.</p>}
+        </SeccionAtencion>
 
-        <div className="mb-3">
-          <label htmlFor="observaciones" className="form-label">Observaciones</label>
+        <SeccionAtencion n={3} titulo="Observaciones" opcional>
+          <label htmlFor="observaciones" className="visually-hidden">Observaciones</label>
           <textarea id="observaciones" rows={2} className={`form-control ${errores.observaciones ? 'is-invalid' : ''}`} value={observaciones} maxLength={LIMITE_TEXTO.observaciones} onChange={(e) => setObservaciones(limpiarTextoLibre(e.target.value, LIMITE_TEXTO.observaciones))} />
           <div className="invalid-feedback">{errores.observaciones}</div>
-            <Contador valor={observaciones} max={LIMITE_TEXTO.observaciones} />
-        </div>
-        <div className="mb-3">
-          <label htmlFor="motivo" className="form-label">Motivo de la corrección *</label>
+          <Contador valor={observaciones} max={LIMITE_TEXTO.observaciones} />
+        </SeccionAtencion>
+
+        <SeccionAtencion n={4} titulo="Resumen y guardar">
+          {!cobrada && (
+            <div className="mb-3 pb-3 border-bottom">
+              <InsumosAtencion tratamientos={elegidos} catalogo={catalogo.data ?? []} ajuste={ajuste} onAjuste={setAjuste} motivo={motivoInsumos} onMotivo={setMotivoInsumos} yaDescontado={yaDescontado} error={errores.insumos ?? errores.motivoInsumos} />
+            </div>
+          )}
+          <label htmlFor="motivo" className="form-label obligatorio">Motivo de la corrección</label>
           <input id="motivo" maxLength={LIMITE_TEXTO.motivo} className={`form-control ${errores.motivo ? 'is-invalid' : ''}`} placeholder="p. ej. Me equivoqué de pieza" value={motivo} onChange={(e) => setMotivo(e.target.value)} />
           <div className="invalid-feedback">{errores.motivo}</div>
-        </div>
-        {guardar.isError && <div className="alert alert-danger" role="alert">{mensajeError(guardar.error)}</div>}
-        <BotonAccion type="submit" className="btn btn-acento w-100" mutacion={guardar}>Guardar corrección</BotonAccion>
+          {guardar.isError && <div className="alert alert-danger mt-3" role="alert">{mensajeError(guardar.error)}</div>}
+          <BotonAccion type="submit" className="btn btn-acento w-100 mt-3" mutacion={guardar}>Guardar corrección</BotonAccion>
+        </SeccionAtencion>
       </form>
     </>
   );

@@ -644,6 +644,12 @@ export const atencionSchema = z.object({
       }),
     )
     .min(1, 'Agregue al menos un tratamiento'),
+  // Pendiente 32: el odontólogo ajusta los insumos usados (si no se envía, se descuenta lo que indica el tarifario)
+  insumos: z
+    .array(z.object({ insumoId: z.coerce.number().int().positive(), cantidad }))
+    .max(60)
+    .optional(),
+  motivoInsumos: textoLibreOpcional(300).optional(),
 });
 export type AtencionDTO = z.infer<typeof atencionSchema>;
 /** Editar una atención: los mismos datos y el motivo de la corrección (queda en el historial). */

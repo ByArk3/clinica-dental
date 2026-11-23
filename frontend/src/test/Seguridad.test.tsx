@@ -90,7 +90,7 @@ describe('Editar atención', () => {
     await u.type(diag, 'Caries en 26');
     await u.click(screen.getByRole('button', { name: 'Guardar corrección' }));
     expect(screen.getByText('Indique el motivo (mínimo 5 caracteres)')).toBeInTheDocument();
-    await u.type(screen.getByLabelText('Motivo de la corrección *'), 'Me equivoqué de pieza');
+    await u.type(screen.getByLabelText('Motivo de la corrección'), 'Me equivoqué de pieza');
     await u.click(screen.getByRole('button', { name: 'Guardar corrección' }));
     await waitFor(() =>
       expect(llamadas.find((l) => l.metodo === 'PATCH')?.body).toEqual({ diagnostico: 'Caries en 26', motivo: 'Me equivoqué de pieza', tratamientos: [{ tratamientoId: 1, piezaDental: '16' }] }),

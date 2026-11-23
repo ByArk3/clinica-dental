@@ -4,8 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { atencionSchema, limpiarTextoLibre, LIMITE_TEXTO, nombrePieza, type AtencionDTO } from '@clinica/shared';
 import { atencionApi, historialApi, tarifarioApi, type ResultadoAtencion } from '../api/recursos';
 import { PiezaDental } from '../components/PiezaDental';
-import { TablaInsumos, calcularConsumo } from '../components/TablaInsumos';
-import { VistaHistorial } from '../components/VistaHistorial';
+import { InsumosAtencion, consumoEfectivo, type AjusteInsumos } from '../components/InsumosAtencion';
+import { FranjaPaciente, SeccionAtencion, UltimasAtenciones } from '../components/PanelAtencion';
 import { BotonAccion, ConfirmarSiNo, Contador, FilaResumen } from '../components/Interaccion';
 import { edadDe, hoyLima, mensajeError, numPE, solesPE } from '../formato';
 
@@ -36,10 +36,14 @@ export default function RegistrarAtencion() {
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [resultado, setResultado] = useState<ResultadoAtencion | null>(null);
   const [porConfirmar, setPorConfirmar] = useState<AtencionDTO | null>(null);
+  const [ajuste, setAjuste] = useState<AjusteInsumos>(null);
+  const [motivoInsumos, setMotivoInsumos] = useState('');
+  const catalogo = useQuery({ queryKey: ['insumos-para-atencion'], queryFn: atencionApi.insumos, staleTime: 60_000 });
 
   const porId = useMemo(() => new Map(tarifario.data?.map((t) => [t.id, t])), [tarifario.data]);
   const elegidos = lineas.map((l) => (l.tratamientoId ? porId.get(l.tratamientoId) : undefined));
-  const consumo = calcularConsumo(elegidos);
+  const consumo = consumoEfectivo(elegidos, ajuste);
+  const nombreInsumo = (id: number) => catalogo.data?.find((c) => c.id === id) ?? elegidos.flatMap((t) => t?.insumos ?? []).map((i) => ({ id: i.insumoId, nombre: i.nombre, unidad: i.unidad })).find((x) => x.id === id);
   const total = elegidos.reduce((s, t) => s + Number(t?.precio ?? 0), 0);
 
   const guardar = useMutation({
@@ -50,6 +54,7 @@ export default function RegistrarAtencion() {
       qc.invalidateQueries({ queryKey: ['mis-citas-od'] });
       qc.invalidateQueries({ queryKey: ['historial'] });
       qc.invalidateQueries({ queryKey: ['tarifario-activo'] });
+      qc.invalidateQueries({ queryKey: ['insumos-para-atencion'] });
     },
     onError: () => setPorConfirmar(null),
   });
@@ -62,6 +67,8 @@ export default function RegistrarAtencion() {
       diagnostico,
       observaciones: observaciones || undefined,
       tratamientos: lineas.filter((l) => l.tratamientoId).map((l) => ({ tratamientoId: Number(l.tratamientoId), piezaDental: l.piezaDental })),
+      // pendiente 32: solo si el odontólogo ajustó los insumos
+      ...(ajuste ? { insumos: consumo, motivoInsumos: motivoInsumos || undefined } : {}),
     };
     const v = atencionSchema.safeParse(datos);
     if (!v.success) {
@@ -103,71 +110,67 @@ export default function RegistrarAtencion() {
 
   return (
     <>
-      <div className="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-3">
+      <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
         <h1 className="h4 mb-0">Registrar atención</h1>
-        <Link to="/atencion/registrar" className="btn btn-sm btn-outline-secondary">← Regresar</Link>
+        <Link to="/atencion/registrar" className="btn btn-outline-secondary btn-sm btn-regresar"><span aria-hidden="true">←</span> Regresar</Link>
       </div>
-      <p className="mb-3">
-        <strong>{cita.paciente.nombres} {cita.paciente.apellidos}</strong> · {cita.hora} · {cita.motivo}
-      </p>
-      {cita.paciente.alergias && (
-        <div className="alert alert-danger py-2" role="note">⚠ Alergias: <strong>{cita.paciente.alergias}</strong></div>
-      )}
+      <FranjaPaciente nombre={`${cita.paciente.nombres} ${cita.paciente.apellidos}`} dni={cita.paciente.dni} edad={edadDe(cita.paciente.fechaNacimiento)} hora={cita.hora} motivo={cita.motivo} h={historial.data} />
 
       <div className="row g-3">
-        <div className="col-lg-7">
-          <form className="tarjeta" onSubmit={enviar} noValidate>
-            <div className="mb-3">
-              <label htmlFor="diagnostico" className="form-label obligatorio">Diagnóstico</label>
+        <div className="col-lg-8">
+          <form onSubmit={enviar} noValidate>
+            <SeccionAtencion n={1} titulo="Diagnóstico" obligatorio>
+              <label htmlFor="diagnostico" className="visually-hidden">Diagnóstico</label>
               <textarea id="diagnostico" rows={2} className={`form-control ${errores.diagnostico ? 'is-invalid' : ''}`} value={diagnostico} maxLength={LIMITE_TEXTO.diagnostico} onChange={(e) => setDiagnostico(limpiarTextoLibre(e.target.value, LIMITE_TEXTO.diagnostico))} />
-            <Contador valor={diagnostico} max={LIMITE_TEXTO.diagnostico} />
               <div className="invalid-feedback">{errores.diagnostico}</div>
-            </div>
+              <Contador valor={diagnostico} max={LIMITE_TEXTO.diagnostico} />
+            </SeccionAtencion>
 
-            <span className="form-label obligatorio d-block">Tratamientos del tarifario</span>
-            {errores.tratamientos && <div className="text-danger small mb-2">{errores.tratamientos}</div>}
-            {lineas.map((l, n) => (
-              <div className="border rounded p-2 mb-2" key={l.clave}>
-                <div className="d-flex gap-2 mb-2">
-                  <select
-                    aria-label={`Tratamiento ${n + 1}`}
-                    className={`form-select ${errores.tratamientos && !l.tratamientoId ? 'is-invalid' : ''}`}
-                    value={l.tratamientoId}
-                    onChange={(e) => actualizar(l.clave, { tratamientoId: e.target.value ? Number(e.target.value) : '' })}
-                  >
-                    <option value="">Seleccione…</option>
-                    {tarifario.data?.map((t) => (
-                      <option key={t.id} value={t.id}>{t.nombre} — {solesPE(t.precio)}</option>
-                    ))}
-                  </select>
-                  {lineas.length > 1 && (
-                    <button type="button" className="btn btn-outline-secondary" aria-label={`Quitar tratamiento ${n + 1}`} onClick={() => setLineas((ls) => ls.filter((x) => x.clave !== l.clave))}>
-                      ✕
-                    </button>
-                  )}
+            <SeccionAtencion n={2} titulo="Tratamientos" obligatorio>
+              {errores.tratamientos && <div className="text-danger small mb-2">{errores.tratamientos}</div>}
+              {lineas.map((l, n) => (
+                <div className="linea-tratamiento" key={l.clave}>
+                  <div className="d-flex gap-2 align-items-center mb-2">
+                    <select
+                      aria-label={`Tratamiento ${n + 1}`}
+                      className={`form-select ${errores.tratamientos && !l.tratamientoId ? 'is-invalid' : ''}`}
+                      value={l.tratamientoId}
+                      onChange={(e) => actualizar(l.clave, { tratamientoId: e.target.value ? Number(e.target.value) : '' })}
+                    >
+                      <option value="">Seleccione…</option>
+                      {tarifario.data?.map((t) => (
+                        <option key={t.id} value={t.id}>{t.nombre} — {solesPE(t.precio)}</option>
+                      ))}
+                    </select>
+                    {lineas.length > 1 && (
+                      <button type="button" className="btn btn-outline-secondary" aria-label={`Quitar tratamiento ${n + 1}`} title="Quitar tratamiento" onClick={() => setLineas((ls) => ls.filter((x) => x.clave !== l.clave))}>
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  <PiezaDental plegable valor={l.piezaDental} edad={edadDe(cita.paciente.fechaNacimiento)} onCambiar={(p) => actualizar(l.clave, { piezaDental: p })} />
                 </div>
-                <PiezaDental valor={l.piezaDental} edad={edadDe(cita.paciente.fechaNacimiento)} onCambiar={(p) => actualizar(l.clave, { piezaDental: p })} />
-              </div>
-            ))}
-            <button type="button" className="btn btn-sm btn-outline-secondary mb-3" onClick={() => setLineas((ls) => [...ls, nuevaLinea()])}>
-              + Agregar otro tratamiento
-            </button>
+              ))}
+              <button type="button" className="btn btn-sm btn-outline-secondary mt-2" onClick={() => setLineas((ls) => [...ls, nuevaLinea()])}>
+                + Agregar otro tratamiento
+              </button>
+            </SeccionAtencion>
 
-            <div className="mb-3">
-              <label htmlFor="observaciones" className="form-label">Observaciones <small className="text-muted">(opcional)</small></label>
-              <textarea id="observaciones" rows={2} className={`form-control ${errores.observaciones ? 'is-invalid' : ''}`} value={observaciones} maxLength={LIMITE_TEXTO.observaciones} onChange={(e) => setObservaciones(limpiarTextoLibre(e.target.value, LIMITE_TEXTO.observaciones))} />
-              <Contador valor={observaciones} max={LIMITE_TEXTO.observaciones} />
+            <SeccionAtencion n={3} titulo="Observaciones" opcional>
+              <label htmlFor="observaciones" className="visually-hidden">Observaciones</label>
+              <textarea id="observaciones" rows={2} placeholder="Indicaciones para el paciente, próximos pasos…" className={`form-control ${errores.observaciones ? 'is-invalid' : ''}`} value={observaciones} maxLength={LIMITE_TEXTO.observaciones} onChange={(e) => setObservaciones(limpiarTextoLibre(e.target.value, LIMITE_TEXTO.observaciones))} />
               <div className="invalid-feedback">{errores.observaciones}</div>
-            </div>
+              <Contador valor={observaciones} max={LIMITE_TEXTO.observaciones} />
+            </SeccionAtencion>
 
-            <h2 className="h6">Insumos que se descontarán</h2>
-            <TablaInsumos filas={consumo} />
-
-            <div className="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
-              <span>Total del tarifario: <strong>{solesPE(total)}</strong></span>
-            </div>
-            {guardar.isError && <div className="alert alert-danger mt-3" role="alert">{mensajeError(guardar.error)}</div>}
-            <BotonAccion type="submit" className="btn btn-acento w-100 mt-3" mutacion={guardar}>Guardar atención</BotonAccion>
+            <SeccionAtencion n={4} titulo="Resumen y guardar">
+              <InsumosAtencion tratamientos={elegidos} catalogo={catalogo.data ?? []} ajuste={ajuste} onAjuste={setAjuste} motivo={motivoInsumos} onMotivo={setMotivoInsumos} error={errores.insumos ?? errores.motivoInsumos} />
+              <div className="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
+                <span>Total del tarifario: <strong>{solesPE(total)}</strong></span>
+              </div>
+              {guardar.isError && <div className="alert alert-danger mt-3" role="alert">{mensajeError(guardar.error)}</div>}
+              <BotonAccion type="submit" className="btn btn-acento w-100 mt-3" mutacion={guardar}>Guardar atención</BotonAccion>
+            </SeccionAtencion>
             <ConfirmarSiNo abierto={!!porConfirmar} titulo="¿Guardar la atención?" ocupado={guardar.isPending} onNo={() => setPorConfirmar(null)} onSi={() => porConfirmar && guardar.mutate(porConfirmar)}>
               {porConfirmar && (
                 <>
@@ -182,8 +185,8 @@ export default function RegistrarAtencion() {
                     );
                   })}
                   <FilaResumen etiqueta="Total a Caja">{solesPE(total)}</FilaResumen>
-                  <FilaResumen etiqueta="Insumos">
-                    {consumo.length === 0 ? 'Ninguno' : consumo.map((f) => `${f.nombre}: ${numPE(f.cantidad)} ${f.unidad}`).join(' · ')}
+                  <FilaResumen etiqueta={ajuste ? 'Insumos (ajustados)' : 'Insumos'}>
+                    {consumo.length === 0 ? 'Ninguno' : consumo.map((f) => { const i = nombreInsumo(f.insumoId); return `${i?.nombre ?? ''}: ${numPE(f.cantidad)} ${i?.unidad ?? ''}`; }).join(' · ')}
                   </FilaResumen>
                   <p className="small text-muted mt-2 mb-0">Al guardar se descuentan los insumos del stock y la cita pasa a Caja para cobrarse.</p>
                 </>
@@ -191,8 +194,8 @@ export default function RegistrarAtencion() {
             </ConfirmarSiNo>
           </form>
         </div>
-        <div className="col-lg-5">
-          {historial.data && <VistaHistorial h={historial.data} compacto />}
+        <div className="col-lg-4">
+          {historial.data && <UltimasAtenciones h={historial.data} />}
         </div>
       </div>
     </>

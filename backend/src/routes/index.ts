@@ -85,6 +85,7 @@ rutas.patch('/tratamientos/:id/desactivar', admin, Inventario.desactivarTratamie
 rutas.patch('/tratamientos/:id/activar', admin, Inventario.activarTratamiento);
 
 // Insumos CU-18..22, kárdex y alertas
+rutas.get('/insumos/para-atencion', requireRol('administrador', 'odontologo'), Inventario.insumosParaAtencion);
 rutas.get('/insumos', admin, Inventario.listarInsumos);
 rutas.get('/insumos/buscar', admin, Inventario.buscarInsumo);
 rutas.post('/insumos', admin, Inventario.crearInsumo);

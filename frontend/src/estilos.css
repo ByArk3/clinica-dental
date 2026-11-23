@@ -262,3 +262,29 @@ body { background: var(--fondo); }
   [data-bs-theme='dark'] .table tbody tr.table-warning:hover > *:first-child { background-image: linear-gradient(to right, #ffc107 4px, transparent 4px); }
   [data-bs-theme='dark'] .table tbody tr.table-danger:hover > *:first-child { background-image: linear-gradient(to right, #dc3545 4px, transparent 4px); }
 }
+
+/* Pendiente 31: «Registrar / Editar atención» en secciones numeradas */
+.seccion-atencion + .seccion-atencion { margin-top: 1rem; }
+.num-seccion { display: inline-flex; align-items: center; justify-content: center; width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--acento); color: #fff; font-size: 0.85rem; font-weight: 700; flex-shrink: 0; }
+.linea-tratamiento { border: 1px solid var(--bs-border-color); border-radius: 8px; padding: 0.6rem; }
+.linea-tratamiento + .linea-tratamiento { margin-top: 0.5rem; }
+.tabla-insumos-atencion td, .tabla-insumos-atencion th { vertical-align: middle; }
+
+/* Pendiente 30: en el modo oscuro los botones secundarios (Regresar, Kárdex, Modificar, Elegir pieza…) parecían
+   desactivados. Texto y borde gris claro con un fondo apenas marcado; los desactivados de verdad siguen apagados. */
+[data-bs-theme='dark'] .btn-outline-secondary {
+  --bs-btn-color: #d3dade;
+  --bs-btn-border-color: #71828a;
+  --bs-btn-bg: rgba(255, 255, 255, 0.05);
+  --bs-btn-disabled-color: #5f6b70;
+  --bs-btn-disabled-border-color: #3a4549;
+  --bs-btn-disabled-bg: transparent;
+}
+[data-bs-theme='dark'] .btn-outline-danger { --bs-btn-bg: rgba(220, 53, 69, 0.06); --bs-btn-color: #f1828d; --bs-btn-border-color: #c2414e; }
+/* «← Regresar»: un poco más grande que los demás botones pequeños */
+.btn-regresar.btn-sm { font-size: 0.9rem; padding-block: 0.3rem; }
+/* Odontograma: cada pieza bien delimitada y el número legible */
+[data-bs-theme='dark'] .pieza { border-color: #56666d; color: #eef2f3; background: #1a2b31; }
+[data-bs-theme='dark'] .titulo-cuadrante { color: #a9b6bb; }
+[data-bs-theme='dark'] .form-text { color: #a9b6bb; }
+[data-bs-theme='dark'] .linea-tratamiento { border-color: #3b4a50; }

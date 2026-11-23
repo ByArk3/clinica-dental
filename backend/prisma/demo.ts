@@ -379,12 +379,13 @@ export async function sembrarDemo(prisma: PrismaClient<any>, { silencioso = fals
     const cantidad = Prisma.Decimal.max(falta.plus(minimo.get(insumoId)!.mul(2)), 10);
     const p = await prisma.pedido.create({
       data: {
-        codigo: `PED-${String(++nPedido).padStart(4, '0')}`, proveedorId: proveedorDe.get(insumoId)!, registradoPorId: admin.id, estado: 'recibido', recibidoEn: masMin(cuando, -30),
-        observacionRecepcion: 'Compra urgente: el stock no alcanzaba para las atenciones del día', createdAt: masMin(cuando, -90), updatedAt: masMin(cuando, -30),
+        codigo: `PED-${String(++nPedido).padStart(4, '0')}`, proveedorId: proveedorDe.get(insumoId)!, registradoPorId: admin.id, estado: 'recibido', recibidoEn: cuando,
+        observacionRecepcion: 'Compra urgente: el stock no alcanzaba para las atenciones del día', createdAt: masMin(cuando, -90), updatedAt: cuando,
         detalles: { create: [{ insumoId, cantidadPedida: cantidad, cantidadRecibida: cantidad }] },
       },
     });
-    await moverStock(insumoId, cantidad, 'entrada_recepcion', masMin(cuando, -30), { tipo: 'pedido', id: p.id }, `Recepción ${p.codigo} (urgente)`);
+    // misma hora que la atención (justo antes en el kárdex): otra atención a esa hora pudo usar el insumo
+    await moverStock(insumoId, cantidad, 'entrada_recepcion', cuando, { tipo: 'pedido', id: p.id }, `Recepción ${p.codigo} (urgente)`);
   }
 
   // ---------- Saldo a favor ----------
@@ -551,8 +552,9 @@ export async function sembrarDemo(prisma: PrismaClient<any>, { silencioso = fals
         const previsto = g.si(0.7) ? 'Consulta' : g.pesado<string>([['Profilaxis', 3], ['Curación con resina', 3], ['Destartraje', 2], ['Blanqueamiento', 1]]);
         const creada = reservaAntes(f, 1, 8);
         const pagoAdelanto = masMin(creada, g.entre(5, 50));
+        // hoy: lo que empezó hace poco aún no se atiende (así ningún movimiento ni cobro queda con hora futura)
         const resultado = f === hoy
-          ? g.pesado<string>([['pagada', 5], ['atendida', 2], ['confirmada', 1]])
+          ? masMin(inicio, 80) > ahora ? 'confirmada' : g.pesado<string>([['pagada', 5], ['atendida', 2], ['confirmada', 1]])
           : faltones.get(p.id) && g.si(0.5)
             ? 'inasistencia'
             : g.pesado<string>([['pagada', 82], ['cancelada', 5], ['cancelada_pagada', 4], ['liberada', 5], ['clinica', devolucionHecha ? 0 : 1]]);
@@ -664,15 +666,17 @@ export async function sembrarDemo(prisma: PrismaClient<any>, { silencioso = fals
     ['Anestesia articaína 4 %', 'Lote vencido retirado del inventario'],
     ['Limas de endodoncia', 'Instrumental deformado: se descartó'],
     ['Ligaduras elásticas', 'Paquete abierto y contaminado'],
-    ['Babero descartable', 'Caja dañada por humedad'],
     ['Gel blanqueador', 'Lote vencido retirado del inventario'],
   ];
-  const pedirYa = ['Guantes de nitrilo M', 'Anestesia articaína 4 %', 'Limas de endodoncia', 'Ligaduras elásticas', 'Babero descartable'];
+  // los movimientos del cierre van después de todo lo registrado hoy (el kárdex queda en orden)
+  const ultimoAntes = (await prisma.movimientoKardex.aggregate({ _max: { createdAt: true } }))._max.createdAt ?? ahora;
+  const baseCierre = Math.max(+masMin(ahora, -30), +ultimoAntes + 60_000);
+  const pedirYa = ['Guantes de nitrilo M', 'Anestesia articaína 4 %', 'Limas de endodoncia', 'Ligaduras elásticas'];
   for (const [k, [nombre, motivo]] of cierre.entries()) {
     const ins = insumos.find((i) => i.nombre === nombre);
     if (!ins) continue;
     const baja = stock.get(ins.id)!.minus(minimo.get(ins.id)!.minus(1));
-    const cuando = masMin(ahora, -60 + k * 5);
+    const cuando = new Date(Math.min(baseCierre + k * 60_000, +ahora));
     if (baja.gt(0)) {
       await prisma.movimientoKardex.create({ data: { insumoId: ins.id, tipo: 'merma', cantidad: baja.neg(), saldo: stock.get(ins.id)!.minus(baja), motivo, referenciaTipo: 'ajuste', referenciaId: ins.id, usuarioId: admin.id, createdAt: cuando } });
       stock.set(ins.id, stock.get(ins.id)!.minus(baja));
@@ -684,6 +688,33 @@ export async function sembrarDemo(prisma: PrismaClient<any>, { silencioso = fals
       await prisma.pedido.create({
         data: { codigo: `PED-${String(++nPedido).padStart(4, '0')}`, proveedorId: proveedorDe.get(ins.id)!, registradoPorId: admin.id, createdAt: masMin(cuando, 3), updatedAt: masMin(cuando, 3), detalles: { create: [{ insumoId: ins.id, cantidadPedida: Prisma.Decimal.max(minimo.get(ins.id)!.mul(5), 20) }] } },
       });
+    }
+  }
+
+  // Pendiente 33: el 80 % de los insumos queda con 100 o más (para probar sin quedarse sin stock) y el 20 % —los del
+  // cierre— con stock bajo y su alerta. La reposición se recibió hoy, después de todo lo demás (el kárdex sigue en orden).
+  const bajos = new Set(cierre.map(([n]) => insumos.find((i) => i.nombre === n)?.id).filter((x): x is number => x !== undefined));
+  const reponer = insumos.filter((i) => !bajos.has(i.id) && stock.get(i.id)!.lessThan(100));
+  const ultimo = await prisma.movimientoKardex.aggregate({ _max: { createdAt: true } });
+  const recibido = new Date(Math.max(+masMin(ahora, -1), +(ultimo._max.createdAt ?? ahora)));
+  const porProveedorRep = new Map<number, typeof reponer>();
+  for (const i of reponer) porProveedorRep.set(proveedorDe.get(i.id)!, [...(porProveedorRep.get(proveedorDe.get(i.id)!) ?? []), i]);
+  for (const [proveedorId, lista] of porProveedorRep) {
+    const cantidades = lista.map((i) => ({ insumoId: i.id, cantidad: D(100).minus(stock.get(i.id)!).plus(g.entre(5, 40)).ceil() }));
+    const p = await prisma.pedido.create({
+      data: {
+        codigo: `PED-${String(++nPedido).padStart(4, '0')}`, proveedorId, registradoPorId: admin.id, estado: 'recibido', recibidoEn: recibido,
+        observacionRecepcion: 'Reposición para la agenda de diciembre', createdAt: en(sumarDias(hoy, -2), '09:30'), updatedAt: recibido,
+        detalles: { create: cantidades.map((x) => ({ insumoId: x.insumoId, cantidadPedida: x.cantidad, cantidadRecibida: x.cantidad })) },
+      },
+    });
+    for (const x of cantidades) {
+      await moverStock(x.insumoId, x.cantidad, 'entrada_recepcion', recibido, { tipo: 'pedido', id: p.id }, `Recepción ${p.codigo}`);
+      const alerta = alertaAbierta.get(x.insumoId);
+      if (alerta) {
+        await prisma.alertaStock.update({ where: { id: alerta }, data: { revisada: true, revisadaPorId: admin.id, revisadaEn: recibido } });
+        alertaAbierta.delete(x.insumoId);
+      }
     }
   }
 
