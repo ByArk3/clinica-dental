@@ -14,6 +14,8 @@ shared/    tipos (Rol, EstadoCita), mensajes exactos y esquemas Zod
 
 ## Opción rápida: Docker (recomendado para el equipo)
 
+> **PC nueva sin nada instalado:** seguir [`Instalar desde cero (PC nueva).txt`](<Instalar desde cero (PC nueva).txt>) (WSL, Docker Desktop, Git, `.env`, construir y prender, usuarios y problemas comunes).
+
 Requisito: [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows, macOS o Linux).
 
 Para la **demo** (con usuarios de prueba), copiar `.env.docker.example` a `.env` (ya trae `SEED=true`) o activarlo al arrancar:

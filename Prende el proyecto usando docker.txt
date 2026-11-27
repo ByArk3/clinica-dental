@@ -5,7 +5,7 @@ Clínica Dental — Grupo 1
 Carpeta del proyecto: D:\Proyectos\clinica-dental (en otra PC puede ser C:\Proyectos\clinica-dental:
 cambiar la letra en los comandos).
 
-¿PC NUEVA, SIN NADA? Hacer primero la sección «DESDE CERO» del final y luego volver aquí.
+¿PC NUEVA, SIN NADA? Seguir el archivo «Instalar desde cero (PC nueva).txt» (todo, paso a paso).
 
 Antes de empezar: abrir Docker Desktop y esperar a que diga que está corriendo.
 Todos los comandos van en PowerShell, uno por uno y en este orden.

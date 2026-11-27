@@ -1,0 +1,218 @@
+INSTALAR LA CLÍNICA DENTAL DESDE CERO (PC NUEVA CON WINDOWS)
+Clínica Dental — Grupo 1
+=============================================================
+
+Sirve para una PC que no tiene nada instalado. Al final el sistema queda funcionando en
+http://localhost:8080 con los datos de prueba (200 personas, citas hasta el 20/12/2026, insumos, pedidos…).
+
+Todos los comandos van en PowerShell, UNO POR UNO, en este orden.
+Para abrir PowerShell: botón Inicio → escribir "PowerShell" → Enter.
+(Si un paso dice "como administrador": clic derecho en PowerShell → "Ejecutar como administrador".)
+
+Tiempo aproximado la primera vez: 30 a 60 minutos (casi todo es descarga).
+
+
+-------------------------------------------------------------
+PARTE 1 — PROGRAMAS (una sola vez por PC)
+-------------------------------------------------------------
+
+Requisitos: Windows 10 (versión 2004 o más nueva) o Windows 11, 8 GB de RAM como mínimo,
+unos 15 GB libres en disco e Internet.
+
+1.1  Activar WSL 2 (lo necesita Docker). En PowerShell COMO ADMINISTRADOR:
+
+     wsl --install
+
+     Reiniciar la PC cuando lo pida.
+
+1.2  Instalar Docker Desktop:
+
+     winget install -e --id Docker.DockerDesktop
+
+     Al terminar, abrir "Docker Desktop" desde el menú Inicio, aceptar los términos y esperar a que
+     abajo a la izquierda diga "Engine running" (motor en marcha). Si pide reiniciar, reiniciar.
+     (Si winget no existe: descargar el instalador de https://www.docker.com/products/docker-desktop/)
+
+1.3  Instalar Git:
+
+     winget install --id Git.Git -e --source winget
+
+     CERRAR PowerShell y abrirlo de nuevo (si no, no reconoce "git").
+
+1.4  Comprobar que todo quedó instalado (cada uno debe mostrar una versión):
+
+     git --version
+     docker --version
+     docker compose version
+
+
+-------------------------------------------------------------
+PARTE 2 — DESCARGAR EL PROYECTO (una sola vez)
+-------------------------------------------------------------
+
+2.1  Crear la carpeta y entrar en ella (puede ser C: o D:; aquí se usa C:):
+
+     mkdir C:\Proyectos\clinica-dental
+     cd C:\Proyectos\clinica-dental
+
+2.2  Descargar el proyecto de GitHub (el punto final lo descarga DENTRO de esta carpeta):
+
+     git clone https://github.com/ByArk3/clinica-dental.git .
+
+     Si se abre el navegador pidiendo iniciar sesión en GitHub, aceptar.
+     Si dice "destination path already exists and is not an empty directory": la carpeta no estaba
+     vacía; vaciarla o usar otra.
+
+
+-------------------------------------------------------------
+PARTE 3 — ARCHIVO .env (configuración; una sola vez)
+-------------------------------------------------------------
+
+El .env NO está en GitHub (guarda contraseñas). Es un ARCHIVO, no una carpeta.
+
+3.1  Crearlo copiando el ejemplo:
+
+     Copy-Item .env.docker.example .env
+
+3.2  Abrirlo para revisarlo:
+
+     notepad .env
+
+     Deben quedar así estas dos líneas (son las importantes):
+
+       SEED=true
+       COOKIE_SECURE=false
+
+     - SEED=true          carga los usuarios y datos de prueba en una base vacía.
+     - COOKIE_SECURE=false OBLIGATORIO en localhost. Con "true" el login parece no funcionar
+                          (solo sirve en un servidor con HTTPS).
+     - Lo demás puede quedar vacío: sin SMTP los correos solo se registran en el log; sin
+       RENIEC_TOKEN los nombres se escriben a mano.
+
+     Guardar con Ctrl + S y cerrar.
+
+3.3  Comprobar que se llama exactamente .env (y no .env.txt):
+
+     Get-ChildItem -Force .env*
+
+     Deben aparecer ".env" y ".env.docker.example". Si aparece ".env.txt":
+
+     Rename-Item .env.txt .env
+
+
+-------------------------------------------------------------
+PARTE 4 — CONSTRUIR Y PRENDER EL SISTEMA
+-------------------------------------------------------------
+
+Antes: Docker Desktop abierto y diciendo "Engine running".
+
+4.1  Construir la imagen del backend (la primera vez tarda varios minutos):
+
+     docker build -f backend/Dockerfile -t clinica-dental-api .
+
+4.2  Construir la imagen del frontend:
+
+     docker build -f frontend/Dockerfile -t clinica-dental-web .
+
+4.3  Prender todo (base de datos, API y web):
+
+     docker compose up
+
+     La ventana se queda mostrando mensajes: es normal, NO cerrarla.
+     La primera vez la API carga los datos de prueba (puede tardar unos minutos).
+     Está listo cuando aparece:
+
+       API de la Clínica Dental en http://localhost:3000/api
+
+4.4  Abrir en el navegador:
+
+     http://localhost:8080
+
+
+-------------------------------------------------------------
+USUARIOS DE PRUEBA (contraseña de todos: Clinica2026)
+-------------------------------------------------------------
+
+Administrador (principal)  carlos.vega@clinica.local
+Administradora             patricia.salazar@clinica.local
+Recepcionistas             ana.rios@clinica.local
+                           sofia.mendoza@clinica.local
+Odontólogos                luis.paredes@clinica.local    (Odontología general, L–V 08:00–14:00)
+                           carmen.diaz@clinica.local     (Endodoncia, L–S 14:00–20:00)
+                           andres.chavez@clinica.local   (Ortodoncia, Ma–S 09:00–13:00)
+                           rocio.benites@clinica.local   (Odontopediatría, L–V 14:00–19:00)
+                           miguel.asmat@clinica.local    (Periodoncia, L-Mi-V 08:00–13:00, S 08:00–12:00)
+Paciente con cuenta web    maria.quispe@correo.local
+
+La lista completa (96 pacientes con cuenta web y 95 presenciales con su DNI) está en:
+docs\usuarios-de-prueba.md
+
+
+-------------------------------------------------------------
+APAGAR
+-------------------------------------------------------------
+
+Ctrl + C en la ventana donde corre "docker compose up", y luego:
+
+     docker compose down
+
+(Los datos se conservan para la próxima vez.)
+
+
+-------------------------------------------------------------
+PRENDER OTRO DÍA (ya instalado)
+-------------------------------------------------------------
+
+Abrir Docker Desktop (esperar "Engine running") y en PowerShell:
+
+     cd C:\Proyectos\clinica-dental
+     docker compose up
+
+
+-------------------------------------------------------------
+ACTUALIZAR CUANDO HAYA CAMBIOS EN GITHUB
+-------------------------------------------------------------
+
+     cd C:\Proyectos\clinica-dental
+     git pull origin main
+     docker compose down
+     docker build -f backend/Dockerfile -t clinica-dental-api .
+     docker build -f frontend/Dockerfile -t clinica-dental-web .
+     docker compose up
+
+Si los cambios incluyen DATOS DE PRUEBA NUEVOS, usar "docker compose down -v" en vez de
+"docker compose down". OJO: el -v borra la base (todo lo registrado a mano) y la crea de nuevo.
+
+
+-------------------------------------------------------------
+PROBLEMAS COMUNES
+-------------------------------------------------------------
+
+- "docker" no se reconoce / "cannot connect to the Docker daemon":
+  Docker Desktop no está abierto o aún no dice "Engine running". Abrirlo y esperar.
+
+- "git" no se reconoce:
+  cerrar PowerShell y abrirlo de nuevo después de instalar Git.
+
+- El login no entra con la contraseña correcta:
+  revisar en el .env que diga COOKIE_SECURE=false; luego "docker compose down" y "docker compose up".
+  Si sigue igual, recargar la página con Ctrl + F5.
+
+- Entra pero no hay usuarios / "Correo o contraseña incorrectos" con todos:
+  revisar SEED=true en el .env y que el archivo se llame .env (no .env.txt). Comprobar los usuarios:
+    docker compose exec db psql -U clinica -d clinica_dental -c "select email, rol from usuarios;"
+
+- "port is already allocated" / el puerto 8080 está ocupado:
+  agregar en el .env la línea WEB_PORT=8081 y entrar en http://localhost:8081
+  (y poner también FRONTEND_URL=http://localhost:8081).
+
+- "dependency failed to start: container ... is unhealthy":
+  la API tardó en arrancar. Esperar un minuto y volver a ejecutar "docker compose up".
+
+- "docker compose up --build" falla con un error de "bake":
+  por eso las imágenes se construyen por separado (pasos 4.1 y 4.2).
+
+- "no space left on device":
+  en Docker Desktop → Troubleshoot → Clean / Purge data, o liberar espacio en el disco.
+
+- Cualquier otro error: sacar captura de la ventana de PowerShell completa.
