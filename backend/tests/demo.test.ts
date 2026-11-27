@@ -1,7 +1,7 @@
 // Datos de demostración (se cargan con la semilla): deben respetar las reglas del sistema
 import { beforeAll, describe, expect, it } from 'vitest';
 import { prisma, reiniciarBD } from './helpers.js';
-import { sembrarDemo } from '../prisma/demo.js';
+import { DIA_DE_DEMOSTRACION, sembrarDemo } from '../prisma/demo.js';
 import { hoyEnLima, moverFecha } from '@clinica/shared';
 
 const uno = async (sql: string) => Number(((await prisma.$queryRawUnsafe(sql)) as { n: number }[])[0].n);
@@ -69,6 +69,30 @@ describe('Datos de demostración', () => {
     expect(bajos.length).toBeGreaterThanOrEqual(4);
     expect(altos + bajos.length).toBe(activos.length);
     for (const b of bajos) expect(await prisma.alertaStock.count({ where: { insumoId: b.id, revisada: false } })).toBe(1);
+  });
+
+  it(`día de la presentación (${DIA_DE_DEMOSTRACION}): todos los horarios hasta las 16:00 ocupados`, async () => {
+    if (hoyEnLima() > DIA_DE_DEMOSTRACION) return; // ya pasó
+    const ocupadas = new Set(
+      (await prisma.cita.findMany({ where: { fecha: new Date(`${DIA_DE_DEMOSTRACION}T00:00:00Z`), estado: { notIn: ['cancelada', 'liberada'] } } })).map((c) => `${c.odontologoId}|${c.hora.toISOString().slice(11, 16)}`),
+    );
+    const dia = new Date(`${DIA_DE_DEMOSTRACION}T00:00:00Z`).getUTCDay() || 7;
+    // horario propio de cada odontólogo o, si no tiene, el general de la clínica
+    const odontologos = await prisma.odontologo.findMany({ where: { activo: true }, include: { horarios: true } });
+    const general = await prisma.horarioAtencion.findMany({ where: { odontologoId: null } });
+    const horarios = odontologos.flatMap((o) => (o.horarios.length ? o.horarios : general.map((g) => ({ ...g, odontologoId: o.id }))).filter((h) => h.diaSemana === dia));
+    let bloques = 0;
+    for (const t of horarios) {
+      for (let m = t.horaInicio.getUTCHours() * 60 + t.horaInicio.getUTCMinutes(); m + 30 <= t.horaFin.getUTCHours() * 60 + t.horaFin.getUTCMinutes(); m += 30) {
+        const h = `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+        if (h >= '16:00') continue;
+        bloques++;
+        expect(ocupadas.has(`${t.odontologoId}|${h}`), `${t.odontologoId} ${h}`).toBe(true);
+      }
+    }
+    expect(bloques).toBeGreaterThan(20);
+    // nadie tiene dos citas ese día y no hay «pendiente de adelanto» (se liberaría)
+    expect(await prisma.cita.count({ where: { fecha: new Date(`${DIA_DE_DEMOSTRACION}T00:00:00Z`), estado: 'pendiente_adelanto' } })).toBe(0);
   });
 
   it('el stock nunca queda negativo y coincide con el kárdex', async () => {

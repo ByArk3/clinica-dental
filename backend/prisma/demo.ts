@@ -46,6 +46,13 @@ const ALERGIAS = ['Penicilina', 'Látex', 'Ibuprofeno', 'Lidocaína (usar artica
 const ANTECEDENTES = ['Hipertensión controlada', 'Diabetes tipo 2', 'Gastritis', 'Asma leve', 'Embarazo (2.º trimestre)'];
 const MOTIVOS = ['Dolor de muela', 'Control', 'Limpieza', 'Sensibilidad al frío', 'Sangrado de encías', 'Revisión general', 'Muela rota', 'Mancha en un diente', 'Dolor al masticar', 'Blanqueamiento', 'Control de niño'];
 
+/**
+ * Día de la presentación: ese día, desde la primera hora hasta las 16:00, TODOS los horarios de los odontólogos que
+ * atienden están ocupados (si la demo se carga antes de esa fecha o ese mismo día).
+ */
+export const DIA_DE_DEMOSTRACION = '2026-12-01';
+const TOPE_DEMOSTRACION = '16:00';
+
 // ---------- Catálogo ampliado del Administrador (ficticio) ----------
 /** 8 proveedores más (10 en total); el último está desactivado */
 const PROVEEDORES_EXTRA: [string, string, string, string, boolean][] = [
@@ -540,6 +547,7 @@ export async function sembrarDemo(prisma: PrismaClient<any>, { silencioso = fals
     const turnos = odontologos.flatMap((o) => {
       const bloques = bloquesDe(o, f);
       const n = f === hoy ? Math.min(3, bloques.length) : g.entre(1, 2);
+      if (f === DIA_DE_DEMOSTRACION) return bloques.filter((h) => h < TOPE_DEMOSTRACION).map((h) => ({ o, h })); // día de la presentación: todo ocupado
       return [...bloques].sort(() => g.r() - 0.5).slice(0, bloques.length ? n : 0).map((h) => ({ o, h }));
     }).sort((a, b) => a.h.localeCompare(b.h) || a.o.id - b.o.id);
     {
@@ -623,13 +631,19 @@ export async function sembrarDemo(prisma: PrismaClient<any>, { silencioso = fals
     if (diaSemana(f) === 7 || feriados.has(f)) continue;
     const cerca = f <= sumarDias(hoy, 14); // la agenda se llena más cuanto más cerca está la fecha
     for (const o of odontologos) {
-      const libres = bloquesDe(o, f).filter((h) => !ocupado.has(`${o.id}|${f}|${h}`) && (f > hoy || h > horaAhora));
+      const libres = bloquesDe(o, f).filter((h) => !ocupado.has(`${o.id}|${f}|${h}`) && (f > hoy || h >= horaAhora));
       const n = Math.min(libres.length, f === hoy ? 3 : cerca ? g.entre(1, 3) : g.entre(0, 2));
-      for (const h of [...libres].sort(() => g.r() - 0.5).slice(0, n).sort()) {
+      // día de la presentación: todos los horarios libres hasta las 16:00 (y algunos después)
+      const lleno = f === DIA_DE_DEMOSTRACION;
+      const horas = lleno
+        ? [...libres.filter((h) => h < TOPE_DEMOSTRACION), ...libres.filter((h) => h >= TOPE_DEMOSTRACION).sort(() => g.r() - 0.5).slice(0, g.entre(0, 2))].sort()
+        : [...libres].sort(() => g.r() - 0.5).slice(0, n).sort();
+      for (const h of horas) {
         const nuevo = sinDni.length > 0 && g.si(0.25);
-        const p = nuevo ? sinDni.shift()! : elegirPaciente(g.si(0.07), f);
+        const p = nuevo ? sinDni.shift()! : elegirPaciente(g.si(o.especialidad === 'Odontopediatría' ? 0.45 : 0.07), f);
         const previsto = nuevo || g.si(0.75) ? 'Consulta' : g.pesado<string>([['Profilaxis', 3], ['Curación con resina', 2], ['Blanqueamiento', 1]]);
-        const estado = !cerca ? 'confirmada' : pendientes < 3 && g.si(0.15) ? 'pendiente_adelanto' : enVerificacion < 2 && g.si(0.12) ? 'pago_en_verificacion' : 'confirmada';
+        // (el día de la presentación no hay «pendiente de adelanto»: se liberaría en 1 hora y dejaría huecos)
+        const estado = !cerca ? 'confirmada' : !lleno && pendientes < 3 && g.si(0.15) ? 'pendiente_adelanto' : enVerificacion < 2 && g.si(0.12) ? 'pago_en_verificacion' : 'confirmada';
         if (estado === 'pendiente_adelanto') {
           pendientes++;
           // recién reservada: tiene 1 hora para pagar (la tarea programada la libera si no paga)
@@ -661,17 +675,18 @@ export async function sembrarDemo(prisma: PrismaClient<any>, { silencioso = fals
   // Cierre del inventario: hoy se retiraron lotes vencidos o dañados (merma, RN-13) de insumos que la agenda hasta el
   // 20/12 necesita → quedan en el mínimo, con su alerta sin revisar; el Administrador ya pidió algunos (pedidos pendientes).
   const cierre: [string, string][] = [
-    ['Guantes de nitrilo M', 'Caja dañada por humedad'],
-    ['Resina compuesta A2', 'Lote vencido retirado del inventario'],
-    ['Anestesia articaína 4 %', 'Lote vencido retirado del inventario'],
-    ['Limas de endodoncia', 'Instrumental deformado: se descartó'],
-    ['Ligaduras elásticas', 'Paquete abierto y contaminado'],
+    // insumos de poco uso: así el día de la presentación no faltan guantes, resina ni anestesia
     ['Gel blanqueador', 'Lote vencido retirado del inventario'],
+    ['Sutura seda 3-0', 'Sobres abiertos: se descartaron'],
+    ['Arco de níquel titanio', 'Llegaron deformados: se descartaron'],
+    ['Brackets metálicos', 'Kit incompleto retirado'],
+    ['Cemento temporal', 'Lote vencido retirado del inventario'],
+    ['Fresa diamantada', 'Fresas desgastadas: se descartaron'],
   ];
   // los movimientos del cierre van después de todo lo registrado hoy (el kárdex queda en orden)
   const ultimoAntes = (await prisma.movimientoKardex.aggregate({ _max: { createdAt: true } }))._max.createdAt ?? ahora;
   const baseCierre = Math.max(+masMin(ahora, -30), +ultimoAntes + 60_000);
-  const pedirYa = ['Guantes de nitrilo M', 'Anestesia articaína 4 %', 'Limas de endodoncia', 'Ligaduras elásticas'];
+  const pedirYa = ['Sutura seda 3-0', 'Arco de níquel titanio', 'Brackets metálicos', 'Cemento temporal', 'Fresa diamantada'];
   for (const [k, [nombre, motivo]] of cierre.entries()) {
     const ins = insumos.find((i) => i.nombre === nombre);
     if (!ins) continue;

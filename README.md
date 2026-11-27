@@ -143,7 +143,7 @@ Sin `SMTP_HOST`, los correos (recuperación de contraseña) no se envían: solo 
 | Descuentos (P3) y monto del adelanto (P6) gestionados por el Administrador | `admin.test.ts` |
 | CU-38 Panel de control · CU-39 Reporte de ingresos · CU-40 Reporte de inventario (rango de fechas, exportación CSV para Excel) | `reporte.test.ts`, `Iteracion4.test.tsx` |
 
-Total: **341 pruebas de API + 127 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y los CU-58 y CU-59 están implementados.
+Total: **342 pruebas de API + 127 de interfaz** (al commit de esta revisión). Los 40 casos de uso del brief, los CU-41 a CU-57 del informe v17 y los CU-58 y CU-59 están implementados.
 
 **Tareas programadas** (`backend/src/jobs`, node-cron, hora de Lima; se activan con `JOBS_ENABLED=true`):
 - **Cada 5 min:** libera las reservas cuyo adelanto no se pagó ni reportó en 1 hora (RN-04; también las citas antiguas
@@ -436,6 +436,11 @@ Resumen de todo lo agregado en las últimas 24 horas (commits `a7d987b` a `34bbf
   odontograma y textos de ayuda más legibles; asterisco rojo en «Tratamientos».
 - **Demo:** el 80 % de los insumos activos termina con 100 o más de stock (reposición recibida hoy) y el 20 % con stock bajo y
   su alerta sin revisar; ningún movimiento, cobro ni recepción queda con hora futura.
+- **Día de la presentación (martes 01/12/2026, `DIA_DE_DEMOSTRACION` en `prisma/demo.ts`):** desde la primera hora hasta las
+  16:00 todos los horarios de los odontólogos que atienden ese día están ocupados (Dr. Paredes 08:00–13:30, Dr. Chávez
+  09:00–12:30, Dra. Díaz y Dra. Benites 14:00–15:30; 28 citas, 30 pacientes distintos, algunos por la web y otros con «DNI
+  pendiente»). Funciona si la demo se carga antes o ese mismo día. Los insumos con stock bajo son de poco uso, para que ese día
+  no falten guantes, resina ni anestesia.
 
 ### Pendientes
 - No hay pendientes anotados. Descartado por ahora: límite de intentos en el registro web (ver «Riesgos conocidos»).
